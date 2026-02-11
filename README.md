@@ -5,6 +5,8 @@ Win32DiskImager is a Windows utility for writing raw disk images (`.img` and rel
 This repository contains:
 - A Qt-based GUI application (`Win32DiskImager.exe`)
 - A native Windows CLI application (`Win32DiskImager-cli.exe`)
+- A native Win32 API GUI scaffold (`native-win32-gui/`)
+- A native Visual Studio CLI solution (`native-win32-cli/`)
 
 ## Important Safety Notes
 
@@ -53,6 +55,20 @@ compile.bat
 Output:
 - `bin\Win32DiskImager.exe`
 
+### Native Win32 GUI scaffold build (Visual Studio)
+
+Open this solution in Visual Studio 2022 (or newer):
+
+```text
+native-win32-gui\Win32DiskImagerNative.sln
+```
+
+Build target:
+- `Debug|x64` (or `Release|x64`)
+
+Output:
+- `native-win32-gui\build\<Configuration>\<Platform>\Win32DiskImagerNative.exe`
+
 ### CLI build
 
 From repository root:
@@ -63,6 +79,20 @@ compile-cli.bat
 
 Output:
 - `bin\Win32DiskImager-cli.exe`
+
+### Native CLI build (Visual Studio)
+
+Open:
+
+```text
+native-win32-cli\Win32DiskImagerCliNative.sln
+```
+
+Build target:
+- `Debug|x64` (or `Release|x64`)
+
+Output:
+- `native-win32-cli\build\<Configuration>\<Platform>\Win32DiskImager-cli-native.exe`
 
 ### Static GUI build (Qt static toolchain)
 
@@ -120,6 +150,8 @@ Win32DiskImager-cli.exe verify --device E: --image C:\images\raspi.img
 - `src/` - main GUI and CLI sources, resources, translations
 - `src/DiskImager.pro` - GUI qmake project
 - `src/DiskImagerCli.pro` - CLI qmake project
+- `native-win32-gui/` - Visual Studio native Win32 GUI scaffold
+- `native-win32-cli/` - Visual Studio native CLI solution
 - `compile.bat` - GUI build helper
 - `compile-cli.bat` - CLI build helper
 - `compile-gui-static.bat` - static GUI build helper
