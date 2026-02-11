@@ -1,0 +1,6 @@
+2.0 Work list:
+
+
+Features:
+    Compression support
+    Reformat device
