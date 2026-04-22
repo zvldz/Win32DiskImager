@@ -660,6 +660,7 @@ void MainWindow::on_bWrite_clicked()
 
             bool writeError  = false;
             QString writeErrMsg;
+            i = 0ul;  // sector offset written to the device; was for(i=0; ...) before the pipeline refactor
             while (status == STATUS_WRITING)
             {
                 std::unique_ptr<IoChunk> c = queue.pop();
@@ -1209,6 +1210,7 @@ void MainWindow::on_bVerify_clicked()
 
             bool verifyError = false;
             QString verifyErrMsg;
+            i = 0ul;  // sector offset into the device; was for(i=0; ...) before the pipeline refactor
             while (status == STATUS_VERIFYING)
             {
                 std::unique_ptr<IoChunk> c = queue.pop();
