@@ -162,7 +162,14 @@ Win32DiskImager-cli.exe verify --device E: --image C:\images\raspi.img
 ## License
 
 - Project license: GNU GPL v2 (see `GPL-2`)
-- Qt binaries/libraries used by builds may be under LGPL terms (see `LGPL-2.1`)
+- Qt is statically linked in the released GUI binary under LGPL-2.1 terms
+  (see `LGPL-2.1`). Qt source is available at
+  https://download.qt.io/official_releases/qt/; the release build uses the
+  `mingw-w64-x86_64-qt6-static` package from MSYS2. All our source is in
+  this repository so you can relink against a different Qt if desired.
+- Third-party components (Qt, zlib, liblzma, and libraries brought in
+  transitively by static Qt) and the full LGPL compliance statement are
+  documented in `THIRD_PARTY_LICENSES.md`.
 - Additional legal text: `License.txt`
 
 ## Historical Notes

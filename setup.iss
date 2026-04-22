@@ -47,6 +47,7 @@ Source: "Release\translations\*.qm";       DestDir: "{app}\translations"; Flags:
 Source: "Changelog.txt";                   DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "GPL-2";                           DestDir: "{app}"; Flags: ignoreversion
 Source: "LGPL-2.1";                        DestDir: "{app}"; Flags: ignoreversion
+Source: "THIRD_PARTY_LICENSES.md";         DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "README.txt";                      DestDir: "{app}"; Flags: ignoreversion isreadme skipifsourcedoesntexist
 
 [Icons]
