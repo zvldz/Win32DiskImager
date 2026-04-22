@@ -93,7 +93,8 @@ TRANSLATIONS_FILES =
 
 LRELEASE_EXEC = lrelease
 win32:exists($$[QT_HOST_BINS]/lrelease-qt6.exe): LRELEASE_EXEC = $$[QT_HOST_BINS]/lrelease-qt6.exe
-win32:!exists($$[QT_HOST_BINS]/lrelease-qt6.exe):exists($$[QT_HOST_BINS]/lrelease-qt5.exe): LRELEASE_EXEC = $$[QT_HOST_BINS]/lrelease-qt5.exe
+else:win32:exists($$[QT_HOST_BINS]/lrelease-qt5.exe): LRELEASE_EXEC = $$[QT_HOST_BINS]/lrelease-qt5.exe
+else:win32:exists($$[QT_HOST_BINS]/lrelease.exe): LRELEASE_EXEC = $$[QT_HOST_BINS]/lrelease.exe
 for(tsfile, TRANSLATIONS) {
     qmfile = $$tsfile
     qmfile ~= s,.ts$,.qm,
