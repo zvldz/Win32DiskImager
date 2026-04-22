@@ -26,8 +26,10 @@
 #include <QFileInfo>
 #include <QDirIterator>
 #include <QClipboard>
+#include <algorithm>         // std::max for chunk-size clamp
 #include <cstdio>
 #include <cstdlib>
+#include <malloc.h>          // _aligned_free (paired with _aligned_malloc in disk.cpp)
 #include <windows.h>
 #include <winioctl.h>
 #include <dbt.h>
@@ -38,6 +40,11 @@
 #include "disk.h"
 #include "mainwindow.h"
 #include "elapsedtimer.h"
+
+// I/O chunk target in bytes. The sector count per iteration is derived from
+// this so a 512-byte-sector device still transfers 4 MB per syscall instead
+// of the legacy 512 KB. Matches what RPi Imager / Etcher do on Windows.
+static const unsigned long long CHUNK_BYTES = 4ULL * 1024ULL * 1024ULL;
 
 MainWindow* MainWindow::instance = NULL;
 
@@ -107,12 +114,12 @@ MainWindow::~MainWindow()
     }
     if (sectorData != NULL)
     {
-        delete[] sectorData;
+        _aligned_free(sectorData);
         sectorData = NULL;
     }
     if (sectorData2 != NULL)
     {
-        delete[] sectorData2;
+        _aligned_free(sectorData2);
         sectorData2 = NULL;
     }
     if (elapsed_timer != NULL)
@@ -459,7 +466,11 @@ void MainWindow::on_bWrite_clicked()
                 setReadWriteButtonState();
                 return;
             }
-            hRawDisk = getHandleOnDevice(deviceID, GENERIC_WRITE);
+            // Direct I/O on the destination: bypass FS cache so MB/s reflects
+            // real device throughput and "Done" only appears once data has
+            // landed. Buffer alignment is handled by readSectorDataFromHandle.
+            hRawDisk = getHandleOnDevice(deviceID, GENERIC_WRITE,
+                                         FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
             if (hRawDisk == INVALID_HANDLE_VALUE)
             {
                 removeLockOnVolume(hVolume);
@@ -490,6 +501,7 @@ void MainWindow::on_bWrite_clicked()
 
             }
             numsectors = getFileSizeInSectors(hFile, sectorsize);
+            const unsigned long long chunkSectors = sectorsize ? std::max<unsigned long long>(1ULL, CHUNK_BYTES / sectorsize) : 1ULL;
             if (!numsectors)
             {
                 //For external card readers you may not get device change notification when you remove the card/flash.
@@ -512,7 +524,7 @@ void MainWindow::on_bWrite_clicked()
                 unsigned long nextchunksize = 0;
                 while ( (i < numsectors) && (datafound == false) )
                 {
-                    nextchunksize = ((numsectors - i) >= 1024ul) ? 1024ul : (numsectors - i);
+                    nextchunksize = ((numsectors - i) >= chunkSectors) ? chunkSectors : (numsectors - i);
                     sectorData = readSectorDataFromHandle(hFile, i, nextchunksize, sectorsize);
                     if(sectorData == NULL)
                     {
@@ -533,7 +545,7 @@ void MainWindow::on_bWrite_clicked()
                     }
                 }
                 // delete the allocated sectorData
-                delete[] sectorData;
+                _aligned_free(sectorData);
                 sectorData = NULL;
                 // build the string for the warning dialog
                 std::ostringstream msg;
@@ -569,9 +581,9 @@ void MainWindow::on_bWrite_clicked()
             lasti = 0ul;
             update_timer.start();
             elapsed_timer->start();
-            for (i = 0ul; i < numsectors && status == STATUS_WRITING; i += 1024ul)
+            for (i = 0ul; i < numsectors && status == STATUS_WRITING; i += chunkSectors)
             {
-                sectorData = readSectorDataFromHandle(hFile, i, (numsectors - i >= 1024ul) ? 1024ul:(numsectors - i), sectorsize);
+                sectorData = readSectorDataFromHandle(hFile, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize);
                 if (sectorData == NULL)
                 {
                     removeLockOnVolume(hVolume);
@@ -586,9 +598,9 @@ void MainWindow::on_bWrite_clicked()
                     setReadWriteButtonState();
                     return;
                 }
-                if (!writeSectorDataToHandle(hRawDisk, sectorData, i, (numsectors - i >= 1024ul) ? 1024ul:(numsectors - i), sectorsize))
+                if (!writeSectorDataToHandle(hRawDisk, sectorData, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize))
                 {
-                    delete[] sectorData;
+                    _aligned_free(sectorData);
                     removeLockOnVolume(hVolume);
                     CloseHandle(hRawDisk);
                     CloseHandle(hFile);
@@ -602,7 +614,7 @@ void MainWindow::on_bWrite_clicked()
                     setReadWriteButtonState();
                     return;
                 }
-                delete[] sectorData;
+                _aligned_free(sectorData);
                 sectorData = NULL;
                 QCoreApplication::processEvents();
                 if (update_timer.elapsed() >= ONE_SEC_IN_MS)
@@ -725,7 +737,9 @@ void MainWindow::on_bRead_clicked()
             setReadWriteButtonState();
             return;
         }
-        hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(myFile.utf16()), GENERIC_WRITE);
+        // Direct I/O on the destination (image file) — see Write path above.
+        hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(myFile.utf16()), GENERIC_WRITE,
+                                FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
         if (hFile == INVALID_HANDLE_VALUE)
         {
             removeLockOnVolume(hVolume);
@@ -750,6 +764,7 @@ void MainWindow::on_bRead_clicked()
             return;
         }
         numsectors = getNumberOfSectors(hRawDisk, &sectorsize);
+        const unsigned long long chunkSectors = sectorsize ? std::max<unsigned long long>(1ULL, CHUNK_BYTES / sectorsize) : 1ULL;
         if(partitionCheckBox->isChecked())
         {
             // Read MBR partition table
@@ -803,9 +818,9 @@ void MainWindow::on_bRead_clicked()
         lasti = 0ul;
         update_timer.start();
         elapsed_timer->start();
-        for (i = 0ul; i < numsectors && status == STATUS_READING; i += 1024ul)
+        for (i = 0ul; i < numsectors && status == STATUS_READING; i += chunkSectors)
         {
-            sectorData = readSectorDataFromHandle(hRawDisk, i, (numsectors - i >= 1024ul) ? 1024ul:(numsectors - i), sectorsize);
+            sectorData = readSectorDataFromHandle(hRawDisk, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize);
             if (sectorData == NULL)
             {
                 removeLockOnVolume(hVolume);
@@ -820,9 +835,9 @@ void MainWindow::on_bRead_clicked()
                 setReadWriteButtonState();
                 return;
             }
-            if (!writeSectorDataToHandle(hFile, sectorData, i, (numsectors - i >= 1024ul) ? 1024ul:(numsectors - i), sectorsize))
+            if (!writeSectorDataToHandle(hFile, sectorData, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize))
             {
-                delete[] sectorData;
+                _aligned_free(sectorData);
                 removeLockOnVolume(hVolume);
                 CloseHandle(hRawDisk);
                 CloseHandle(hFile);
@@ -836,7 +851,7 @@ void MainWindow::on_bRead_clicked()
                 setReadWriteButtonState();
                 return;
             }
-            delete[] sectorData;
+            _aligned_free(sectorData);
             sectorData = NULL;
             if (update_timer.elapsed() >= ONE_SEC_IN_MS)
             {
@@ -974,6 +989,7 @@ void MainWindow::on_bVerify_clicked()
 
             }
             numsectors = getFileSizeInSectors(hFile, sectorsize);
+            const unsigned long long chunkSectors = sectorsize ? std::max<unsigned long long>(1ULL, CHUNK_BYTES / sectorsize) : 1ULL;
             if (!numsectors)
             {
                 //For external card readers you may not get device change notification when you remove the card/flash.
@@ -996,7 +1012,7 @@ void MainWindow::on_bVerify_clicked()
                 unsigned long nextchunksize = 0;
                 while ( (i < numsectors) && (datafound == false) )
                 {
-                    nextchunksize = ((numsectors - i) >= 1024ul) ? 1024ul : (numsectors - i);
+                    nextchunksize = ((numsectors - i) >= chunkSectors) ? chunkSectors : (numsectors - i);
                     sectorData = readSectorDataFromHandle(hFile, i, nextchunksize, sectorsize);
                     if(sectorData == NULL)
                     {
@@ -1017,7 +1033,7 @@ void MainWindow::on_bVerify_clicked()
                     }
                 }
                 // delete the allocated sectorData
-                delete[] sectorData;
+                _aligned_free(sectorData);
                 sectorData = NULL;
                 // build the string for the warning dialog
                 std::ostringstream msg;
@@ -1052,9 +1068,9 @@ void MainWindow::on_bVerify_clicked()
             update_timer.start();
             elapsed_timer->start();
             lasti = 0ul;
-            for (i = 0ul; i < numsectors && status == STATUS_VERIFYING; i += 1024ul)
+            for (i = 0ul; i < numsectors && status == STATUS_VERIFYING; i += chunkSectors)
             {
-                sectorData = readSectorDataFromHandle(hFile, i, (numsectors - i >= 1024ul) ? 1024ul:(numsectors - i), sectorsize);
+                sectorData = readSectorDataFromHandle(hFile, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize);
                 if (sectorData == NULL)
                 {
                     removeLockOnVolume(hVolume);
@@ -1069,7 +1085,7 @@ void MainWindow::on_bVerify_clicked()
                     setReadWriteButtonState();
                     return;
                 }
-                sectorData2 = readSectorDataFromHandle(hRawDisk, i, (numsectors - i >= 1024ul) ? 1024ul:(numsectors - i), sectorsize);
+                sectorData2 = readSectorDataFromHandle(hRawDisk, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize);
                 if (sectorData2 == NULL)
                 {
                     QMessageBox::critical(this, tr("Verify Failure"), tr("Verification failed at sector: %1").arg(i));
@@ -1085,7 +1101,7 @@ void MainWindow::on_bVerify_clicked()
                     setReadWriteButtonState();
                     return;
                 }
-                result = memcmp(sectorData, sectorData2, ((numsectors - i >= 1024ul) ? 1024ul:(numsectors - i)) * sectorsize);
+                result = memcmp(sectorData, sectorData2, ((numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i)) * sectorsize);
                 if (result)
                 {
                     QMessageBox::critical(this, tr("Verify Failure"), tr("Verification failed at sector: %1").arg(i));
@@ -1101,8 +1117,8 @@ void MainWindow::on_bVerify_clicked()
                     elapsed_timer->update(i, numsectors);
                     lasti = i;
                 }
-                delete[] sectorData;
-                delete[] sectorData2;
+                _aligned_free(sectorData);
+                _aligned_free(sectorData2);
                 sectorData = NULL;
                 sectorData2 = NULL;
                 progressbar->setValue(i);
@@ -1112,8 +1128,8 @@ void MainWindow::on_bVerify_clicked()
             CloseHandle(hRawDisk);
             CloseHandle(hFile);
             CloseHandle(hVolume);
-            delete[] sectorData;
-            delete[] sectorData2;
+            _aligned_free(sectorData);
+            _aligned_free(sectorData2);
             sectorData = NULL;
             sectorData2 = NULL;
             hRawDisk = INVALID_HANDLE_VALUE;

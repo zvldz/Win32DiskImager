@@ -25,15 +25,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <malloc.h>          // _aligned_malloc / _aligned_free
 #include <windows.h>
 #include <winioctl.h>
 #include "disk.h"
 #include "mainwindow.h"
 
-HANDLE getHandleOnFile(LPCWSTR filelocation, DWORD access)
+HANDLE getHandleOnFile(LPCWSTR filelocation, DWORD access, DWORD extraFlags)
 {
     HANDLE hFile;
-    hFile = CreateFileW(filelocation, access, (access == GENERIC_READ) ? FILE_SHARE_READ : 0, NULL, (access == GENERIC_READ) ? OPEN_EXISTING:CREATE_ALWAYS, 0, NULL);
+    hFile = CreateFileW(filelocation, access, (access == GENERIC_READ) ? FILE_SHARE_READ : 0, NULL, (access == GENERIC_READ) ? OPEN_EXISTING:CREATE_ALWAYS, extraFlags, NULL);
     if (hFile == INVALID_HANDLE_VALUE)
     {
         wchar_t *errormessage=NULL;
@@ -64,11 +65,11 @@ DWORD getDeviceID(HANDLE hVolume)
     return sd.Extents[0].DiskNumber;
 }
 
-HANDLE getHandleOnDevice(int device, DWORD access)
+HANDLE getHandleOnDevice(int device, DWORD access, DWORD extraFlags)
 {
     HANDLE hDevice;
     QString devicename = QString("\\\\.\\PhysicalDrive%1").arg(device);
-    hDevice = CreateFileW(reinterpret_cast<LPCWSTR>(devicename.utf16()), access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    hDevice = CreateFileW(reinterpret_cast<LPCWSTR>(devicename.utf16()), access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, extraFlags, NULL);
     if (hDevice == INVALID_HANDLE_VALUE)
     {
         wchar_t *errormessage=NULL;
@@ -82,12 +83,12 @@ HANDLE getHandleOnDevice(int device, DWORD access)
     return hDevice;
 }
 
-HANDLE getHandleOnVolume(int volume, DWORD access)
+HANDLE getHandleOnVolume(int volume, DWORD access, DWORD extraFlags)
 {
     HANDLE hVolume;
     wchar_t volumename[] = L"\\\\.\\A:";
     volumename[4] += volume;
-    hVolume = CreateFileW(volumename, access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    hVolume = CreateFileW(volumename, access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, extraFlags, NULL);
     if (hVolume == INVALID_HANDLE_VALUE)
     {
         wchar_t *errormessage=NULL;
@@ -190,10 +191,16 @@ bool isVolumeUnmounted(HANDLE handle)
     return (!bResult);
 }
 
+// Sector-aligned buffer: FILE_FLAG_NO_BUFFERING on the device/file handle
+// requires both the buffer address and transfer size to be a multiple of the
+// sector size. Freeing must go through _aligned_free (see callers).
 char *readSectorDataFromHandle(HANDLE handle, unsigned long long startsector, unsigned long long numsectors, unsigned long long sectorsize)
 {
     unsigned long bytesread;
-    char *data = new char[sectorsize * numsectors];
+    char *data = (char *)_aligned_malloc((size_t)(sectorsize * numsectors), (size_t)sectorsize);
+    if (!data) {
+        return NULL;
+    }
     LARGE_INTEGER li;
     li.QuadPart = startsector * sectorsize;
     SetFilePointer(handle, li.LowPart, &li.HighPart, FILE_BEGIN);
@@ -206,7 +213,7 @@ char *readSectorDataFromHandle(HANDLE handle, unsigned long long startsector, un
                               QObject::tr("An error occurred when attempting to read data from handle.\n"
                                           "Error %1: %2").arg(GetLastError()).arg(errText));
         LocalFree(errormessage);
-        delete[] data;
+        _aligned_free(data);
         data = NULL;
     }
     if (data && bytesread < (sectorsize * numsectors))

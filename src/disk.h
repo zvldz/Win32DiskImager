@@ -44,9 +44,16 @@ typedef struct _DEVICE_NUMBER
 // IOCTL control code
 #define IOCTL_STORAGE_QUERY_PROPERTY   CTL_CODE(IOCTL_STORAGE_BASE, 0x0500, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-HANDLE getHandleOnFile(LPCWSTR filelocation, DWORD access);
-HANDLE getHandleOnDevice(int device, DWORD access);
-HANDLE getHandleOnVolume(int volume, DWORD access);
+// extraFlags is OR'd into CreateFileW's dwFlagsAndAttributes. Pass
+// FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH on the destination handle
+// of a Read/Write operation to bypass the Windows FS cache — this makes
+// reported throughput match reality and guarantees data is on the device
+// before the operation returns (required for correctness on sudden power
+// loss / device yank). Buffers used with NO_BUFFERING must be sector-aligned
+// (see readSectorDataFromHandle).
+HANDLE getHandleOnFile(LPCWSTR filelocation, DWORD access, DWORD extraFlags = 0);
+HANDLE getHandleOnDevice(int device, DWORD access, DWORD extraFlags = 0);
+HANDLE getHandleOnVolume(int volume, DWORD access, DWORD extraFlags = 0);
 QString getDriveLabel(const char *drv);
 DWORD getDeviceID(HANDLE handle);
 bool getLockOnVolume(HANDLE handle);
