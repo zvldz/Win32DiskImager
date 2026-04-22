@@ -579,7 +579,19 @@ public:
         fp_ = _wfopen(path.c_str(), L"rb");
         if (!fp_) { if (err) *err = "Cannot open xz image."; return false; }
 
-        if (lzma_stream_decoder(&strm_, UINT64_MAX, LZMA_CONCATENATED) != LZMA_OK) {
+        // Try multi-threaded decoder first (up to 8 threads). Same fallback
+        // story as the GUI XzImageReader — see src/xzimagereader.cpp.
+        lzma_mt mtOpts = {};
+        mtOpts.flags              = LZMA_CONCATENATED;
+        mtOpts.threads            = std::min(8u, std::max(2u, std::thread::hardware_concurrency()));
+        mtOpts.memlimit_threading = UINT64_MAX;
+        mtOpts.memlimit_stop      = UINT64_MAX;
+        lzma_ret r = lzma_stream_decoder_mt(&strm_, &mtOpts);
+        if (r != LZMA_OK) {
+            strm_ = LZMA_STREAM_INIT;
+            r = lzma_stream_decoder(&strm_, UINT64_MAX, LZMA_CONCATENATED);
+        }
+        if (r != LZMA_OK) {
             if (err) *err = "lzma_stream_decoder failed.";
             fclose(fp_); fp_ = nullptr; return false;
         }
