@@ -46,6 +46,21 @@
 
 #include <thread>
 
+// Format "2m 15s" / "1h 5m 30s" from a milliseconds value. Used by the
+// completion dialogs to report how long Read / Write / (Write + Verify)
+// actually took.
+static QString formatElapsedMs(qint64 ms)
+{
+    if (ms < 0) ms = 0;
+    qint64 s = ms / 1000;
+    const qint64 h = s / 3600;
+    const qint64 m = (s / 60) % 60;
+    s %= 60;
+    if (h > 0) return QString("%1h %2m %3s").arg(h).arg(m).arg(s);
+    if (m > 0) return QString("%1m %2s").arg(m).arg(s);
+    return QString("%1s").arg(s);
+}
+
 // I/O chunk target in bytes. The sector count per iteration is derived from
 // this so a 512-byte-sector device still transfers 4 MB per syscall instead
 // of the legacy 512 KB. Matches what RPi Imager / Etcher do on Windows.
@@ -743,15 +758,18 @@ void MainWindow::on_bWrite_clicked()
         setReadWriteButtonState();
         if (passfail){
             addImageFileToHistory(leFile->currentText());
+            const qint64 writeMs = elapsed_timer->ms();
             // Auto-verify chains into on_bVerify_clicked() so the user gets
             // one combined "Verify Successful" dialog instead of two.
             if (cbVerifyAfterWrite->isChecked()) {
+                m_writeElapsedMs = writeMs;  // read back from Verify's completion dialog
                 status = STATUS_IDLE;
                 elapsed_timer->stop();
                 on_bVerify_clicked();
                 return;  // verify handles its own close-on-EXIT and timer stop
             }
-            QMessageBox::information(this, tr("Complete"), tr("Write Successful."));
+            QMessageBox::information(this, tr("Complete"),
+                tr("Write Successful.\n\nElapsed: %1").arg(formatElapsedMs(writeMs)));
         }
 
     }
@@ -971,8 +989,8 @@ void MainWindow::on_bRead_clicked()
             QMessageBox::information(this, tr("Complete"), tr("Read Canceled."));
         } else {
             addImageFileToHistory(leFile->currentText());
-            QMessageBox::information(this, tr("Complete"), tr("Read Successful."));
-
+            QMessageBox::information(this, tr("Complete"),
+                tr("Read Successful.\n\nElapsed: %1").arg(formatElapsedMs(elapsed_timer->ms())));
         }
         updateHashControls();
     }
@@ -1308,7 +1326,20 @@ void MainWindow::on_bVerify_clicked()
         bCancel->setEnabled(false);
         setReadWriteButtonState();
         if (passfail){
-            QMessageBox::information(this, tr("Complete"), tr("Verify Successful."));
+            const qint64 verifyMs = elapsed_timer->ms();
+            QString msg;
+            if (m_writeElapsedMs > 0) {
+                // Chained from an auto-verify — report both phases.
+                const qint64 totalMs = m_writeElapsedMs + verifyMs;
+                msg = tr("Write & Verify Successful.\n\nWrite: %1\nVerify: %2\nTotal: %3")
+                          .arg(formatElapsedMs(m_writeElapsedMs))
+                          .arg(formatElapsedMs(verifyMs))
+                          .arg(formatElapsedMs(totalMs));
+                m_writeElapsedMs = 0;
+            } else {
+                msg = tr("Verify Successful.\n\nElapsed: %1").arg(formatElapsedMs(verifyMs));
+            }
+            QMessageBox::information(this, tr("Complete"), msg);
         }
     }
     else

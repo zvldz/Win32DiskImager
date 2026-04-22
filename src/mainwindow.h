@@ -92,6 +92,10 @@ private:
         char *sectorData2; //for verify
         QElapsedTimer update_timer;
         ElapsedTimer *elapsed_timer = NULL;
+        // Non-zero while a Write has just finished and is about to chain
+        // into an auto-verify. Verify's completion dialog uses it to report
+        // Write + Verify + Total time instead of just Verify's own elapsed.
+        qint64 m_writeElapsedMs = 0;
         QClipboard *clipboard;
         void generateHash(char *filename, int hashish);
         QString myHomeDir;
