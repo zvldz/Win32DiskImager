@@ -75,9 +75,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          MAJOR=$(grep -oP '#define APP_VERSION_MAJOR\s+\K\d+' src/version.h)
-          MINOR=$(grep -oP '#define APP_VERSION_MINOR\s+\K\d+' src/version.h)
-          PATCH=$(grep -oP '#define APP_VERSION_PATCH\s+\K\d+' src/version.h)
+          MAJOR=$(awk '/^#define APP_VERSION_MAJOR/{print $3; exit}' src/version.h)
+          MINOR=$(awk '/^#define APP_VERSION_MINOR/{print $3; exit}' src/version.h)
+          PATCH=$(awk '/^#define APP_VERSION_PATCH/{print $3; exit}' src/version.h)
           V="${MAJOR}.${MINOR}.${PATCH}"
           echo "version=${V}" >> "$GITHUB_OUTPUT"
           echo "App version: ${V}"
