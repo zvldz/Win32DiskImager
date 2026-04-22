@@ -16,6 +16,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Static Qt 6 pulls in many third-party libs at link time (image codecs,
+      # SSL, fonts, text layout, compression). MSYS2's qt6-static does not
+      # declare all of them as hard deps, so list each explicitly. Missing any
+      # surfaces as "cannot find -lXXX" from ld during the final link step.
       - name: Setup MSYS2 + static Qt 6 + MinGW
         uses: msys2/setup-msys2@v2
         with:
@@ -26,6 +30,26 @@ jobs:
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-make
             mingw-w64-x86_64-qt6-static
+            mingw-w64-x86_64-libtiff
+            mingw-w64-x86_64-libjpeg-turbo
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-libwebp
+            mingw-w64-x86_64-libdeflate
+            mingw-w64-x86_64-jbigkit
+            mingw-w64-x86_64-lerc
+            mingw-w64-x86_64-xz
+            mingw-w64-x86_64-zstd
+            mingw-w64-x86_64-bzip2
+            mingw-w64-x86_64-brotli
+            mingw-w64-x86_64-libb2
+            mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-pcre2
+            mingw-w64-x86_64-glib2
+            mingw-w64-x86_64-graphite2
+            mingw-w64-x86_64-harfbuzz
+            mingw-w64-x86_64-freetype
+            mingw-w64-x86_64-double-conversion
+            mingw-w64-x86_64-md4c
 
       # Static Qt in MSYS2 lives under /mingw64/qt6-static/. The GUI build uses
       # compile-gui-static.bat's qmake path via QT_STATIC_BIN; here we invoke
