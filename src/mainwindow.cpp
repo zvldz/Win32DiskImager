@@ -39,6 +39,7 @@
 
 #include "disk.h"
 #include "imagereader.h"
+#include "rawimagereader.h"
 #include "mainwindow.h"
 #include "elapsedtimer.h"
 
@@ -501,12 +502,15 @@ void MainWindow::on_bWrite_clicked()
                 return;
 
             }
-            numsectors = getFileSizeInSectors(hFile, sectorsize);
             const unsigned long long chunkSectors = sectorsize ? std::max<unsigned long long>(1ULL, CHUNK_BYTES / sectorsize) : 1ULL;
-            if (!numsectors)
+
+            // Open the image reader (sniffs magic bytes — Raw / Gz / Xz).
+            QString readerErr;
+            std::unique_ptr<ImageReader> reader = ImageReader::open(leFile->currentText(), &readerErr);
+            if (!reader || reader->compressedSize() == 0)
             {
-                //For external card readers you may not get device change notification when you remove the card/flash.
-                //(So no WM_DEVICECHANGE signal). Device stays but size goes to 0. [Is there special event for this on Windows??]
+                QMessageBox::critical(this, tr("File Error"),
+                                      reader ? tr("The selected image file is empty.") : readerErr);
                 removeLockOnVolume(hVolume);
                 CloseHandle(hRawDisk);
                 CloseHandle(hFile);
@@ -515,54 +519,60 @@ void MainWindow::on_bWrite_clicked()
                 hFile = INVALID_HANDLE_VALUE;
                 hVolume = INVALID_HANDLE_VALUE;
                 status = STATUS_IDLE;
+                bCancel->setEnabled(false);
+                setReadWriteButtonState();
                 return;
-
             }
-            if (numsectors > availablesectors)
+
+            // knownSize == true when the reader can report the uncompressed
+            // payload size (raw: file size; xz: via stream index; gz: via the
+            // ISIZE footer when < 4 GB). Unknown size → we cap the main loop
+            // at the device capacity and rely on the reader returning EOF.
+            const quint64 imgBytes   = reader->uncompressedSize();
+            const bool    knownSize  = (imgBytes > 0);
+            numsectors = knownSize ? (imgBytes + sectorsize - 1) / sectorsize
+                                   : availablesectors;
+
+            if (knownSize && numsectors > availablesectors)
             {
-                bool datafound = false;
-                i = availablesectors;
-                unsigned long nextchunksize = 0;
-                while ( (i < numsectors) && (datafound == false) )
+                // For raw images we peek at the bytes past the device
+                // capacity so the warning can say whether the truncated tail
+                // carried data. Compressed sources don't allow cheap random
+                // access → default to the pessimistic "DOES contain data".
+                bool datafound = true;
+                if (dynamic_cast<RawImageReader *>(reader.get()))
                 {
-                    nextchunksize = ((numsectors - i) >= chunkSectors) ? chunkSectors : (numsectors - i);
-                    sectorData = readSectorDataFromHandle(hFile, i, nextchunksize, sectorsize);
-                    if(sectorData == NULL)
+                    datafound = false;
+                    unsigned long long si = availablesectors;
+                    while (si < numsectors && !datafound)
                     {
-                        // if there's an error verifying the truncated data, just move on to the
-                        //  write, as we don't care about an error in a section that we're not writing...
-                        i = numsectors + 1;
-                    } else {
-                        unsigned int j = 0;
-                        unsigned limit = nextchunksize * sectorsize;
-                        while ( (datafound == false) && ( j < limit ) )
+                        const unsigned long long next =
+                            std::min<unsigned long long>(chunkSectors, numsectors - si);
+                        char *sd = readSectorDataFromHandle(hFile, si, next, sectorsize);
+                        if (!sd) break;
+                        const unsigned long long limit = next * sectorsize;
+                        for (unsigned long long j = 0; j < limit; ++j)
                         {
-                            if(sectorData[j++] != 0)
-                            {
-                                datafound = true;
-                            }
+                            if (sd[j]) { datafound = true; break; }
                         }
-                        i += nextchunksize;
+                        _aligned_free(sd);
+                        si += next;
                     }
                 }
-                // delete the allocated sectorData
-                _aligned_free(sectorData);
-                sectorData = NULL;
-                // build the string for the warning dialog
                 std::ostringstream msg;
                 msg << "More space required than is available:"
-                    << "\n  Required: " << numsectors << " sectors"
-                    << "\n  Available: " << availablesectors << " sectors"
+                    << "\n  Required: "   << numsectors      << " sectors"
+                    << "\n  Available: "  << availablesectors << " sectors"
                     << "\n  Sector Size: " << sectorsize
                     << "\n\nThe extra space " << ((datafound) ? "DOES" : "does not") << " appear to contain data"
                     << "\n\nContinue Anyway?";
-                if(QMessageBox::warning(this, tr("Not enough available space!"),
-                                        tr(msg.str().c_str()), QMessageBox::Ok, QMessageBox::Cancel) == QMessageBox::Ok)
+                if (QMessageBox::warning(this, tr("Not enough available space!"),
+                                         tr(msg.str().c_str()),
+                                         QMessageBox::Ok, QMessageBox::Cancel) == QMessageBox::Ok)
                 {
-                    // truncate the image at the device size...
                     numsectors = availablesectors;
                 }
-                else    // Cancel
+                else
                 {
                     removeLockOnVolume(hVolume);
                     CloseHandle(hRawDisk);
@@ -578,28 +588,15 @@ void MainWindow::on_bWrite_clicked()
                 }
             }
 
-            // Pre-scan (above) used hFile directly; the streaming main loop
-            // goes through ImageReader so compressed-source support added in
-            // later commits plugs in transparently.
+            // hFile was only needed for the pre-scan above — the main loop
+            // reads through the reader (which holds its own file handle or
+            // decompressor state).
             CloseHandle(hFile);
             hFile = INVALID_HANDLE_VALUE;
-            QString readerErr;
-            std::unique_ptr<ImageReader> reader = ImageReader::open(leFile->currentText(), &readerErr);
-            if (!reader)
-            {
-                QMessageBox::critical(this, tr("File Error"), readerErr);
-                removeLockOnVolume(hVolume);
-                CloseHandle(hRawDisk);
-                CloseHandle(hVolume);
-                status = STATUS_IDLE;
-                hRawDisk = INVALID_HANDLE_VALUE;
-                hVolume = INVALID_HANDLE_VALUE;
-                bCancel->setEnabled(false);
-                setReadWriteButtonState();
-                return;
-            }
 
-            progressbar->setRange(0, (numsectors == 0ul) ? 100 : (int)numsectors);
+            // Progress bar unit: sectors when size is known, compressed-byte
+            // percentage otherwise. The bar stays smooth either way.
+            progressbar->setRange(0, knownSize ? (numsectors == 0ul ? 100 : (int)numsectors) : 100);
             lasti = 0ul;
             update_timer.start();
             elapsed_timer->start();
@@ -655,7 +652,12 @@ void MainWindow::on_bWrite_clicked()
                     update_timer.start();
                     lasti = i;
                 }
-                progressbar->setValue(i);
+                if (knownSize) {
+                    progressbar->setValue((int)i);
+                } else {
+                    const quint64 cSize = reader->compressedSize();
+                    if (cSize > 0) progressbar->setValue((int)(reader->compressedPos() * 100ULL / cSize));
+                }
                 QCoreApplication::processEvents();
             }
             _aligned_free(buf);
@@ -1017,12 +1019,15 @@ void MainWindow::on_bVerify_clicked()
                 return;
 
             }
-            numsectors = getFileSizeInSectors(hFile, sectorsize);
             const unsigned long long chunkSectors = sectorsize ? std::max<unsigned long long>(1ULL, CHUNK_BYTES / sectorsize) : 1ULL;
-            if (!numsectors)
+
+            // Open the image reader (sniffs magic bytes — Raw / Gz / Xz).
+            QString verifyReaderErr;
+            std::unique_ptr<ImageReader> reader = ImageReader::open(leFile->currentText(), &verifyReaderErr);
+            if (!reader || reader->compressedSize() == 0)
             {
-                //For external card readers you may not get device change notification when you remove the card/flash.
-                //(So no WM_DEVICECHANGE signal). Device stays but size goes to 0. [Is there special event for this on Windows??]
+                QMessageBox::critical(this, tr("File Error"),
+                                      reader ? tr("The selected image file is empty.") : verifyReaderErr);
                 removeLockOnVolume(hVolume);
                 CloseHandle(hRawDisk);
                 CloseHandle(hFile);
@@ -1031,54 +1036,52 @@ void MainWindow::on_bVerify_clicked()
                 hFile = INVALID_HANDLE_VALUE;
                 hVolume = INVALID_HANDLE_VALUE;
                 status = STATUS_IDLE;
+                bCancel->setEnabled(false);
+                setReadWriteButtonState();
                 return;
-
             }
-            if (numsectors > availablesectors)
+
+            const quint64 imgBytes  = reader->uncompressedSize();
+            const bool    knownSize = (imgBytes > 0);
+            numsectors = knownSize ? (imgBytes + sectorsize - 1) / sectorsize
+                                   : availablesectors;
+
+            if (knownSize && numsectors > availablesectors)
             {
-                bool datafound = false;
-                i = availablesectors;
-                unsigned long nextchunksize = 0;
-                while ( (i < numsectors) && (datafound == false) )
+                bool datafound = true;
+                if (dynamic_cast<RawImageReader *>(reader.get()))
                 {
-                    nextchunksize = ((numsectors - i) >= chunkSectors) ? chunkSectors : (numsectors - i);
-                    sectorData = readSectorDataFromHandle(hFile, i, nextchunksize, sectorsize);
-                    if(sectorData == NULL)
+                    datafound = false;
+                    unsigned long long si = availablesectors;
+                    while (si < numsectors && !datafound)
                     {
-                        // if there's an error verifying the truncated data, just move on to the
-                        //  write, as we don't care about an error in a section that we're not writing...
-                        i = numsectors + 1;
-                    } else {
-                        unsigned int j = 0;
-                        unsigned limit = nextchunksize * sectorsize;
-                        while ( (datafound == false) && ( j < limit ) )
+                        const unsigned long long next =
+                            std::min<unsigned long long>(chunkSectors, numsectors - si);
+                        char *sd = readSectorDataFromHandle(hFile, si, next, sectorsize);
+                        if (!sd) break;
+                        const unsigned long long limit = next * sectorsize;
+                        for (unsigned long long j = 0; j < limit; ++j)
                         {
-                            if(sectorData[j++] != 0)
-                            {
-                                datafound = true;
-                            }
+                            if (sd[j]) { datafound = true; break; }
                         }
-                        i += nextchunksize;
+                        _aligned_free(sd);
+                        si += next;
                     }
                 }
-                // delete the allocated sectorData
-                _aligned_free(sectorData);
-                sectorData = NULL;
-                // build the string for the warning dialog
                 std::ostringstream msg;
                 msg << "Size of image larger than device:"
-                    << "\n  Image: " << numsectors << " sectors"
+                    << "\n  Image: "  << numsectors      << " sectors"
                     << "\n  Device: " << availablesectors << " sectors"
                     << "\n  Sector Size: " << sectorsize
                     << "\n\nThe extra space " << ((datafound) ? "DOES" : "does not") << " appear to contain data"
                     << "\n\nContinue Anyway?";
-                if(QMessageBox::warning(this, tr("Size Mismatch!"),
-                                        tr(msg.str().c_str()), QMessageBox::Ok, QMessageBox::Cancel) == QMessageBox::Ok)
+                if (QMessageBox::warning(this, tr("Size Mismatch!"),
+                                         tr(msg.str().c_str()),
+                                         QMessageBox::Ok, QMessageBox::Cancel) == QMessageBox::Ok)
                 {
-                    // truncate the image at the device size...
                     numsectors = availablesectors;
                 }
-                else    // Cancel
+                else
                 {
                     removeLockOnVolume(hVolume);
                     CloseHandle(hRawDisk);
@@ -1093,28 +1096,14 @@ void MainWindow::on_bVerify_clicked()
                     return;
                 }
             }
-            // Close hFile; the Verify main loop runs through ImageReader to
-            // mirror the Write path and to stay compatible with compressed
-            // inputs added in a later commit.
+
+            // hFile was only useful for the pre-scan above — the Verify main
+            // loop consumes the reader (which holds its own state) and reads
+            // the device directly via readSectorDataFromHandle.
             CloseHandle(hFile);
             hFile = INVALID_HANDLE_VALUE;
-            QString verifyReaderErr;
-            std::unique_ptr<ImageReader> reader = ImageReader::open(leFile->currentText(), &verifyReaderErr);
-            if (!reader)
-            {
-                QMessageBox::critical(this, tr("File Error"), verifyReaderErr);
-                removeLockOnVolume(hVolume);
-                CloseHandle(hRawDisk);
-                CloseHandle(hVolume);
-                status = STATUS_IDLE;
-                hRawDisk = INVALID_HANDLE_VALUE;
-                hVolume = INVALID_HANDLE_VALUE;
-                bCancel->setEnabled(false);
-                setReadWriteButtonState();
-                return;
-            }
 
-            progressbar->setRange(0, (numsectors == 0ul) ? 100 : (int)numsectors);
+            progressbar->setRange(0, knownSize ? (numsectors == 0ul ? 100 : (int)numsectors) : 100);
             update_timer.start();
             elapsed_timer->start();
             lasti = 0ul;
@@ -1181,7 +1170,12 @@ void MainWindow::on_bVerify_clicked()
                 _aligned_free(sectorData2);
                 sectorData2 = NULL;
                 i += chunk;
-                progressbar->setValue(i);
+                if (knownSize) {
+                    progressbar->setValue((int)i);
+                } else {
+                    const quint64 cSize = reader->compressedSize();
+                    if (cSize > 0) progressbar->setValue((int)(reader->compressedPos() * 100ULL / cSize));
+                }
                 QCoreApplication::processEvents();
             }
             _aligned_free(fileBuf);

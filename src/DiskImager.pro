@@ -58,7 +58,9 @@ HEADERS += disk.h\
            droppablecombobox.h \
            elapsedtimer.h \
            imagereader.h \
-           rawimagereader.h
+           rawimagereader.h \
+           gzimagereader.h \
+           xzimagereader.h
 
 FORMS += mainwindow.ui
 
@@ -68,7 +70,12 @@ SOURCES += disk.cpp\
            droppablecombobox.cpp \
            elapsedtimer.cpp \
            imagereader.cpp \
-           rawimagereader.cpp
+           rawimagereader.cpp \
+           gzimagereader.cpp \
+           xzimagereader.cpp
+
+# zlib + liblzma are pulled in for on-the-fly .gz / .xz image decompression.
+LIBS += -lz -llzma
 
 RESOURCES += gui_icons.qrc translations.qrc
 

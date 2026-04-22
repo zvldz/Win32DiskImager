@@ -41,6 +41,7 @@ jobs:
             mingw-w64-x86_64-jbigkit
             mingw-w64-x86_64-lerc
             mingw-w64-x86_64-xz
+            mingw-w64-x86_64-zlib
             mingw-w64-x86_64-zstd
             mingw-w64-x86_64-bzip2
             mingw-w64-x86_64-brotli

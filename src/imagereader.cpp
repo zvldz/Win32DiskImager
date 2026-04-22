@@ -11,16 +11,42 @@
  **********************************************************************/
 
 #include "imagereader.h"
+#include "gzimagereader.h"
 #include "rawimagereader.h"
+#include "xzimagereader.h"
 
-// Factory: today only the raw path is wired up. A later commit adds magic-
-// byte sniffing here to return GzImageReader / XzImageReader for compressed
-// inputs without touching any caller.
+#include <QFile>
+
+// Sniff the first handful of bytes and hand back a reader that speaks the
+// detected format. We pick by magic bytes, not extension — users sometimes
+// rename `.img.xz` → `.img` thinking it doesn't matter.
 std::unique_ptr<ImageReader> ImageReader::open(const QString &path, QString *err)
 {
-    auto reader = std::make_unique<RawImageReader>();
-    if (!reader->open(path, err)) {
+    QFile probe(path);
+    if (!probe.open(QIODevice::ReadOnly)) {
+        if (err) *err = probe.errorString();
         return nullptr;
     }
-    return reader;
+    unsigned char magic[6] = {0};
+    const qint64 n = probe.read(reinterpret_cast<char *>(magic), 6);
+    probe.close();
+
+    const bool isGz = (n >= 2) && magic[0] == 0x1F && magic[1] == 0x8B;
+    const bool isXz = (n >= 6) && magic[0] == 0xFD && magic[1] == '7'
+                   && magic[2] == 'z' && magic[3] == 'X'
+                   && magic[4] == 'Z' && magic[5] == 0x00;
+
+    if (isGz) {
+        auto r = std::make_unique<GzImageReader>();
+        if (!r->open(path, err)) return nullptr;
+        return r;
+    }
+    if (isXz) {
+        auto r = std::make_unique<XzImageReader>();
+        if (!r->open(path, err)) return nullptr;
+        return r;
+    }
+    auto r = std::make_unique<RawImageReader>();
+    if (!r->open(path, err)) return nullptr;
+    return r;
 }
