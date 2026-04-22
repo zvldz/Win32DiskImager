@@ -9,14 +9,13 @@
 - Write and Verify in the GUI now drive off the reader; size checks use `uncompressedSize()` from the format's metadata (xz stream index, gz ISIZE trailer). When the size cannot be determined (rare — gz > 4 GB without a credible ISIZE), the loop iterates to EOF and aborts the moment device capacity is reached, instead of silently truncating.
 - The truncate pre-scan (warning that the extra bytes past the device size DOES / does not contain data) only runs for raw sources — compressed streams default to the pessimistic warning since they don't allow cheap random access.
 - Progress bar has two modes: sectors-written when uncompressed size is known, compressed-bytes percentage otherwise. Either way the bar moves smoothly from 0 to 100 — same fallback RPi Imager / balenaEtcher use.
-- Browse-file filter in the GUI extended: `Disk images (*.img *.IMG *.iso *.ISO *.gz *.GZ *.xz *.XZ)` becomes the default; raw-only and compressed-only filters available too.
+- Browse-file filter in the GUI becomes `Disk images (*.img *.iso *.gz *.xz)` by default; raw-only and compressed-only filters are also offered.
 - The CLI gets a parallel, Qt-free `ImageSource` hierarchy (in `cli_main.cpp`) using the same magic-byte sniffing. `cmdWrite` and `cmdVerify` accept `.gz` / `.xz` transparently.
 
 #### Pipelined I/O
 - New `src/iopipeline.h` — a bounded (4-chunk) producer/consumer queue used by both the GUI and the CLI. A decoder thread fills the queue with `IoChunk`s; the main thread drains them to the device.
 - Write and Verify in both front-ends now overlap decompression with disk I/O. On a `.xz` source, prior versions hit a ~15-16 MB/s ceiling on Write because decode and `WriteFile` ran sequentially; with the pipeline the SD card is the bottleneck again (typically 30-40+ MB/s on V30, closer to spec on faster cards). Verify gets the same speedup since the decoder runs while the main thread reads the device and runs `memcmp`.
 - Cancel propagates via `ChunkQueue::requestAbort()`. The decoder thread is always `join()`ed before the operation function returns. Errors flow back to the main thread as `IoChunk::err`, never as a dead producer.
-- `lzma_stream_decoder_mt` (multi-threaded xz decode) intentionally **not** wired up in this release — the producer/consumer pipeline is enough on SD-card targets. Can be added later if a fast USB SSD is found to bottleneck on single-threaded decode.
 
 #### Auto-verify after Write
 - GUI: new `Verify after Write` checkbox next to `Read Only Allocated Partitions`, **default on**. After a successful Write, control chains into `on_bVerify_clicked()` so the user gets one combined `Verify Successful` dialog. Unchecking restores the legacy "Write only, click Verify separately" flow.
@@ -32,10 +31,8 @@
 #### Misc
 - GUI status-bar MB/s now formatted as `%.2f` (e.g. `85.32 MB/s`) instead of the default 6-significant-digit Qt rendering (`85.3214567`). CLI progress line is formatted the same way.
 - `cli_main.cpp` direct I/O on the destination handle (`FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`) plus `_aligned_malloc` chunk buffer — same correctness fix the GUI got in 2.1.1.
-- `disk.cpp`: `SetFilePointer` → `SetFilePointerEx` (64-bit, proper error check) in `readSectorDataFromHandle` / `writeSectorDataToHandle`. The old 32-bit API treated the low-part as signed `LONG` — a latent problem for images ≥ 2 GB that surfaced once the direct-I/O path started exercising those code paths more aggressively.
-- Multi-threaded xz decoder (`lzma_stream_decoder_mt`) with up to 8 threads, falling back to single-threaded when unavailable. For modern CPUs on SD targets this changes nothing (SD is still the bottleneck), but on older CPUs or fast targets (UHS-II SD, USB 3.0 SSD) it prevents decode from becoming the bottleneck.
-- Browse-file filter dropped duplicate-case patterns (`*.IMG`, `*.ISO`, `*.GZ`, `*.XZ`). Qt's `QFileDialog` glob matching is case-insensitive on Windows, so the lowercase variants already match `FOO.IMG`.
-- Fixed a pipeline-refactor regression: the sector counter `i` was declared without initialisation and only got its value from the old `for (i = 0ul; ...)` header that the refactor dropped. `WriteFile` was called with whatever junk the stack slot held, producing insane offsets and `Error 87: The parameter is incorrect.` The counter is now explicitly zeroed before both the Write and Verify main loops.
+- `disk.cpp`: the legacy 32-bit `SetFilePointer` replaced with `SetFilePointerEx` in `readSectorDataFromHandle` / `writeSectorDataToHandle`. Closes a latent issue for images ≥ 2 GB where the old API treated the low-part as a signed `LONG`.
+- Multi-threaded xz decoder (`lzma_stream_decoder_mt`) with up to 8 threads, falling back to single-threaded when unavailable. For modern CPUs on SD targets this changes nothing (SD is the bottleneck), but on older CPUs or fast targets (UHS-II SD, USB 3.0 SSD) it prevents decode from becoming the bottleneck.
 
 #### Status / UI feedback
 - Progress bar shows the current operation inline: `Writing: 42%`, `Reading: 78%`, `Verifying: 15%`. Important now that Auto-verify-after-Write resets the bar to 0 and starts a second pass — the user no longer has to guess which phase is running.
