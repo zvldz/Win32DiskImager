@@ -44,11 +44,10 @@ Name: "addclitopath"; Description: "Add Win32DiskImager-cli to system PATH"; Gro
 Source: "Release\Win32DiskImager.exe";     DestDir: "{app}"; Flags: ignoreversion
 Source: "Release\Win32DiskImager-cli.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Release\translations\*.qm";       DestDir: "{app}\translations"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "Changelog.txt";                   DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "CHANGELOG.md";                    DestDir: "{app}"; Flags: ignoreversion
 Source: "GPL-2";                           DestDir: "{app}"; Flags: ignoreversion
 Source: "LGPL-2.1";                        DestDir: "{app}"; Flags: ignoreversion
 Source: "THIRD_PARTY_LICENSES.md";         DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "README.txt";                      DestDir: "{app}"; Flags: ignoreversion isreadme skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

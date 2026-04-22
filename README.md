@@ -5,8 +5,6 @@ Win32DiskImager is a Windows utility for writing raw disk images (`.img` and rel
 This repository contains:
 - A Qt-based GUI application (`Win32DiskImager.exe`)
 - A native Windows CLI application (`Win32DiskImager-cli.exe`)
-- A native Win32 API GUI scaffold (`native-win32-gui/`)
-- A native Visual Studio CLI solution (`native-win32-cli/`)
 
 ## Important Safety Notes
 
@@ -40,8 +38,9 @@ This repository contains:
 - MinGW-w64 (`g++`, `mingw32-make`)
 - Optional static Qt build for fully static GUI builds
 
-The provided batch files expect a typical MSYS2 MinGW path:
-- `C:\msys64\mingw64\bin`
+The provided batch files auto-detect Qt and MinGW in common locations
+(MSYS2 `C:\msys64\mingw64\bin`, the Qt online installer under `C:\Qt`).
+Set `QT_BIN` and / or `MINGW_BIN` to override.
 
 ## Build
 
@@ -56,20 +55,6 @@ compile.bat
 Output:
 - `bin\Win32DiskImager.exe`
 
-### Native Win32 GUI scaffold build (Visual Studio)
-
-Open this solution in Visual Studio 2022 (or newer):
-
-```text
-native-win32-gui\Win32DiskImagerNative.sln
-```
-
-Build target:
-- `Debug|x64` (or `Release|x64`)
-
-Output:
-- `native-win32-gui\build\<Configuration>\<Platform>\Win32DiskImagerNative.exe`
-
 ### CLI build
 
 From repository root:
@@ -80,20 +65,6 @@ compile-cli.bat
 
 Output:
 - `bin\Win32DiskImager-cli.exe`
-
-### Native CLI build (Visual Studio)
-
-Open:
-
-```text
-native-win32-cli\Win32DiskImagerCliNative.sln
-```
-
-Build target:
-- `Debug|x64` (or `Release|x64`)
-
-Output:
-- `native-win32-cli\build\<Configuration>\<Platform>\Win32DiskImager-cli-native.exe`
 
 ### Static GUI build (Qt static toolchain)
 
@@ -127,17 +98,22 @@ Usage:
 
 ```text
 Win32DiskImager-cli.exe list
-Win32DiskImager-cli.exe write  --device E: --image C:\path\image.img
+Win32DiskImager-cli.exe write  --device E: --image C:\path\image.img[.gz|.xz] [--no-verify]
 Win32DiskImager-cli.exe read   --device E: --image C:\path\backup.img [--bytes N] [--allocated-only]
-Win32DiskImager-cli.exe verify --device E: --image C:\path\image.img
+Win32DiskImager-cli.exe verify --device E: --image C:\path\image.img[.gz|.xz]
 ```
+
+`write` / `verify` accept plain `.img`, gzipped `.img.gz` and
+xz-compressed `.img.xz` — the format is detected by magic bytes, not the
+file extension. `write` runs a verify pass afterwards by default; pass
+`--no-verify` to skip it.
 
 Examples:
 
 ```bat
 Win32DiskImager-cli.exe list
-Win32DiskImager-cli.exe write --device E: --image C:\images\raspi.img
-Win32DiskImager-cli.exe read --device E: --image C:\images\backup.img --allocated-only
+Win32DiskImager-cli.exe write  --device E: --image C:\images\raspi.img.xz
+Win32DiskImager-cli.exe read   --device E: --image C:\images\backup.img --allocated-only
 Win32DiskImager-cli.exe verify --device E: --image C:\images\raspi.img
 ```
 
@@ -148,16 +124,13 @@ Win32DiskImager-cli.exe verify --device E: --image C:\images\raspi.img
 
 ## Repository Layout
 
-- `src/` - main GUI and CLI sources, resources, translations
+- `src/` - GUI and CLI sources, resources, translations
 - `src/DiskImager.pro` - GUI qmake project
 - `src/DiskImagerCli.pro` - CLI qmake project
-- `native-win32-gui/` - Visual Studio native Win32 GUI scaffold
-- `native-win32-cli/` - Visual Studio native CLI solution
-- `compile.bat` - GUI build helper
-- `compile-cli.bat` - CLI build helper
-- `compile-gui-static.bat` - static GUI build helper
+- `compile.bat` / `compile-cli.bat` / `compile-gui-static.bat` - local build helpers
+- `_detect-toolchain.bat` - Qt / MinGW auto-discovery used by the above
 - `setup.iss` - Inno Setup installer script
-- `bin/` - build outputs and packaged zip artifacts
+- `.github/workflows/release.yml` - CI that publishes the static GUI / CLI / installer
 
 ## License
 
@@ -171,10 +144,3 @@ Win32DiskImager-cli.exe verify --device E: --image C:\images\raspi.img
   transitively by static Qt) and the full LGPL compliance statement are
   documented in `THIRD_PARTY_LICENSES.md`.
 - Additional legal text: `License.txt`
-
-## Historical Notes
-
-Legacy docs are still included:
-- `README.txt`
-- `DEVEL.txt`
-- `CHANGELOG.md` and `Changelog.txt`
