@@ -612,6 +612,8 @@ void MainWindow::on_bWrite_clicked()
             // Progress bar unit: sectors when size is known, compressed-byte
             // percentage otherwise. The bar stays smooth either way.
             progressbar->setRange(0, knownSize ? (numsectors == 0ul ? 100 : (int)numsectors) : 100);
+            progressbar->setFormat(tr("Writing: %p%"));
+            statusbar->showMessage(tr("Writing..."));
             lasti = 0ul;
             update_timer.start();
             elapsed_timer->start();
@@ -683,7 +685,7 @@ void MainWindow::on_bWrite_clicked()
                 if (update_timer.elapsed() >= ONE_SEC_IN_MS)
                 {
                     mbpersec = (((double)sectorsize * (i - lasti)) * ((float)ONE_SEC_IN_MS / update_timer.elapsed())) / 1024.0 / 1024.0;
-                    statusbar->showMessage(QString("%1 MB/s").arg(mbpersec, 0, 'f', 2));
+                    statusbar->showMessage(tr("Writing: %1 MB/s").arg(mbpersec, 0, 'f', 2));
                     elapsed_timer->update(i, numsectors);
                     update_timer.start();
                     lasti = i;
@@ -905,6 +907,8 @@ void MainWindow::on_bRead_clicked()
         {
             progressbar->setRange(0, (int)numsectors);
         }
+        progressbar->setFormat(tr("Reading: %p%"));
+        statusbar->showMessage(tr("Reading..."));
         lasti = 0ul;
         update_timer.start();
         elapsed_timer->start();
@@ -946,7 +950,7 @@ void MainWindow::on_bRead_clicked()
             if (update_timer.elapsed() >= ONE_SEC_IN_MS)
             {
                 mbpersec = (((double)sectorsize * (i - lasti)) * ((float)ONE_SEC_IN_MS / update_timer.elapsed())) / 1024.0 / 1024.0;
-                statusbar->showMessage(QString("%1MB/s").arg(mbpersec, 0, 'f', 2));
+                statusbar->showMessage(tr("Reading: %1 MB/s").arg(mbpersec, 0, 'f', 2));
                 update_timer.start();
                 elapsed_timer->update(i, numsectors);
                 lasti = i;
@@ -1163,6 +1167,8 @@ void MainWindow::on_bVerify_clicked()
             hFile = INVALID_HANDLE_VALUE;
 
             progressbar->setRange(0, knownSize ? (numsectors == 0ul ? 100 : (int)numsectors) : 100);
+            progressbar->setFormat(tr("Verifying: %p%"));
+            statusbar->showMessage(tr("Verifying..."));
             update_timer.start();
             elapsed_timer->start();
             lasti = 0ul;
@@ -1246,7 +1252,7 @@ void MainWindow::on_bVerify_clicked()
                 if (update_timer.elapsed() >= ONE_SEC_IN_MS)
                 {
                     mbpersec = (((double)sectorsize * (i - lasti)) * ((float)ONE_SEC_IN_MS / update_timer.elapsed())) / 1024.0 / 1024.0;
-                    statusbar->showMessage(QString("%1MB/s").arg(mbpersec, 0, 'f', 2));
+                    statusbar->showMessage(tr("Verifying: %1 MB/s").arg(mbpersec, 0, 'f', 2));
                     update_timer.start();
                     elapsed_timer->update(i, numsectors);
                     lasti = i;

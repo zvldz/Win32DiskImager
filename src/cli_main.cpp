@@ -883,6 +883,7 @@ int cmdWrite(const std::string &imagePath, const std::string &device)
 
     uint64_t processed = 0;       // bytes committed to device
     uint64_t compLast  = 0;
+    std::cout << "Writing:" << std::endl;
     ProgressPrinter progress(imageBytes > 0 ? imageBytes : src->compressedSize());
 
     while (true) {
@@ -992,6 +993,7 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
 
     uint64_t processed = 0;
     int rc = 0;
+    std::cout << "Reading:" << std::endl;
     ProgressPrinter progress(bytesToRead);
 
     while (processed < bytesToRead) {
@@ -1111,6 +1113,7 @@ int cmdVerify(const std::string &imagePath, const std::string &device)
     uint64_t processed = 0;
     uint64_t compLast  = 0;
     int rc = 0;
+    std::cout << "Verifying:" << std::endl;
     ProgressPrinter progress(imageBytes > 0 ? imageBytes : src->compressedSize());
 
     while (true) {
@@ -1275,7 +1278,7 @@ int main(int argc, char *argv[])
     if (opt.command == "write") {
         const int rc = cmdWrite(opt.image, opt.device);
         if (rc != 0 || opt.noVerify) return rc;
-        std::cout << "\nVerifying..." << std::endl;
+        std::cout << std::endl;  // blank line between Write and auto-Verify
         return cmdVerify(opt.image, opt.device);
     }
     if (opt.command == "read") {
