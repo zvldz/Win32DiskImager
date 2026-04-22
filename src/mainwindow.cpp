@@ -736,6 +736,14 @@ void MainWindow::on_bWrite_clicked()
         setReadWriteButtonState();
         if (passfail){
             addImageFileToHistory(leFile->currentText());
+            // Auto-verify chains into on_bVerify_clicked() so the user gets
+            // one combined "Verify Successful" dialog instead of two.
+            if (cbVerifyAfterWrite->isChecked()) {
+                status = STATUS_IDLE;
+                elapsed_timer->stop();
+                on_bVerify_clicked();
+                return;  // verify handles its own close-on-EXIT and timer stop
+            }
             QMessageBox::information(this, tr("Complete"), tr("Write Successful."));
         }
 

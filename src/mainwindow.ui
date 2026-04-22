@@ -249,6 +249,25 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="cbVerifyAfterWrite">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="toolTip">
+         <string>Re-read the device after writing and compare against the source. Catches bad SD cards.</string>
+        </property>
+        <property name="text">
+         <string>Verify after Write</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="horizontalSpacer_4">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
