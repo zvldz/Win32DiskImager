@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <limits>
@@ -303,22 +304,66 @@ public:
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - m_tick).count() < 500) {
             return;
         }
-        const double sec = std::chrono::duration_cast<std::chrono::duration<double>>(now - m_start).count();
-        const double mbPerSec = (sec > 0.0) ? ((processedBytes / 1024.0 / 1024.0) / sec) : 0.0;
-
-        if (m_totalBytes > 0) {
-            const double pct = (100.0 * processedBytes) / static_cast<double>(m_totalBytes);
-            std::cout << "\rProgress: " << pct << "%  Speed: " << mbPerSec << " MB/s" << std::flush;
-        } else {
-            std::cout << "\rProcessed: " << (processedBytes / 1024.0 / 1024.0) << " MB  Speed: " << mbPerSec << " MB/s" << std::flush;
-        }
+        render(processedBytes);
         m_tick = now;
     }
 
     void done(uint64_t processedBytes)
     {
-        update(processedBytes);
-        std::cout << std::endl;
+        render(processedBytes);           // force-draw the last state
+        std::cout << '\n';
+    }
+
+private:
+    static constexpr int BAR_WIDTH = 20;
+
+    void render(uint64_t processedBytes)
+    {
+        const auto now   = std::chrono::steady_clock::now();
+        const double sec = std::chrono::duration_cast<std::chrono::duration<double>>(now - m_start).count();
+        const double mbPerSec = (sec > 0.0)
+            ? (static_cast<double>(processedBytes) / (1024.0 * 1024.0) / sec)
+            : 0.0;
+
+        char line[160];
+        if (m_totalBytes > 0) {
+            const double pct = 100.0 * static_cast<double>(processedBytes)
+                                     / static_cast<double>(m_totalBytes);
+            int filled = static_cast<int>((pct / 100.0) * BAR_WIDTH + 0.5);
+            if (filled < 0) filled = 0;
+            if (filled > BAR_WIDTH) filled = BAR_WIDTH;
+
+            char bar[BAR_WIDTH + 1];
+            for (int i = 0; i < BAR_WIDTH; ++i) bar[i] = (i < filled) ? '#' : '.';
+            bar[BAR_WIDTH] = '\0';
+
+            char eta[16] = "--:--";
+            if (mbPerSec > 0.0 && processedBytes < m_totalBytes) {
+                const double remSec = static_cast<double>(m_totalBytes - processedBytes)
+                                    / (mbPerSec * 1024.0 * 1024.0);
+                const uint64_t s = static_cast<uint64_t>(remSec);
+                if (s >= 3600) {
+                    std::snprintf(eta, sizeof(eta), "%u:%02u:%02u",
+                                  static_cast<unsigned>(s / 3600),
+                                  static_cast<unsigned>((s / 60) % 60),
+                                  static_cast<unsigned>(s % 60));
+                } else {
+                    std::snprintf(eta, sizeof(eta), "%02u:%02u",
+                                  static_cast<unsigned>(s / 60),
+                                  static_cast<unsigned>(s % 60));
+                }
+            }
+
+            std::snprintf(line, sizeof(line),
+                          "\r[%s] %5.1f%%  %6.1f MB/s  ETA %-8s",
+                          bar, pct, mbPerSec, eta);
+        } else {
+            std::snprintf(line, sizeof(line),
+                          "\rProcessed: %8.2f MB  Speed: %6.1f MB/s         ",
+                          static_cast<double>(processedBytes) / (1024.0 * 1024.0),
+                          mbPerSec);
+        }
+        std::cout << line << std::flush;
     }
 
 private:
