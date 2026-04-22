@@ -612,7 +612,6 @@ void MainWindow::on_bWrite_clicked()
             // Progress bar unit: sectors when size is known, compressed-byte
             // percentage otherwise. The bar stays smooth either way.
             progressbar->setRange(0, knownSize ? (numsectors == 0ul ? 100 : (int)numsectors) : 100);
-            progressbar->setFormat(tr("Writing: %p%"));
             statusbar->showMessage(tr("Writing..."));
             lasti = 0ul;
             update_timer.start();
@@ -907,7 +906,6 @@ void MainWindow::on_bRead_clicked()
         {
             progressbar->setRange(0, (int)numsectors);
         }
-        progressbar->setFormat(tr("Reading: %p%"));
         statusbar->showMessage(tr("Reading..."));
         lasti = 0ul;
         update_timer.start();
@@ -1167,7 +1165,6 @@ void MainWindow::on_bVerify_clicked()
             hFile = INVALID_HANDLE_VALUE;
 
             progressbar->setRange(0, knownSize ? (numsectors == 0ul ? 100 : (int)numsectors) : 100);
-            progressbar->setFormat(tr("Verifying: %p%"));
             statusbar->showMessage(tr("Verifying..."));
             update_timer.start();
             elapsed_timer->start();
