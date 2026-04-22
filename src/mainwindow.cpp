@@ -38,6 +38,7 @@
 #include <sstream>
 
 #include "disk.h"
+#include "imagereader.h"
 #include "mainwindow.h"
 #include "elapsedtimer.h"
 
@@ -577,45 +578,74 @@ void MainWindow::on_bWrite_clicked()
                 }
             }
 
+            // Pre-scan (above) used hFile directly; the streaming main loop
+            // goes through ImageReader so compressed-source support added in
+            // later commits plugs in transparently.
+            CloseHandle(hFile);
+            hFile = INVALID_HANDLE_VALUE;
+            QString readerErr;
+            std::unique_ptr<ImageReader> reader = ImageReader::open(leFile->currentText(), &readerErr);
+            if (!reader)
+            {
+                QMessageBox::critical(this, tr("File Error"), readerErr);
+                removeLockOnVolume(hVolume);
+                CloseHandle(hRawDisk);
+                CloseHandle(hVolume);
+                status = STATUS_IDLE;
+                hRawDisk = INVALID_HANDLE_VALUE;
+                hVolume = INVALID_HANDLE_VALUE;
+                bCancel->setEnabled(false);
+                setReadWriteButtonState();
+                return;
+            }
+
             progressbar->setRange(0, (numsectors == 0ul) ? 100 : (int)numsectors);
             lasti = 0ul;
             update_timer.start();
             elapsed_timer->start();
-            for (i = 0ul; i < numsectors && status == STATUS_WRITING; i += chunkSectors)
+            char *buf = (char *)_aligned_malloc((size_t)(chunkSectors * sectorsize), (size_t)sectorsize);
+            for (i = 0ul; i < numsectors && status == STATUS_WRITING; )
             {
-                sectorData = readSectorDataFromHandle(hFile, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize);
-                if (sectorData == NULL)
+                const qsizetype want = (qsizetype)std::min<unsigned long long>(
+                                           chunkSectors * sectorsize,
+                                           (numsectors - i) * sectorsize);
+                qint64 got = reader->read(buf, want);
+                if (got < 0)
                 {
+                    QMessageBox::critical(this, tr("File Error"), reader->errorString());
+                    _aligned_free(buf);
                     removeLockOnVolume(hVolume);
                     CloseHandle(hRawDisk);
-                    CloseHandle(hFile);
                     CloseHandle(hVolume);
                     status = STATUS_IDLE;
                     hRawDisk = INVALID_HANDLE_VALUE;
-                    hFile = INVALID_HANDLE_VALUE;
                     hVolume = INVALID_HANDLE_VALUE;
                     bCancel->setEnabled(false);
                     setReadWriteButtonState();
                     return;
                 }
-                if (!writeSectorDataToHandle(hRawDisk, sectorData, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize))
+                if (got == 0) break;  // clean EOF
+                // Pad a partial trailing read up to a full sector boundary.
+                if (got % (qint64)sectorsize)
                 {
-                    _aligned_free(sectorData);
+                    memset(buf + got, 0, (size_t)(sectorsize - (got % sectorsize)));
+                    got = ((got + (qint64)sectorsize - 1) / (qint64)sectorsize) * (qint64)sectorsize;
+                }
+                const unsigned long long chunk = (unsigned long long)got / sectorsize;
+                if (!writeSectorDataToHandle(hRawDisk, buf, i, chunk, sectorsize))
+                {
+                    _aligned_free(buf);
                     removeLockOnVolume(hVolume);
                     CloseHandle(hRawDisk);
-                    CloseHandle(hFile);
                     CloseHandle(hVolume);
                     status = STATUS_IDLE;
-                    sectorData = NULL;
                     hRawDisk = INVALID_HANDLE_VALUE;
-                    hFile = INVALID_HANDLE_VALUE;
                     hVolume = INVALID_HANDLE_VALUE;
                     bCancel->setEnabled(false);
                     setReadWriteButtonState();
                     return;
                 }
-                _aligned_free(sectorData);
-                sectorData = NULL;
+                i += chunk;
                 QCoreApplication::processEvents();
                 if (update_timer.elapsed() >= ONE_SEC_IN_MS)
                 {
@@ -628,12 +658,11 @@ void MainWindow::on_bWrite_clicked()
                 progressbar->setValue(i);
                 QCoreApplication::processEvents();
             }
+            _aligned_free(buf);
             removeLockOnVolume(hVolume);
             CloseHandle(hRawDisk);
-            CloseHandle(hFile);
             CloseHandle(hVolume);
             hRawDisk = INVALID_HANDLE_VALUE;
-            hFile = INVALID_HANDLE_VALUE;
             hVolume = INVALID_HANDLE_VALUE;
             if (status == STATUS_CANCELED){
                 passfail = false;
@@ -1064,50 +1093,82 @@ void MainWindow::on_bVerify_clicked()
                     return;
                 }
             }
+            // Close hFile; the Verify main loop runs through ImageReader to
+            // mirror the Write path and to stay compatible with compressed
+            // inputs added in a later commit.
+            CloseHandle(hFile);
+            hFile = INVALID_HANDLE_VALUE;
+            QString verifyReaderErr;
+            std::unique_ptr<ImageReader> reader = ImageReader::open(leFile->currentText(), &verifyReaderErr);
+            if (!reader)
+            {
+                QMessageBox::critical(this, tr("File Error"), verifyReaderErr);
+                removeLockOnVolume(hVolume);
+                CloseHandle(hRawDisk);
+                CloseHandle(hVolume);
+                status = STATUS_IDLE;
+                hRawDisk = INVALID_HANDLE_VALUE;
+                hVolume = INVALID_HANDLE_VALUE;
+                bCancel->setEnabled(false);
+                setReadWriteButtonState();
+                return;
+            }
+
             progressbar->setRange(0, (numsectors == 0ul) ? 100 : (int)numsectors);
             update_timer.start();
             elapsed_timer->start();
             lasti = 0ul;
-            for (i = 0ul; i < numsectors && status == STATUS_VERIFYING; i += chunkSectors)
+            char *fileBuf = (char *)_aligned_malloc((size_t)(chunkSectors * sectorsize), (size_t)sectorsize);
+            for (i = 0ul; i < numsectors && status == STATUS_VERIFYING; )
             {
-                sectorData = readSectorDataFromHandle(hFile, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize);
-                if (sectorData == NULL)
+                const qsizetype want = (qsizetype)std::min<unsigned long long>(
+                                           chunkSectors * sectorsize,
+                                           (numsectors - i) * sectorsize);
+                qint64 got = reader->read(fileBuf, want);
+                if (got < 0)
                 {
+                    QMessageBox::critical(this, tr("File Error"), reader->errorString());
+                    _aligned_free(fileBuf);
                     removeLockOnVolume(hVolume);
                     CloseHandle(hRawDisk);
-                    CloseHandle(hFile);
                     CloseHandle(hVolume);
                     status = STATUS_IDLE;
                     hRawDisk = INVALID_HANDLE_VALUE;
-                    hFile = INVALID_HANDLE_VALUE;
                     hVolume = INVALID_HANDLE_VALUE;
                     bCancel->setEnabled(false);
                     setReadWriteButtonState();
                     return;
                 }
-                sectorData2 = readSectorDataFromHandle(hRawDisk, i, (numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i), sectorsize);
+                if (got == 0) break;  // clean EOF
+                if (got % (qint64)sectorsize)
+                {
+                    memset(fileBuf + got, 0, (size_t)(sectorsize - (got % sectorsize)));
+                    got = ((got + (qint64)sectorsize - 1) / (qint64)sectorsize) * (qint64)sectorsize;
+                }
+                const unsigned long long chunk = (unsigned long long)got / sectorsize;
+                sectorData2 = readSectorDataFromHandle(hRawDisk, i, chunk, sectorsize);
                 if (sectorData2 == NULL)
                 {
                     QMessageBox::critical(this, tr("Verify Failure"), tr("Verification failed at sector: %1").arg(i));
+                    _aligned_free(fileBuf);
                     removeLockOnVolume(hVolume);
                     CloseHandle(hRawDisk);
-                    CloseHandle(hFile);
                     CloseHandle(hVolume);
                     status = STATUS_IDLE;
                     hRawDisk = INVALID_HANDLE_VALUE;
-                    hFile = INVALID_HANDLE_VALUE;
                     hVolume = INVALID_HANDLE_VALUE;
                     bCancel->setEnabled(false);
                     setReadWriteButtonState();
                     return;
                 }
-                result = memcmp(sectorData, sectorData2, ((numsectors - i >= chunkSectors) ? chunkSectors:(numsectors - i)) * sectorsize);
+                result = memcmp(fileBuf, sectorData2, (size_t)(chunk * sectorsize));
                 if (result)
                 {
                     QMessageBox::critical(this, tr("Verify Failure"), tr("Verification failed at sector: %1").arg(i));
                     passfail = false;
+                    _aligned_free(sectorData2);
+                    sectorData2 = NULL;
                     break;
-
                 }
                 if (update_timer.elapsed() >= ONE_SEC_IN_MS)
                 {
@@ -1117,23 +1178,17 @@ void MainWindow::on_bVerify_clicked()
                     elapsed_timer->update(i, numsectors);
                     lasti = i;
                 }
-                _aligned_free(sectorData);
                 _aligned_free(sectorData2);
-                sectorData = NULL;
                 sectorData2 = NULL;
+                i += chunk;
                 progressbar->setValue(i);
                 QCoreApplication::processEvents();
             }
+            _aligned_free(fileBuf);
             removeLockOnVolume(hVolume);
             CloseHandle(hRawDisk);
-            CloseHandle(hFile);
             CloseHandle(hVolume);
-            _aligned_free(sectorData);
-            _aligned_free(sectorData2);
-            sectorData = NULL;
-            sectorData2 = NULL;
             hRawDisk = INVALID_HANDLE_VALUE;
-            hFile = INVALID_HANDLE_VALUE;
             hVolume = INVALID_HANDLE_VALUE;
             if (status == STATUS_CANCELED){
                 passfail = false;

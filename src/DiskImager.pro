@@ -56,7 +56,9 @@ QMAKE_TARGET_COPYRIGHT = "Copyright (C) 2009-2017 Windows ImageWriter Team"
 HEADERS += disk.h\
            mainwindow.h\
            droppablecombobox.h \
-           elapsedtimer.h
+           elapsedtimer.h \
+           imagereader.h \
+           rawimagereader.h
 
 FORMS += mainwindow.ui
 
@@ -64,7 +66,9 @@ SOURCES += disk.cpp\
            main.cpp\
            mainwindow.cpp\
            droppablecombobox.cpp \
-           elapsedtimer.cpp
+           elapsedtimer.cpp \
+           imagereader.cpp \
+           rawimagereader.cpp
 
 RESOURCES += gui_icons.qrc translations.qrc
 
