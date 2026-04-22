@@ -202,9 +202,19 @@ char *readSectorDataFromHandle(HANDLE handle, unsigned long long startsector, un
         return NULL;
     }
     LARGE_INTEGER li;
-    li.QuadPart = startsector * sectorsize;
-    SetFilePointer(handle, li.LowPart, &li.HighPart, FILE_BEGIN);
-    if (!ReadFile(handle, data, sectorsize * numsectors, &bytesread, NULL))
+    li.QuadPart = (LONGLONG)(startsector * sectorsize);
+    if (!SetFilePointerEx(handle, li, nullptr, FILE_BEGIN)) {
+        wchar_t *errormessage=NULL;
+        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, GetLastError(), 0, (LPWSTR)&errormessage, 0, NULL);
+        QString errText = QString::fromUtf16((const char16_t *)errormessage);
+        QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("Read Error"),
+                              QObject::tr("Seek failed at offset %1.\nError %2: %3")
+                                  .arg(li.QuadPart).arg(GetLastError()).arg(errText));
+        LocalFree(errormessage);
+        _aligned_free(data);
+        return NULL;
+    }
+    if (!ReadFile(handle, data, (DWORD)(sectorsize * numsectors), &bytesread, NULL))
     {
         wchar_t *errormessage=NULL;
         FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, GetLastError(), 0, (LPWSTR)&errormessage, 0, NULL);
@@ -226,11 +236,19 @@ char *readSectorDataFromHandle(HANDLE handle, unsigned long long startsector, un
 bool writeSectorDataToHandle(HANDLE handle, char *data, unsigned long long startsector, unsigned long long numsectors, unsigned long long sectorsize)
 {
     unsigned long byteswritten;
-    BOOL bResult;
     LARGE_INTEGER li;
-    li.QuadPart = startsector * sectorsize;
-    SetFilePointer(handle, li.LowPart, &li.HighPart, FILE_BEGIN);
-    bResult = WriteFile(handle, data, sectorsize * numsectors, &byteswritten, NULL);
+    li.QuadPart = (LONGLONG)(startsector * sectorsize);
+    if (!SetFilePointerEx(handle, li, nullptr, FILE_BEGIN)) {
+        wchar_t *errormessage=NULL;
+        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, GetLastError(), 0, (LPWSTR)&errormessage, 0, NULL);
+        QString errText = QString::fromUtf16((const char16_t *)errormessage);
+        QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("Write Error"),
+                              QObject::tr("Seek failed at offset %1.\nError %2: %3")
+                                  .arg(li.QuadPart).arg(GetLastError()).arg(errText));
+        LocalFree(errormessage);
+        return false;
+    }
+    const BOOL bResult = WriteFile(handle, data, (DWORD)(sectorsize * numsectors), &byteswritten, NULL);
     if (!bResult)
     {
         wchar_t *errormessage=NULL;
@@ -238,7 +256,12 @@ bool writeSectorDataToHandle(HANDLE handle, char *data, unsigned long long start
         QString errText = QString::fromUtf16((const char16_t *)errormessage);
         QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("Write Error"),
                               QObject::tr("An error occurred when attempting to write data to handle.\n"
-                                          "Error %1: %2").arg(GetLastError()).arg(errText));
+                                          "Error %1: %2\n\n"
+                                          "(offset=%3, bytes=%4, buffer=%5)")
+                                  .arg(GetLastError()).arg(errText)
+                                  .arg(li.QuadPart)
+                                  .arg((qulonglong)(sectorsize * numsectors))
+                                  .arg((qulonglong)(uintptr_t)data, 0, 16));
         LocalFree(errormessage);
     }
     return (bResult);
