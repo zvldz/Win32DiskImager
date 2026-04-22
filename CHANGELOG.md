@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-04-22
+
+### Version 2.1.1
+
+#### I/O correctness and throughput
+- Direct I/O on the destination handle (hRawDisk for Write, hFile for Read) with `FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`. Matches the behavior of Raspberry Pi Imager / balenaEtcher: the Windows FS cache is bypassed, the status-bar MB/s now reflects real device throughput, and `"Done"` only appears once data has physically landed on the device — previously a sudden power loss or device removal in the post-`"Done"` flush window could leave the image corrupted.
+- Sector-aligned chunk buffer via `_aligned_malloc` / `_aligned_free` (required by `NO_BUFFERING`). Replaces `new[]` / `delete[]` in `readSectorDataFromHandle` and all per-chunk free sites in `on_bRead` / `on_bWrite` / `on_bVerify` and the destructor.
+- Adaptive chunk size: 4 MB target regardless of sector size. On 512-byte-sector media the per-syscall transfer grows from the legacy 512 KB (1024 × 512 B) to 4 MB; 4K-sector media keep their existing 4 MB chunk.
+
+### Version 2.1.0
+
+#### Reliability
+- Silenced the drive-enumeration probe in `GetDisksProperty` / `checkDriveType`. No more `"Error 122: The data area passed to a system call is too small"` popups at startup from virtual filesystems (Google Drive, OneDrive, Dokany, VeraCrypt, Subst, RamDisk, ...) that don't implement `IOCTL_STORAGE_QUERY_PROPERTY`. Failures in the probe path now return `false` silently so the caller simply skips the device; dialogs remain only on paths triggered by an explicit user action.
+- Removed the dead-code fallback branch in `GetDisksProperty` (the `if (bResult && GetLastError() == ERROR_INVALID_FUNCTION)` check was logically contradictory and served only to suppress a dialog we're no longer showing).
+
+#### GUI features
+- Image File field became an editable drop-down with a 20-entry **history**. New entries are added on successful Read / Write and persisted under `HKCU\Software\Win32DiskImager\ImageFileHistory`. Pick from the list and edit the selected path as needed; drag-and-drop of files into the field still works.
+- Sub-string autocomplete on the Image File drop-down (case-insensitive, `Qt::MatchContains`).
+- Removed the hard 65 px `maximumSize` on the Hash combo — Qt 6.11's `qmodernwindowsstyle` draws a wider drop-arrow than 6.10 and was clipping "None".
+- `DroppableLineEdit` (QLineEdit subclass) replaced with `DroppableComboBox` (editable `QComboBox` subclass) that keeps the drag-and-drop behavior.
+
+#### Version management
+- Introduced `src/version.h` as the **single source of truth**. Bumping `APP_VERSION_MAJOR` / `APP_VERSION_MINOR` / `APP_VERSION_PATCH` propagates via the C preprocessor to:
+  - `DiskImager.rc` / `DiskImagerCli.rc` — `FILEVERSION`, `PRODUCTVERSION`, and the string `FileVersion` / `ProductVersion` values,
+  - `main.cpp` — GUI title-bar `setApplicationDisplayName(APP_VERSION)`,
+  - `cli_main.cpp` — `--version` output,
+  - `setup.iss` — reads `PRODUCT_VERSION` back out of the built exe via `GetStringFileInfo`, so the installer filename and metadata track automatically.
+
+#### Installer (setup.iss)
+- Now bundles the CLI exe (`Win32DiskImager-cli.exe`) alongside the GUI.
+- New optional task: **"Add Win32DiskImager-cli to system PATH"**. Appends `{app}` to machine-wide `Path`; duplicate-safe via `NeedsAddPath` check function. `ChangesEnvironment=yes` broadcasts `WM_SETTINGCHANGE` on finish.
+- Default install dir: `{autopf}\Win32DiskImager` (was `{pf32}\ImageWriter`) and Start-Menu group renamed to match.
+- Explicit x64-only constraints (`ArchitecturesInstallIn64BitMode=x64compatible`, `ArchitecturesAllowed=x64compatible`).
+- Dropped the `Release\*.dll` / `Release\platforms\*.dll` entries — the static GUI build embeds Qt, no runtime DLLs need deploying.
+- Dropped the pre-Vista Quick Launch icon entry (dead code for modern Windows).
+
+#### Build system / CI
+- New GitHub Actions workflow `.github/workflows/release.yml`. One job on `windows-latest`:
+  - Sets up MSYS2 with `mingw-w64-x86_64-qt6-static` plus link-time deps (libtiff, libjpeg-turbo, libpng, openssl, pcre2, glib2, harfbuzz, freetype, brotli, ...),
+  - Builds GUI against static Qt 6 and CLI (no Qt, already static MinGW runtime),
+  - Reads version from `src/version.h` via `awk`,
+  - Stages `Release/` and runs Inno Setup,
+  - Uploads three distinct artifacts (installer, GUI zip, CLI zip) and, on `v*` tags, publishes a GitHub Release with the files attached as raw assets.
+- `_detect-toolchain.bat` helper for local builds. Auto-discovers Qt and MinGW across MSYS2 (`C:\msys64\mingw64`) and Qt online-installer layouts (`C:\Qt\<ver>\mingw*_64`, `C:\Qt\Tools\mingw*_64`). Honors `QT_BIN` / `MINGW_BIN` env overrides. Selects the preferred qmake flavor (`qmake6` > `qmake` > `qmake-qt5`).
+- `compile.bat`, `compile-cli.bat`, `compile-gui-static.bat` rewritten on top of the helper — no more hard-coded `C:\msys64\mingw64\bin` path.
+- `.pro` translations step: added a `lrelease.exe` fallback (in addition to `lrelease-qt6.exe` / `lrelease-qt5.exe`) so MSYS2 static Qt, which ships the binary without a version suffix, picks it up.
+- Added `.gitignore` entries for `bin/`, `Output/`, `artifacts/`, `.claude/`, `CLAUDE.md`. Removed tracking of upstream-shipped `bin/*.zip`.
+
+#### Documentation
+- README: documented the Image File history drop-down.
+
 ## 2026-02-11
 
 ### Version 2.0
