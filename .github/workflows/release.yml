@@ -119,11 +119,28 @@ jobs:
           Compress-Archive -Path bin/Win32DiskImager-cli.exe -DestinationPath "artifacts/Win32DiskImager-cli-$V.zip" -Force
           Copy-Item Output/*.exe artifacts/
 
-      - name: Upload artifacts
+      # Three separate artifacts so the Actions run page shows three distinct
+      # downloads. GitHub still zip-wraps each one on download, but each wrapper
+      # contains exactly one file (installer / gui zip / cli zip).
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Win32DiskImager-setup-${{ steps.version.outputs.version }}
+          path: artifacts/Win32DiskImager-setup-${{ steps.version.outputs.version }}.exe
+          if-no-files-found: error
+
+      - name: Upload GUI portable
         uses: actions/upload-artifact@v4
         with:
           name: Win32DiskImager-${{ steps.version.outputs.version }}
-          path: artifacts/*
+          path: artifacts/Win32DiskImager-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+
+      - name: Upload CLI portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Win32DiskImager-cli-${{ steps.version.outputs.version }}
+          path: artifacts/Win32DiskImager-cli-${{ steps.version.outputs.version }}.zip
           if-no-files-found: error
 
       - name: Create GitHub Release
