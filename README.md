@@ -24,6 +24,7 @@ This repository contains:
 - Optional read limit in CLI (`--bytes`)
 - Optional allocated-only read mode in CLI (`--allocated-only`, MBR-based)
 - Image hash generation in GUI (MD5, SHA1, SHA256)
+- Recently-used **Image File history** in the GUI (editable drop-down, up to 20 entries; saved on successful Read/Write, persisted in `HKCU\Software\Win32DiskImager\ImageFileHistory`)
 - Multi-language UI translations (`src/lang/*.ts`)
 
 ## Requirements

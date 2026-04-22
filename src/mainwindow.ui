@@ -145,12 +145,6 @@
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
-           <property name="maximumSize">
-            <size>
-             <width>65</width>
-             <height>16777215</height>
-            </size>
-           </property>
            <property name="toolTip">
             <string>Select hash type for verification</string>
            </property>
