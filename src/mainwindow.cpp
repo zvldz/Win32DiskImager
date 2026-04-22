@@ -39,9 +39,12 @@
 
 #include "disk.h"
 #include "imagereader.h"
+#include "iopipeline.h"
 #include "rawimagereader.h"
 #include "mainwindow.h"
 #include "elapsedtimer.h"
+
+#include <thread>
 
 // I/O chunk target in bytes. The sector count per iteration is derived from
 // this so a 512-byte-sector device still transfers 4 MB per syscall instead
@@ -90,10 +93,17 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         initializeHomeDir();
     }
 
+    // Default filter covers raw .img plus the two compressed forms the Write
+    // path understands (.gz / .xz). ".iso" accepts hybrid ISO images that are
+    // sometimes distributed for SD write. "*.*" stays as an escape hatch.
+    const QString defaultFilter = tr("Disk images (*.img *.IMG *.iso *.ISO *.gz *.GZ *.xz *.XZ)");
     if (myFileType.isEmpty()) {
-        myFileType = tr("Disk Images (*.img *.IMG)");
+        myFileType = defaultFilter;
     }
-    myFileTypeList << tr("Disk Images (*.img *.IMG)") << "*.*";
+    myFileTypeList << defaultFilter
+                   << tr("Raw images (*.img *.IMG *.iso *.ISO)")
+                   << tr("Compressed images (*.gz *.GZ *.xz *.XZ)")
+                   << "*.*";
 }
 
 MainWindow::~MainWindow()
@@ -600,54 +610,74 @@ void MainWindow::on_bWrite_clicked()
             lasti = 0ul;
             update_timer.start();
             elapsed_timer->start();
-            char *buf = (char *)_aligned_malloc((size_t)(chunkSectors * sectorsize), (size_t)sectorsize);
-            for (i = 0ul; i < numsectors && status == STATUS_WRITING; )
+
+            // Producer/consumer pipeline: decoder thread fills the queue,
+            // main thread drains to the device. Gets decode time off the
+            // critical path so on .xz inputs the USB can keep pumping while
+            // the next chunk is being decompressed. See src/iopipeline.h.
+            ChunkQueue queue(4);  // ~16 MB in flight at 4 × 4 MB chunks
+            const unsigned long long sectorSizeLocal = sectorsize;
+            const unsigned long long chunkBytesLocal = chunkSectors * sectorsize;
+            const unsigned long long sectorBudget   = numsectors;
+            ImageReader *rawReaderPtr = reader.get();
+            std::thread decoderThread([&queue, rawReaderPtr, chunkBytesLocal, sectorSizeLocal, sectorBudget]() {
+                unsigned long long produced = 0;
+                while (!queue.aborted()) {
+                    if (produced >= sectorBudget) {
+                        auto eof = std::make_unique<IoChunk>();
+                        eof->eof = true;
+                        queue.push(std::move(eof));
+                        return;
+                    }
+                    auto c = std::make_unique<IoChunk>();
+                    if (!c->allocate((size_t)chunkBytesLocal, (size_t)sectorSizeLocal)) {
+                        c->err = "Out of memory allocating I/O buffer.";
+                        queue.push(std::move(c));
+                        return;
+                    }
+                    const unsigned long long want = std::min<unsigned long long>(
+                        chunkBytesLocal, (sectorBudget - produced) * sectorSizeLocal);
+                    qint64 got = rawReaderPtr->read(c->data, (qsizetype)want);
+                    if (got < 0) {
+                        c->err = rawReaderPtr->errorString().toStdString();
+                        queue.push(std::move(c));
+                        return;
+                    }
+                    if (got == 0) {
+                        c->eof = true;
+                        queue.push(std::move(c));
+                        return;
+                    }
+                    if (got % (qint64)sectorSizeLocal) {
+                        memset(c->data + got, 0, (size_t)(sectorSizeLocal - (got % sectorSizeLocal)));
+                        got = ((got + (qint64)sectorSizeLocal - 1) / (qint64)sectorSizeLocal) * (qint64)sectorSizeLocal;
+                    }
+                    c->length = (size_t)got;
+                    produced += (unsigned long long)got / sectorSizeLocal;
+                    if (!queue.push(std::move(c))) return;  // aborted mid-push
+                }
+            });
+
+            bool writeError  = false;
+            QString writeErrMsg;
+            while (status == STATUS_WRITING)
             {
-                const qsizetype want = (qsizetype)std::min<unsigned long long>(
-                                           chunkSectors * sectorsize,
-                                           (numsectors - i) * sectorsize);
-                qint64 got = reader->read(buf, want);
-                if (got < 0)
+                std::unique_ptr<IoChunk> c = queue.pop();
+                if (!c) break;  // queue aborted
+                if (!c->err.empty()) { writeErrMsg = QString::fromStdString(c->err); writeError = true; break; }
+                if (c->eof) break;
+
+                const unsigned long long chunk = c->length / sectorsize;
+                if (!writeSectorDataToHandle(hRawDisk, c->data, i, chunk, sectorsize))
                 {
-                    QMessageBox::critical(this, tr("File Error"), reader->errorString());
-                    _aligned_free(buf);
-                    removeLockOnVolume(hVolume);
-                    CloseHandle(hRawDisk);
-                    CloseHandle(hVolume);
-                    status = STATUS_IDLE;
-                    hRawDisk = INVALID_HANDLE_VALUE;
-                    hVolume = INVALID_HANDLE_VALUE;
-                    bCancel->setEnabled(false);
-                    setReadWriteButtonState();
-                    return;
-                }
-                if (got == 0) break;  // clean EOF
-                // Pad a partial trailing read up to a full sector boundary.
-                if (got % (qint64)sectorsize)
-                {
-                    memset(buf + got, 0, (size_t)(sectorsize - (got % sectorsize)));
-                    got = ((got + (qint64)sectorsize - 1) / (qint64)sectorsize) * (qint64)sectorsize;
-                }
-                const unsigned long long chunk = (unsigned long long)got / sectorsize;
-                if (!writeSectorDataToHandle(hRawDisk, buf, i, chunk, sectorsize))
-                {
-                    _aligned_free(buf);
-                    removeLockOnVolume(hVolume);
-                    CloseHandle(hRawDisk);
-                    CloseHandle(hVolume);
-                    status = STATUS_IDLE;
-                    hRawDisk = INVALID_HANDLE_VALUE;
-                    hVolume = INVALID_HANDLE_VALUE;
-                    bCancel->setEnabled(false);
-                    setReadWriteButtonState();
-                    return;
+                    writeError = true;
+                    break;
                 }
                 i += chunk;
-                QCoreApplication::processEvents();
                 if (update_timer.elapsed() >= ONE_SEC_IN_MS)
                 {
                     mbpersec = (((double)sectorsize * (i - lasti)) * ((float)ONE_SEC_IN_MS / update_timer.elapsed())) / 1024.0 / 1024.0;
-                    statusbar->showMessage(QString("%1 MB/s").arg(mbpersec));
+                    statusbar->showMessage(QString("%1 MB/s").arg(mbpersec, 0, 'f', 2));
                     elapsed_timer->update(i, numsectors);
                     update_timer.start();
                     lasti = i;
@@ -660,7 +690,22 @@ void MainWindow::on_bWrite_clicked()
                 }
                 QCoreApplication::processEvents();
             }
-            _aligned_free(buf);
+            queue.requestAbort();
+            decoderThread.join();
+
+            if (writeError)
+            {
+                if (!writeErrMsg.isEmpty()) QMessageBox::critical(this, tr("File Error"), writeErrMsg);
+                removeLockOnVolume(hVolume);
+                CloseHandle(hRawDisk);
+                CloseHandle(hVolume);
+                status = STATUS_IDLE;
+                hRawDisk = INVALID_HANDLE_VALUE;
+                hVolume = INVALID_HANDLE_VALUE;
+                bCancel->setEnabled(false);
+                setReadWriteButtonState();
+                return;
+            }
             removeLockOnVolume(hVolume);
             CloseHandle(hRawDisk);
             CloseHandle(hVolume);
@@ -887,7 +932,7 @@ void MainWindow::on_bRead_clicked()
             if (update_timer.elapsed() >= ONE_SEC_IN_MS)
             {
                 mbpersec = (((double)sectorsize * (i - lasti)) * ((float)ONE_SEC_IN_MS / update_timer.elapsed())) / 1024.0 / 1024.0;
-                statusbar->showMessage(QString("%1MB/s").arg(mbpersec));
+                statusbar->showMessage(QString("%1MB/s").arg(mbpersec, 0, 'f', 2));
                 update_timer.start();
                 elapsed_timer->update(i, numsectors);
                 lasti = i;
@@ -1107,50 +1152,71 @@ void MainWindow::on_bVerify_clicked()
             update_timer.start();
             elapsed_timer->start();
             lasti = 0ul;
-            char *fileBuf = (char *)_aligned_malloc((size_t)(chunkSectors * sectorsize), (size_t)sectorsize);
-            for (i = 0ul; i < numsectors && status == STATUS_VERIFYING; )
+
+            // Same producer/consumer shape as Write. Decoder thread fills the
+            // queue with decoded file chunks, the main thread reads the disk
+            // and memcmp's. Decode runs in parallel with disk read + compare.
+            ChunkQueue queue(4);
+            const unsigned long long sectorSizeLocal = sectorsize;
+            const unsigned long long chunkBytesLocal = chunkSectors * sectorsize;
+            const unsigned long long sectorBudget   = numsectors;
+            ImageReader *rawReaderPtr = reader.get();
+            std::thread decoderThread([&queue, rawReaderPtr, chunkBytesLocal, sectorSizeLocal, sectorBudget]() {
+                unsigned long long produced = 0;
+                while (!queue.aborted()) {
+                    if (produced >= sectorBudget) {
+                        auto eof = std::make_unique<IoChunk>();
+                        eof->eof = true;
+                        queue.push(std::move(eof));
+                        return;
+                    }
+                    auto c = std::make_unique<IoChunk>();
+                    if (!c->allocate((size_t)chunkBytesLocal, (size_t)sectorSizeLocal)) {
+                        c->err = "Out of memory allocating I/O buffer.";
+                        queue.push(std::move(c));
+                        return;
+                    }
+                    const unsigned long long want = std::min<unsigned long long>(
+                        chunkBytesLocal, (sectorBudget - produced) * sectorSizeLocal);
+                    qint64 got = rawReaderPtr->read(c->data, (qsizetype)want);
+                    if (got < 0) {
+                        c->err = rawReaderPtr->errorString().toStdString();
+                        queue.push(std::move(c));
+                        return;
+                    }
+                    if (got == 0) {
+                        c->eof = true;
+                        queue.push(std::move(c));
+                        return;
+                    }
+                    if (got % (qint64)sectorSizeLocal) {
+                        memset(c->data + got, 0, (size_t)(sectorSizeLocal - (got % sectorSizeLocal)));
+                        got = ((got + (qint64)sectorSizeLocal - 1) / (qint64)sectorSizeLocal) * (qint64)sectorSizeLocal;
+                    }
+                    c->length = (size_t)got;
+                    produced += (unsigned long long)got / sectorSizeLocal;
+                    if (!queue.push(std::move(c))) return;
+                }
+            });
+
+            bool verifyError = false;
+            QString verifyErrMsg;
+            while (status == STATUS_VERIFYING)
             {
-                const qsizetype want = (qsizetype)std::min<unsigned long long>(
-                                           chunkSectors * sectorsize,
-                                           (numsectors - i) * sectorsize);
-                qint64 got = reader->read(fileBuf, want);
-                if (got < 0)
-                {
-                    QMessageBox::critical(this, tr("File Error"), reader->errorString());
-                    _aligned_free(fileBuf);
-                    removeLockOnVolume(hVolume);
-                    CloseHandle(hRawDisk);
-                    CloseHandle(hVolume);
-                    status = STATUS_IDLE;
-                    hRawDisk = INVALID_HANDLE_VALUE;
-                    hVolume = INVALID_HANDLE_VALUE;
-                    bCancel->setEnabled(false);
-                    setReadWriteButtonState();
-                    return;
-                }
-                if (got == 0) break;  // clean EOF
-                if (got % (qint64)sectorsize)
-                {
-                    memset(fileBuf + got, 0, (size_t)(sectorsize - (got % sectorsize)));
-                    got = ((got + (qint64)sectorsize - 1) / (qint64)sectorsize) * (qint64)sectorsize;
-                }
-                const unsigned long long chunk = (unsigned long long)got / sectorsize;
+                std::unique_ptr<IoChunk> c = queue.pop();
+                if (!c) break;
+                if (!c->err.empty()) { verifyErrMsg = QString::fromStdString(c->err); verifyError = true; break; }
+                if (c->eof) break;
+
+                const unsigned long long chunk = c->length / sectorsize;
                 sectorData2 = readSectorDataFromHandle(hRawDisk, i, chunk, sectorsize);
                 if (sectorData2 == NULL)
                 {
                     QMessageBox::critical(this, tr("Verify Failure"), tr("Verification failed at sector: %1").arg(i));
-                    _aligned_free(fileBuf);
-                    removeLockOnVolume(hVolume);
-                    CloseHandle(hRawDisk);
-                    CloseHandle(hVolume);
-                    status = STATUS_IDLE;
-                    hRawDisk = INVALID_HANDLE_VALUE;
-                    hVolume = INVALID_HANDLE_VALUE;
-                    bCancel->setEnabled(false);
-                    setReadWriteButtonState();
-                    return;
+                    verifyError = true;
+                    break;
                 }
-                result = memcmp(fileBuf, sectorData2, (size_t)(chunk * sectorsize));
+                result = memcmp(c->data, sectorData2, c->length);
                 if (result)
                 {
                     QMessageBox::critical(this, tr("Verify Failure"), tr("Verification failed at sector: %1").arg(i));
@@ -1159,17 +1225,17 @@ void MainWindow::on_bVerify_clicked()
                     sectorData2 = NULL;
                     break;
                 }
+                _aligned_free(sectorData2);
+                sectorData2 = NULL;
+                i += chunk;
                 if (update_timer.elapsed() >= ONE_SEC_IN_MS)
                 {
                     mbpersec = (((double)sectorsize * (i - lasti)) * ((float)ONE_SEC_IN_MS / update_timer.elapsed())) / 1024.0 / 1024.0;
-                    statusbar->showMessage(QString("%1MB/s").arg(mbpersec));
+                    statusbar->showMessage(QString("%1MB/s").arg(mbpersec, 0, 'f', 2));
                     update_timer.start();
                     elapsed_timer->update(i, numsectors);
                     lasti = i;
                 }
-                _aligned_free(sectorData2);
-                sectorData2 = NULL;
-                i += chunk;
                 if (knownSize) {
                     progressbar->setValue((int)i);
                 } else {
@@ -1178,7 +1244,22 @@ void MainWindow::on_bVerify_clicked()
                 }
                 QCoreApplication::processEvents();
             }
-            _aligned_free(fileBuf);
+            queue.requestAbort();
+            decoderThread.join();
+
+            if (verifyError)
+            {
+                if (!verifyErrMsg.isEmpty()) QMessageBox::critical(this, tr("File Error"), verifyErrMsg);
+                removeLockOnVolume(hVolume);
+                CloseHandle(hRawDisk);
+                CloseHandle(hVolume);
+                status = STATUS_IDLE;
+                hRawDisk = INVALID_HANDLE_VALUE;
+                hVolume = INVALID_HANDLE_VALUE;
+                bCancel->setEnabled(false);
+                setReadWriteButtonState();
+                return;
+            }
             removeLockOnVolume(hVolume);
             CloseHandle(hRawDisk);
             CloseHandle(hVolume);

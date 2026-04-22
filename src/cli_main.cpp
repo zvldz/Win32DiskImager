@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 #include <iostream>
 #include <limits>
 #include <malloc.h>
@@ -20,6 +21,7 @@
 #include <zlib.h>
 #include <lzma.h>
 
+#include "iopipeline.h"
 #include "version.h"
 
 namespace {
@@ -36,6 +38,7 @@ struct CliOptions {
     uint64_t bytes = 0;
     bool bytesSet = false;
     bool allocatedOnly = false;
+    bool noVerify = false;     // `write` runs verify afterwards by default
 };
 
 std::wstring widen(const std::string &s)
@@ -63,12 +66,14 @@ void printUsage()
 {
     std::cout << "Usage:\n";
     std::cout << "  Win32DiskImager-cli.exe list\n";
-    std::cout << "  Win32DiskImager-cli.exe write  --device E: --image C:\\path\\image.img[.gz|.xz]\n";
+    std::cout << "  Win32DiskImager-cli.exe write  --device E: --image C:\\path\\image.img[.gz|.xz] [--no-verify]\n";
     std::cout << "  Win32DiskImager-cli.exe read   --device E: --image C:\\path\\backup.img [--bytes N] [--allocated-only]\n";
     std::cout << "  Win32DiskImager-cli.exe verify --device E: --image C:\\path\\image.img[.gz|.xz]\n";
     std::cout << "\n";
     std::cout << "write / verify accept plain .img, gzipped .img.gz and xz-compressed .img.xz.\n";
     std::cout << "Format is detected by magic bytes, not file extension.\n";
+    std::cout << "\n";
+    std::cout << "`write` runs a verify pass afterwards by default; pass --no-verify to skip it.\n";
 }
 
 std::wstring formatWinError(DWORD code)
@@ -757,55 +762,80 @@ int cmdWrite(const std::string &imagePath, const std::string &device)
     chunk -= chunk % static_cast<size_t>(geometry.bytesPerSector);
     if (chunk == 0) chunk = static_cast<size_t>(geometry.bytesPerSector);
 
-    // NO_BUFFERING on the disk handle requires sector-aligned buffers.
-    char *buffer = static_cast<char *>(_aligned_malloc(chunk, (size_t)geometry.bytesPerSector));
-    if (!buffer) {
-        std::cerr << "Out of memory allocating I/O buffer." << std::endl;
-        cleanupDiskHandles(hVolume, hDisk);
-        return 1;
-    }
+    // Producer/consumer: decoder thread fills the queue, this thread drains
+    // it to the device so decompression can overlap USB/SD writes.
+    ChunkQueue queue(4);
+    const uint64_t diskCap    = geometry.totalBytes;
+    const size_t   sectorSize = (size_t)geometry.bytesPerSector;
+    ImageSource *srcPtr = src.get();
+    std::thread decoderThread([&queue, srcPtr, chunk, sectorSize, diskCap]() {
+        uint64_t produced = 0;
+        while (!queue.aborted()) {
+            auto c = std::make_unique<IoChunk>();
+            if (!c->allocate(chunk, sectorSize)) {
+                c->err = "Out of memory allocating I/O buffer.";
+                queue.push(std::move(c));
+                return;
+            }
+            const size_t want = (size_t)std::min<uint64_t>(chunk, diskCap - produced);
+            if (want == 0) {
+                // Device already "full" from the decoder's view — stop clean.
+                c->eof = true;
+                queue.push(std::move(c));
+                return;
+            }
+            int64_t got = srcPtr->read(c->data, want);
+            if (got < 0) {
+                c->err = "Image read error: " + srcPtr->errorString();
+                queue.push(std::move(c));
+                return;
+            }
+            if (got == 0) {
+                c->eof = true;
+                queue.push(std::move(c));
+                return;
+            }
+            size_t toWrite = (size_t)got;
+            const size_t rem = toWrite % sectorSize;
+            if (rem != 0) {
+                const size_t pad = sectorSize - rem;
+                memset(c->data + toWrite, 0, pad);
+                toWrite += pad;
+            }
+            c->length = toWrite;
+            produced += toWrite;
+            if (!queue.push(std::move(c))) return;  // aborted mid-push
+        }
+    });
 
-    uint64_t processed  = 0;       // bytes written to device (unknown-size progress driver)
-    uint64_t compLast   = 0;
-    // For unknown-size inputs we show compressed-bytes progress — either
-    // way ProgressPrinter decides "%" vs "MB" from whether totalBytes is set.
+    uint64_t processed = 0;       // bytes committed to device
+    uint64_t compLast  = 0;
     ProgressPrinter progress(imageBytes > 0 ? imageBytes : src->compressedSize());
 
     while (true) {
-        int64_t got = src->read(buffer, chunk);
-        if (got < 0) {
-            std::cerr << "Image read error: " << src->errorString() << std::endl;
+        std::unique_ptr<IoChunk> c = queue.pop();
+        if (!c) break;
+        if (!c->err.empty()) {
+            std::cerr << "\n" << c->err << std::endl;
             rc = 1;
             break;
         }
-        if (got == 0) break;
+        if (c->eof) break;
 
-        size_t toWrite = (size_t)got;
-        const size_t rem = toWrite % (size_t)geometry.bytesPerSector;
-        if (rem != 0) {
-            const size_t pad = (size_t)geometry.bytesPerSector - rem;
-            memset(buffer + toWrite, 0, pad);
-            toWrite += pad;
-        }
-
-        // If we've already filled the device while the input still has data,
-        // abort rather than silently truncate. Only possible for unknown-size
-        // inputs (gz > 4 GB without size hints); known-size ones are rejected
-        // up front by the paddedImageBytes check above.
-        if (processed + toWrite > geometry.totalBytes) {
-            std::cerr << "\nImage exceeds target disk capacity (" << geometry.totalBytes
-                      << " bytes); aborting." << std::endl;
+        if (processed + c->length > diskCap) {
+            std::cerr << "\nImage exceeds target disk capacity ("
+                      << diskCap << " bytes); aborting." << std::endl;
             rc = 1;
             break;
         }
 
-        if (!writeAll(hDisk, buffer, (DWORD)toWrite)) {
+        if (!writeAll(hDisk, c->data, (DWORD)c->length)) {
             printWinError(L"Failed while writing to physical disk.", GetLastError());
             rc = 1;
             break;
         }
 
-        processed += toWrite;
+        processed += c->length;
         if (imageBytes > 0) {
             progress.update(processed > imageBytes ? imageBytes : processed);
         } else {
@@ -813,8 +843,9 @@ int cmdWrite(const std::string &imagePath, const std::string &device)
             if (cp != compLast) { progress.update(cp); compLast = cp; }
         }
     }
+    queue.requestAbort();
+    decoderThread.join();
 
-    _aligned_free(buffer);
     FlushFileBuffers(hDisk);
     cleanupDiskHandles(hVolume, hDisk);
     if (rc == 0) {
@@ -958,55 +989,84 @@ int cmdVerify(const std::string &imagePath, const std::string &device)
     chunk -= chunk % static_cast<size_t>(geometry.bytesPerSector);
     if (chunk == 0) chunk = static_cast<size_t>(geometry.bytesPerSector);
 
-    char *fileBuf = static_cast<char *>(_aligned_malloc(chunk, (size_t)geometry.bytesPerSector));
-    std::vector<char> diskBuf(chunk, 0);
-    if (!fileBuf) {
-        std::cerr << "Out of memory allocating I/O buffer." << std::endl;
-        cleanupDiskHandles(hVolume, hDisk);
-        return 1;
-    }
+    // Producer/consumer: decoder thread fills the file-side queue, this
+    // thread reads the disk and memcmp's. Decode overlaps disk-read + cmp.
+    ChunkQueue queue(4);
+    const uint64_t diskCap    = geometry.totalBytes;
+    const size_t   sectorSize = (size_t)geometry.bytesPerSector;
+    ImageSource *srcPtr = src.get();
+    std::thread decoderThread([&queue, srcPtr, chunk, sectorSize, diskCap]() {
+        uint64_t produced = 0;
+        while (!queue.aborted()) {
+            auto c = std::make_unique<IoChunk>();
+            if (!c->allocate(chunk, sectorSize)) {
+                c->err = "Out of memory allocating I/O buffer.";
+                queue.push(std::move(c));
+                return;
+            }
+            const size_t want = (size_t)std::min<uint64_t>(chunk, diskCap - produced);
+            if (want == 0) {
+                c->eof = true;
+                queue.push(std::move(c));
+                return;
+            }
+            int64_t got = srcPtr->read(c->data, want);
+            if (got < 0) {
+                c->err = "Image read error: " + srcPtr->errorString();
+                queue.push(std::move(c));
+                return;
+            }
+            if (got == 0) {
+                c->eof = true;
+                queue.push(std::move(c));
+                return;
+            }
+            size_t ask = (size_t)got;
+            const size_t rem = ask % sectorSize;
+            if (rem != 0) {
+                const size_t pad = sectorSize - rem;
+                memset(c->data + ask, 0, pad);
+                ask += pad;
+            }
+            c->length = ask;
+            produced += ask;
+            if (!queue.push(std::move(c))) return;
+        }
+    });
 
+    std::vector<char> diskBuf(chunk, 0);
     uint64_t processed = 0;
     uint64_t compLast  = 0;
     int rc = 0;
     ProgressPrinter progress(imageBytes > 0 ? imageBytes : src->compressedSize());
 
     while (true) {
-        int64_t got = src->read(fileBuf, chunk);
-        if (got < 0) {
-            std::cerr << "Image read error: " << src->errorString() << std::endl;
+        std::unique_ptr<IoChunk> c = queue.pop();
+        if (!c) break;
+        if (!c->err.empty()) {
+            std::cerr << "\n" << c->err << std::endl;
             rc = 1;
             break;
         }
-        if (got == 0) break;  // clean EOF
+        if (c->eof) break;
 
-        size_t ask = (size_t)got;
-        const size_t rem = ask % (size_t)geometry.bytesPerSector;
-        if (rem != 0) {
-            const size_t pad = (size_t)geometry.bytesPerSector - rem;
-            memset(fileBuf + ask, 0, pad);
-            ask += pad;
-        }
-
-        if (processed + ask > geometry.totalBytes) {
+        if (processed + c->length > diskCap) {
             std::cerr << "\nImage exceeds target disk capacity; aborting." << std::endl;
             rc = 1;
             break;
         }
-
-        if (!readExact(hDisk, diskBuf.data(), (DWORD)ask)) {
+        if (!readExact(hDisk, diskBuf.data(), (DWORD)c->length)) {
             printWinError(L"Failed while reading from physical disk.", GetLastError());
             rc = 1;
             break;
         }
-
-        if (memcmp(fileBuf, diskBuf.data(), ask) != 0) {
+        if (memcmp(c->data, diskBuf.data(), c->length) != 0) {
             std::cerr << "\nVerify failed at byte offset " << processed << std::endl;
             rc = 1;
             break;
         }
 
-        processed += ask;
+        processed += c->length;
         if (imageBytes > 0) {
             progress.update(processed > imageBytes ? imageBytes : processed);
         } else {
@@ -1014,8 +1074,9 @@ int cmdVerify(const std::string &imagePath, const std::string &device)
             if (cp != compLast) { progress.update(cp); compLast = cp; }
         }
     }
+    queue.requestAbort();
+    decoderThread.join();
 
-    _aligned_free(fileBuf);
     cleanupDiskHandles(hVolume, hDisk);
     if (rc == 0) {
         progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
@@ -1065,6 +1126,10 @@ bool parseArgs(int argc, char *argv[], CliOptions &opt)
                 std::cerr << "Invalid --bytes value." << std::endl;
                 return false;
             }
+            continue;
+        }
+        if (a == "--no-verify") {
+            opt.noVerify = true;
             continue;
         }
         if (a == "--allocated-only" || a == "-a") {
@@ -1133,7 +1198,10 @@ int main(int argc, char *argv[])
     }
 
     if (opt.command == "write") {
-        return cmdWrite(opt.image, opt.device);
+        const int rc = cmdWrite(opt.image, opt.device);
+        if (rc != 0 || opt.noVerify) return rc;
+        std::cout << "\nVerifying..." << std::endl;
+        return cmdVerify(opt.image, opt.device);
     }
     if (opt.command == "read") {
         const uint64_t bytes = opt.bytesSet ? opt.bytes : 0;
