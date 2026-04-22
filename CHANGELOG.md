@@ -37,6 +37,16 @@
 - Browse-file filter dropped duplicate-case patterns (`*.IMG`, `*.ISO`, `*.GZ`, `*.XZ`). Qt's `QFileDialog` glob matching is case-insensitive on Windows, so the lowercase variants already match `FOO.IMG`.
 - Fixed a pipeline-refactor regression: the sector counter `i` was declared without initialisation and only got its value from the old `for (i = 0ul; ...)` header that the refactor dropped. `WriteFile` was called with whatever junk the stack slot held, producing insane offsets and `Error 87: The parameter is incorrect.` The counter is now explicitly zeroed before both the Write and Verify main loops.
 
+#### Status / UI feedback
+- Progress bar shows the current operation inline: `Writing: 42%`, `Reading: 78%`, `Verifying: 15%`. Important now that Auto-verify-after-Write resets the bar to 0 and starts a second pass — the user no longer has to guess which phase is running.
+- Status-bar line is prefixed too: `Writing: 85.32 MB/s`, `Verifying: 92.10 MB/s`. An initial `"Writing..."` / `"Reading..."` / `"Verifying..."` lands before the first MB/s tick so the user sees the operation start.
+- CLI prints an explicit `Writing:` / `Reading:` / `Verifying:` header on its own line before the progress bar, and inserts a blank line between a Write and its auto-chained Verify.
+- GUI: removed the fake resize grip in the bottom-right corner. The window is pinned via `setFixedSize`, but Qt still drew the diagonal grip in the status-bar and flipped the cursor to the resize arrow on hover. `sizeGripEnabled=false` on the statusbar widget kills the affordance.
+- GUI: Read / Write / Verify button state now refreshes on every keystroke in the Image File combo (`QComboBox::editTextChanged`), not only on `editingFinished`. Pressing Tab right after typing a path no longer skips past buttons that were about to become enabled.
+
+#### Reliability
+- `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` is now retried through a short transient-error window (10 × 200 ms). Google Drive / OneDrive / the Explorer indexer can briefly grab a freshly-inserted SD card, during which the IOCTL returns `ERROR_DEV_NOT_EXIST (55)` or `ERROR_ACCESS_DENIED (5)`. Previously the tool bailed out with `"Failed to get disk geometry"` and the user had to retry by hand. Applied to both `cli_main.cpp::getDiskGeometry` and `disk.cpp::getNumberOfSectors`.
+
 ## 2026-04-22
 
 ### Version 2.1.1
