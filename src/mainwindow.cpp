@@ -61,6 +61,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         connect(fileEdit, &QLineEdit::editingFinished,
                 this, &MainWindow::onImageFileEditingFinished);
     }
+    // Live-update Read/Write/Verify enabled state as the user types — otherwise
+    // the buttons only refresh on Enter / focus-out (editingFinished), which
+    // raced with Tab and left Tab unable to reach a button that was about to
+    // become enabled.
+    connect(leFile, &QComboBox::editTextChanged,
+            this, [this](const QString &) { setReadWriteButtonState(); });
     loadImageFileHistory();
     elapsed_timer = new ElapsedTimer();
     statusbar->addPermanentWidget(elapsed_timer);   // "addpermanent" puts it on the RHS of the statusbar
