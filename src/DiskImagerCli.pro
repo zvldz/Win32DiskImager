@@ -14,3 +14,6 @@ DEFINES += _WIN32_WINNT=0x0A00
 
 SOURCES += cli_main.cpp
 RC_FILE = DiskImagerCli.rc
+
+# zlib + liblzma for .gz / .xz image decompression in cmdWrite / cmdVerify.
+LIBS += -lz -llzma

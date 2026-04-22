@@ -11,8 +11,13 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <malloc.h>
+#include <memory>
 #include <string>
 #include <vector>
+
+#include <zlib.h>
+#include <lzma.h>
 
 #include "version.h"
 
@@ -57,9 +62,12 @@ void printUsage()
 {
     std::cout << "Usage:\n";
     std::cout << "  Win32DiskImager-cli.exe list\n";
-    std::cout << "  Win32DiskImager-cli.exe write  --device E: --image C:\\path\\image.img\n";
+    std::cout << "  Win32DiskImager-cli.exe write  --device E: --image C:\\path\\image.img[.gz|.xz]\n";
     std::cout << "  Win32DiskImager-cli.exe read   --device E: --image C:\\path\\backup.img [--bytes N] [--allocated-only]\n";
-    std::cout << "  Win32DiskImager-cli.exe verify --device E: --image C:\\path\\image.img\n";
+    std::cout << "  Win32DiskImager-cli.exe verify --device E: --image C:\\path\\image.img[.gz|.xz]\n";
+    std::cout << "\n";
+    std::cout << "write / verify accept plain .img, gzipped .img.gz and xz-compressed .img.xz.\n";
+    std::cout << "Format is detected by magic bytes, not file extension.\n";
 }
 
 std::wstring formatWinError(DWORD code)
@@ -120,10 +128,10 @@ HANDLE openVolume(wchar_t driveLetter, DWORD access)
     return CreateFileW(path.c_str(), access, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
 }
 
-HANDLE openPhysicalDisk(DWORD diskNumber, DWORD access)
+HANDLE openPhysicalDisk(DWORD diskNumber, DWORD access, DWORD extraFlags = 0)
 {
     const std::wstring path = toPhysicalDrivePath(diskNumber);
-    return CreateFileW(path.c_str(), access, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    return CreateFileW(path.c_str(), access, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, extraFlags, nullptr);
 }
 
 bool getVolumeDiskNumber(HANDLE hVolume, DWORD &diskNumber)
@@ -324,7 +332,8 @@ bool prepareDiskHandles(const std::string &device,
                         HANDLE &hVolume,
                         HANDLE &hDisk,
                         DWORD &diskNumber,
-                        DiskGeometry &geometry)
+                        DiskGeometry &geometry,
+                        DWORD diskExtraFlags = 0)
 {
     hVolume = INVALID_HANDLE_VALUE;
     hDisk = INVALID_HANDLE_VALUE;
@@ -363,7 +372,7 @@ bool prepareDiskHandles(const std::string &device,
         return false;
     }
 
-    hDisk = openPhysicalDisk(diskNumber, diskAccess);
+    hDisk = openPhysicalDisk(diskNumber, diskAccess, diskExtraFlags);
     if (hDisk == INVALID_HANDLE_VALUE) {
         printWinError(L"Failed to open physical disk.", GetLastError());
         unlockVolume(hVolume);
@@ -398,25 +407,222 @@ void cleanupDiskHandles(HANDLE &hVolume, HANDLE &hDisk)
     }
 }
 
-HANDLE openImageFileRead(const std::string &path)
+HANDLE openImageFileWrite(const std::string &path, DWORD extraFlags = 0)
 {
     const std::wstring w = widen(path);
-    return CreateFileW(w.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    const DWORD flags = extraFlags ? extraFlags : FILE_ATTRIBUTE_NORMAL;
+    return CreateFileW(w.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, flags, nullptr);
 }
 
-HANDLE openImageFileWrite(const std::string &path)
-{
-    const std::wstring w = widen(path);
-    return CreateFileW(w.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-}
+// ---------------------------------------------------------------------------
+// Image source abstraction (raw / gz / xz).
+// ---------------------------------------------------------------------------
+// Parallels the GUI's ImageReader. CLI stays Qt-free, so this is a local copy
+// built on top of plain Win32 / zlib / liblzma. See src/imagereader.h for the
+// Qt-flavored version used by mainwindow.cpp.
 
-uint64_t getHandleSize(HANDLE h)
-{
-    LARGE_INTEGER li = {};
-    if (!GetFileSizeEx(h, &li)) {
-        return 0;
+struct ImageSource {
+    virtual ~ImageSource() = default;
+    virtual int64_t read(void *buf, size_t maxBytes) = 0;
+    virtual uint64_t uncompressedSize() const = 0;   // 0 if unknown
+    virtual uint64_t compressedPos()    const = 0;
+    virtual uint64_t compressedSize()   const = 0;
+    virtual std::string errorString()   const = 0;
+};
+
+class RawImageSource : public ImageSource {
+public:
+    ~RawImageSource() override { if (h_ != INVALID_HANDLE_VALUE) CloseHandle(h_); }
+    bool open(const std::wstring &path, std::string *err) {
+        h_ = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                         OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+        if (h_ == INVALID_HANDLE_VALUE) { if (err) *err = "Cannot open image."; return false; }
+        LARGE_INTEGER s;
+        if (!GetFileSizeEx(h_, &s)) { if (err) *err = "GetFileSizeEx failed."; return false; }
+        size_ = (uint64_t)s.QuadPart;
+        return true;
     }
-    return static_cast<uint64_t>(li.QuadPart);
+    int64_t read(void *buf, size_t maxBytes) override {
+        if (h_ == INVALID_HANDLE_VALUE || maxBytes == 0) return 0;
+        DWORD got = 0;
+        if (!ReadFile(h_, buf, (DWORD)maxBytes, &got, nullptr)) { err_ = "ReadFile failed."; return -1; }
+        pos_ += got;
+        return (int64_t)got;
+    }
+    uint64_t uncompressedSize() const override { return size_; }
+    uint64_t compressedPos()    const override { return pos_; }
+    uint64_t compressedSize()   const override { return size_; }
+    std::string errorString()   const override { return err_; }
+private:
+    HANDLE   h_    = INVALID_HANDLE_VALUE;
+    uint64_t size_ = 0;
+    uint64_t pos_  = 0;
+    std::string err_;
+};
+
+class GzImageSource : public ImageSource {
+public:
+    ~GzImageSource() override { if (gz_) gzclose(gz_); }
+    bool open(const std::wstring &path, std::string *err) {
+        // Compressed file size
+        HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE) { if (err) *err = "Cannot open gzip image."; return false; }
+        LARGE_INTEGER s; GetFileSizeEx(h, &s);
+        compressed_ = (uint64_t)s.QuadPart;
+        // ISIZE trailer (last 4 bytes) — mod 2^32 so unreliable for > 4 GB inputs.
+        if (compressed_ >= 4) {
+            LARGE_INTEGER pos; pos.QuadPart = (LONGLONG)compressed_ - 4;
+            SetFilePointerEx(h, pos, nullptr, FILE_BEGIN);
+            unsigned char b[4]; DWORD got = 0;
+            if (ReadFile(h, b, 4, &got, nullptr) && got == 4) {
+                const uint32_t isize = (uint32_t)b[0] | ((uint32_t)b[1] << 8)
+                                     | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
+                if (isize >= compressed_) uncompressed_ = isize;
+            }
+        }
+        CloseHandle(h);
+        gz_ = gzopen_w(path.c_str(), "rb");
+        if (!gz_) { if (err) *err = "gzopen_w failed."; return false; }
+        return true;
+    }
+    int64_t read(void *buf, size_t maxBytes) override {
+        if (!gz_ || maxBytes == 0) return 0;
+        int got = gzread(gz_, buf, (unsigned)maxBytes);
+        if (got < 0) { int ec = 0; const char *m = gzerror(gz_, &ec); err_ = m ? m : "gz error"; return -1; }
+        const z_off_t off = gzoffset(gz_);
+        if (off >= 0) compressedPos_ = (uint64_t)off;
+        return (int64_t)got;
+    }
+    uint64_t uncompressedSize() const override { return uncompressed_; }
+    uint64_t compressedPos()    const override { return compressedPos_; }
+    uint64_t compressedSize()   const override { return compressed_; }
+    std::string errorString()   const override { return err_; }
+private:
+    gzFile   gz_            = nullptr;
+    uint64_t compressed_    = 0;
+    uint64_t compressedPos_ = 0;
+    uint64_t uncompressed_  = 0;
+    std::string err_;
+};
+
+class XzImageSource : public ImageSource {
+public:
+    ~XzImageSource() override {
+        if (strmInit_) lzma_end(&strm_);
+        if (fp_) fclose(fp_);
+    }
+    bool open(const std::wstring &path, std::string *err) {
+        // file size + probe index for uncompressed size
+        FILE *probe = _wfopen(path.c_str(), L"rb");
+        if (!probe) { if (err) *err = "Cannot open xz image."; return false; }
+        _fseeki64(probe, 0, SEEK_END);
+        compressed_ = (uint64_t)_ftelli64(probe);
+        uncompressed_ = probeXzIndex(probe, compressed_);
+        fclose(probe);
+
+        fp_ = _wfopen(path.c_str(), L"rb");
+        if (!fp_) { if (err) *err = "Cannot open xz image."; return false; }
+
+        if (lzma_stream_decoder(&strm_, UINT64_MAX, LZMA_CONCATENATED) != LZMA_OK) {
+            if (err) *err = "lzma_stream_decoder failed.";
+            fclose(fp_); fp_ = nullptr; return false;
+        }
+        strmInit_ = true;
+        inBuf_.resize(64 * 1024);
+        return true;
+    }
+    int64_t read(void *buf, size_t maxBytes) override {
+        if (!fp_ || maxBytes == 0 || eof_) return 0;
+        strm_.next_out  = (unsigned char *)buf;
+        strm_.avail_out = maxBytes;
+        while (strm_.avail_out > 0 && !eof_) {
+            if (strm_.avail_in == 0 && !feof(fp_)) {
+                size_t n = fread(inBuf_.data(), 1, inBuf_.size(), fp_);
+                if (ferror(fp_)) { err_ = "fread on xz file failed."; return -1; }
+                strm_.next_in = inBuf_.data();
+                strm_.avail_in = n;
+                compressedPos_ += n;
+            }
+            lzma_action action = feof(fp_) ? LZMA_FINISH : LZMA_RUN;
+            lzma_ret rc = lzma_code(&strm_, action);
+            if (rc == LZMA_STREAM_END) { eof_ = true; break; }
+            if (rc != LZMA_OK) {
+                switch (rc) {
+                    case LZMA_FORMAT_ERROR: err_ = "Not a valid xz file."; break;
+                    case LZMA_DATA_ERROR:   err_ = "Corrupted xz data.";   break;
+                    case LZMA_BUF_ERROR:    err_ = "Unexpected end of xz stream."; break;
+                    default:                err_ = "xz decoder error.";   break;
+                }
+                return -1;
+            }
+        }
+        return (int64_t)maxBytes - (int64_t)strm_.avail_out;
+    }
+    uint64_t uncompressedSize() const override { return uncompressed_; }
+    uint64_t compressedPos()    const override { return compressedPos_; }
+    uint64_t compressedSize()   const override { return compressed_; }
+    std::string errorString()   const override { return err_; }
+private:
+    static uint64_t probeXzIndex(FILE *f, uint64_t fileSize) {
+        if (fileSize < 2 * LZMA_STREAM_HEADER_SIZE) return 0;
+        unsigned char footer[LZMA_STREAM_HEADER_SIZE];
+        _fseeki64(f, (long long)fileSize - LZMA_STREAM_HEADER_SIZE, SEEK_SET);
+        if (fread(footer, 1, LZMA_STREAM_HEADER_SIZE, f) != LZMA_STREAM_HEADER_SIZE) return 0;
+        lzma_stream_flags flags;
+        if (lzma_stream_footer_decode(&flags, footer) != LZMA_OK) return 0;
+        const uint64_t idxSz = flags.backward_size;
+        if (idxSz == 0 || idxSz > fileSize - LZMA_STREAM_HEADER_SIZE) return 0;
+        std::vector<unsigned char> idx((size_t)idxSz);
+        _fseeki64(f, (long long)(fileSize - LZMA_STREAM_HEADER_SIZE - idxSz), SEEK_SET);
+        if (fread(idx.data(), 1, (size_t)idxSz, f) != (size_t)idxSz) return 0;
+        lzma_index *index = nullptr;
+        uint64_t memlimit = UINT64_MAX;
+        size_t inPos = 0;
+        if (lzma_index_buffer_decode(&index, &memlimit, nullptr,
+                                     idx.data(), &inPos, (size_t)idxSz) != LZMA_OK) return 0;
+        const uint64_t total = (uint64_t)lzma_index_uncompressed_size(index);
+        lzma_index_end(index, nullptr);
+        return total;
+    }
+    FILE       *fp_          = nullptr;
+    lzma_stream strm_        = LZMA_STREAM_INIT;
+    bool        strmInit_    = false;
+    bool        eof_         = false;
+    std::vector<unsigned char> inBuf_;
+    uint64_t    compressed_    = 0;
+    uint64_t    compressedPos_ = 0;
+    uint64_t    uncompressed_  = 0;
+    std::string err_;
+};
+
+// Sniff first bytes to pick the right reader. Magic bytes beat file extension.
+std::unique_ptr<ImageSource> openImageSource(const std::string &path, std::string *err)
+{
+    const std::wstring w = widen(path);
+    HANDLE h = CreateFileW(w.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) { if (err) *err = "Cannot open image file."; return nullptr; }
+    unsigned char magic[6] = {0};
+    DWORD got = 0;
+    ReadFile(h, magic, 6, &got, nullptr);
+    CloseHandle(h);
+
+    const bool isGz = (got >= 2) && magic[0] == 0x1F && magic[1] == 0x8B;
+    const bool isXz = (got >= 6) && magic[0] == 0xFD && magic[1] == '7'
+                   && magic[2] == 'z' && magic[3] == 'X'
+                   && magic[4] == 'Z' && magic[5] == 0x00;
+
+    std::unique_ptr<ImageSource> s;
+    if (isGz)      s = std::make_unique<GzImageSource>();
+    else if (isXz) s = std::make_unique<XzImageSource>();
+    else           s = std::make_unique<RawImageSource>();
+
+    bool ok = false;
+    if (auto *r = dynamic_cast<RawImageSource *>(s.get())) ok = r->open(w, err);
+    else if (auto *g = dynamic_cast<GzImageSource *>(s.get())) ok = g->open(w, err);
+    else if (auto *x = dynamic_cast<XzImageSource *>(s.get())) ok = x->open(w, err);
+    return ok ? std::move(s) : nullptr;
 }
 
 int cmdList()
@@ -463,9 +669,10 @@ int cmdList()
 
 int cmdWrite(const std::string &imagePath, const std::string &device)
 {
-    HANDLE hImage = openImageFileRead(imagePath);
-    if (hImage == INVALID_HANDLE_VALUE) {
-        printWinError(L"Failed to open image file for reading.", GetLastError());
+    std::string srcErr;
+    std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
+    if (!src) {
+        std::cerr << "Failed to open image: " << srcErr << std::endl;
         return 1;
     }
 
@@ -473,8 +680,10 @@ int cmdWrite(const std::string &imagePath, const std::string &device)
     HANDLE hDisk = INVALID_HANDLE_VALUE;
     DWORD diskNumber = 0;
     DiskGeometry geometry;
-    if (!prepareDiskHandles(device, GENERIC_WRITE, hVolume, hDisk, diskNumber, geometry)) {
-        CloseHandle(hImage);
+    // Direct I/O on the destination: honest MB/s, and "Write successful"
+    // means data is on the device (no ghost flush after the CLI exits).
+    if (!prepareDiskHandles(device, GENERIC_WRITE, hVolume, hDisk, diskNumber, geometry,
+                            FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH)) {
         return 1;
     }
 
@@ -482,68 +691,89 @@ int cmdWrite(const std::string &imagePath, const std::string &device)
     LARGE_INTEGER pos = {};
     if (!SetFilePointerEx(hDisk, pos, nullptr, FILE_BEGIN)) {
         printWinError(L"Failed to seek physical disk.", GetLastError());
-        rc = 1;
         cleanupDiskHandles(hVolume, hDisk);
-        CloseHandle(hImage);
-        return rc;
-    }
-
-    const uint64_t imageBytes = getHandleSize(hImage);
-    const uint64_t paddedImageBytes =
-        ((imageBytes + geometry.bytesPerSector - 1) / geometry.bytesPerSector) * geometry.bytesPerSector;
-
-    if (paddedImageBytes > geometry.totalBytes) {
-        std::cerr << "Image is larger than target disk." << std::endl;
-        std::cerr << "Image bytes (padded): " << paddedImageBytes << ", disk bytes: " << geometry.totalBytes << std::endl;
-        cleanupDiskHandles(hVolume, hDisk);
-        CloseHandle(hImage);
         return 1;
     }
 
-    DWORD chunk = 4 * 1024 * 1024;
-    chunk -= chunk % static_cast<DWORD>(geometry.bytesPerSector);
-    if (chunk == 0) {
-        chunk = static_cast<DWORD>(geometry.bytesPerSector);
+    const uint64_t imageBytes = src->uncompressedSize();  // 0 if unknown
+    if (imageBytes > 0) {
+        const uint64_t paddedImageBytes =
+            ((imageBytes + geometry.bytesPerSector - 1) / geometry.bytesPerSector) * geometry.bytesPerSector;
+        if (paddedImageBytes > geometry.totalBytes) {
+            std::cerr << "Image is larger than target disk." << std::endl;
+            std::cerr << "Image bytes (padded): " << paddedImageBytes
+                      << ", disk bytes: " << geometry.totalBytes << std::endl;
+            cleanupDiskHandles(hVolume, hDisk);
+            return 1;
+        }
     }
 
-    std::vector<char> buffer(chunk, 0);
-    uint64_t processed = 0;
-    ProgressPrinter progress(imageBytes);
+    size_t chunk = 4 * 1024 * 1024;
+    chunk -= chunk % static_cast<size_t>(geometry.bytesPerSector);
+    if (chunk == 0) chunk = static_cast<size_t>(geometry.bytesPerSector);
+
+    // NO_BUFFERING on the disk handle requires sector-aligned buffers.
+    char *buffer = static_cast<char *>(_aligned_malloc(chunk, (size_t)geometry.bytesPerSector));
+    if (!buffer) {
+        std::cerr << "Out of memory allocating I/O buffer." << std::endl;
+        cleanupDiskHandles(hVolume, hDisk);
+        return 1;
+    }
+
+    uint64_t processed  = 0;       // bytes written to device (unknown-size progress driver)
+    uint64_t compLast   = 0;
+    // For unknown-size inputs we show compressed-bytes progress — either
+    // way ProgressPrinter decides "%" vs "MB" from whether totalBytes is set.
+    ProgressPrinter progress(imageBytes > 0 ? imageBytes : src->compressedSize());
 
     while (true) {
-        DWORD got = 0;
-        if (!ReadFile(hImage, buffer.data(), static_cast<DWORD>(buffer.size()), &got, nullptr)) {
-            printWinError(L"Error while reading image file.", GetLastError());
+        int64_t got = src->read(buffer, chunk);
+        if (got < 0) {
+            std::cerr << "Image read error: " << src->errorString() << std::endl;
             rc = 1;
             break;
         }
-        if (got == 0) {
-            break;
-        }
+        if (got == 0) break;
 
-        DWORD toWrite = got;
-        const DWORD rem = toWrite % static_cast<DWORD>(geometry.bytesPerSector);
+        size_t toWrite = (size_t)got;
+        const size_t rem = toWrite % (size_t)geometry.bytesPerSector;
         if (rem != 0) {
-            const DWORD pad = static_cast<DWORD>(geometry.bytesPerSector) - rem;
-            memset(buffer.data() + toWrite, 0, pad);
+            const size_t pad = (size_t)geometry.bytesPerSector - rem;
+            memset(buffer + toWrite, 0, pad);
             toWrite += pad;
         }
 
-        if (!writeAll(hDisk, buffer.data(), toWrite)) {
+        // If we've already filled the device while the input still has data,
+        // abort rather than silently truncate. Only possible for unknown-size
+        // inputs (gz > 4 GB without size hints); known-size ones are rejected
+        // up front by the paddedImageBytes check above.
+        if (processed + toWrite > geometry.totalBytes) {
+            std::cerr << "\nImage exceeds target disk capacity (" << geometry.totalBytes
+                      << " bytes); aborting." << std::endl;
+            rc = 1;
+            break;
+        }
+
+        if (!writeAll(hDisk, buffer, (DWORD)toWrite)) {
             printWinError(L"Failed while writing to physical disk.", GetLastError());
             rc = 1;
             break;
         }
 
-        processed += got;
-        progress.update(processed);
+        processed += toWrite;
+        if (imageBytes > 0) {
+            progress.update(processed > imageBytes ? imageBytes : processed);
+        } else {
+            const uint64_t cp = src->compressedPos();
+            if (cp != compLast) { progress.update(cp); compLast = cp; }
+        }
     }
 
+    _aligned_free(buffer);
     FlushFileBuffers(hDisk);
     cleanupDiskHandles(hVolume, hDisk);
-    CloseHandle(hImage);
     if (rc == 0) {
-        progress.done(processed);
+        progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
         std::cout << "Write successful." << std::endl;
     }
     return rc;
@@ -551,7 +781,9 @@ int cmdWrite(const std::string &imagePath, const std::string &device)
 
 int cmdRead(const std::string &imagePath, const std::string &device, uint64_t requestedBytes, bool allocatedOnly)
 {
-    HANDLE hImage = openImageFileWrite(imagePath);
+    // Direct I/O on the destination image file: "Read successful" means the
+    // bytes are on disk (no ghost flush after the CLI exits).
+    HANDLE hImage = openImageFileWrite(imagePath, FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
     if (hImage == INVALID_HANDLE_VALUE) {
         printWinError(L"Failed to open image file for writing.", GetLastError());
         return 1;
@@ -596,26 +828,32 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
         return 1;
     }
 
-    DWORD chunk = 4 * 1024 * 1024;
-    chunk -= chunk % static_cast<DWORD>(geometry.bytesPerSector);
-    if (chunk == 0) {
-        chunk = static_cast<DWORD>(geometry.bytesPerSector);
+    size_t chunk = 4 * 1024 * 1024;
+    chunk -= chunk % static_cast<size_t>(geometry.bytesPerSector);
+    if (chunk == 0) chunk = static_cast<size_t>(geometry.bytesPerSector);
+
+    // Sector-aligned buffer (required by NO_BUFFERING on hImage).
+    char *buffer = static_cast<char *>(_aligned_malloc(chunk, (size_t)geometry.bytesPerSector));
+    if (!buffer) {
+        std::cerr << "Out of memory allocating I/O buffer." << std::endl;
+        cleanupDiskHandles(hVolume, hDisk);
+        CloseHandle(hImage);
+        return 1;
     }
 
-    std::vector<char> buffer(chunk, 0);
     uint64_t processed = 0;
     int rc = 0;
     ProgressPrinter progress(bytesToRead);
 
     while (processed < bytesToRead) {
         const DWORD ask = static_cast<DWORD>((bytesToRead - processed) < chunk ? (bytesToRead - processed) : chunk);
-        if (!readExact(hDisk, buffer.data(), ask)) {
+        if (!readExact(hDisk, buffer, ask)) {
             printWinError(L"Failed while reading from physical disk.", GetLastError());
             rc = 1;
             break;
         }
 
-        if (!writeAll(hImage, buffer.data(), ask)) {
+        if (!writeAll(hImage, buffer, ask)) {
             printWinError(L"Failed while writing image file.", GetLastError());
             rc = 1;
             break;
@@ -625,6 +863,7 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
         progress.update(processed);
     }
 
+    _aligned_free(buffer);
     FlushFileBuffers(hImage);
     cleanupDiskHandles(hVolume, hDisk);
     CloseHandle(hImage);
@@ -637,9 +876,10 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
 
 int cmdVerify(const std::string &imagePath, const std::string &device)
 {
-    HANDLE hImage = openImageFileRead(imagePath);
-    if (hImage == INVALID_HANDLE_VALUE) {
-        printWinError(L"Failed to open image file for reading.", GetLastError());
+    std::string srcErr;
+    std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
+    if (!src) {
+        std::cerr << "Failed to open image: " << srcErr << std::endl;
         return 1;
     }
 
@@ -648,81 +888,92 @@ int cmdVerify(const std::string &imagePath, const std::string &device)
     DWORD diskNumber = 0;
     DiskGeometry geometry;
     if (!prepareDiskHandles(device, GENERIC_READ, hVolume, hDisk, diskNumber, geometry)) {
-        CloseHandle(hImage);
         return 1;
     }
 
-    const uint64_t imageBytes = getHandleSize(hImage);
-    const uint64_t paddedImageBytes =
-        ((imageBytes + geometry.bytesPerSector - 1) / geometry.bytesPerSector) * geometry.bytesPerSector;
-    if (paddedImageBytes > geometry.totalBytes) {
-        std::cerr << "Image is larger than target disk." << std::endl;
-        cleanupDiskHandles(hVolume, hDisk);
-        CloseHandle(hImage);
-        return 1;
+    const uint64_t imageBytes = src->uncompressedSize();  // 0 if unknown
+    if (imageBytes > 0) {
+        const uint64_t padded =
+            ((imageBytes + geometry.bytesPerSector - 1) / geometry.bytesPerSector) * geometry.bytesPerSector;
+        if (padded > geometry.totalBytes) {
+            std::cerr << "Image is larger than target disk." << std::endl;
+            cleanupDiskHandles(hVolume, hDisk);
+            return 1;
+        }
     }
 
     LARGE_INTEGER pos = {};
     if (!SetFilePointerEx(hDisk, pos, nullptr, FILE_BEGIN)) {
         printWinError(L"Failed to seek physical disk.", GetLastError());
         cleanupDiskHandles(hVolume, hDisk);
-        CloseHandle(hImage);
         return 1;
     }
 
-    DWORD chunk = 4 * 1024 * 1024;
-    chunk -= chunk % static_cast<DWORD>(geometry.bytesPerSector);
-    if (chunk == 0) {
-        chunk = static_cast<DWORD>(geometry.bytesPerSector);
+    size_t chunk = 4 * 1024 * 1024;
+    chunk -= chunk % static_cast<size_t>(geometry.bytesPerSector);
+    if (chunk == 0) chunk = static_cast<size_t>(geometry.bytesPerSector);
+
+    char *fileBuf = static_cast<char *>(_aligned_malloc(chunk, (size_t)geometry.bytesPerSector));
+    std::vector<char> diskBuf(chunk, 0);
+    if (!fileBuf) {
+        std::cerr << "Out of memory allocating I/O buffer." << std::endl;
+        cleanupDiskHandles(hVolume, hDisk);
+        return 1;
     }
 
-    std::vector<char> fileBuf(chunk, 0);
-    std::vector<char> diskBuf(chunk, 0);
     uint64_t processed = 0;
+    uint64_t compLast  = 0;
     int rc = 0;
-    ProgressPrinter progress(imageBytes);
+    ProgressPrinter progress(imageBytes > 0 ? imageBytes : src->compressedSize());
 
-    while (processed < imageBytes) {
-        DWORD got = 0;
-        if (!ReadFile(hImage, fileBuf.data(), static_cast<DWORD>(fileBuf.size()), &got, nullptr)) {
-            printWinError(L"Error while reading image file.", GetLastError());
+    while (true) {
+        int64_t got = src->read(fileBuf, chunk);
+        if (got < 0) {
+            std::cerr << "Image read error: " << src->errorString() << std::endl;
             rc = 1;
             break;
         }
-        if (got == 0) {
-            rc = 1;
-            std::cerr << "Unexpected end of image file." << std::endl;
-            break;
-        }
+        if (got == 0) break;  // clean EOF
 
-        DWORD ask = got;
-        const DWORD rem = ask % static_cast<DWORD>(geometry.bytesPerSector);
+        size_t ask = (size_t)got;
+        const size_t rem = ask % (size_t)geometry.bytesPerSector;
         if (rem != 0) {
-            const DWORD pad = static_cast<DWORD>(geometry.bytesPerSector) - rem;
-            memset(fileBuf.data() + ask, 0, pad);
+            const size_t pad = (size_t)geometry.bytesPerSector - rem;
+            memset(fileBuf + ask, 0, pad);
             ask += pad;
         }
 
-        if (!readExact(hDisk, diskBuf.data(), ask)) {
+        if (processed + ask > geometry.totalBytes) {
+            std::cerr << "\nImage exceeds target disk capacity; aborting." << std::endl;
+            rc = 1;
+            break;
+        }
+
+        if (!readExact(hDisk, diskBuf.data(), (DWORD)ask)) {
             printWinError(L"Failed while reading from physical disk.", GetLastError());
             rc = 1;
             break;
         }
 
-        if (memcmp(fileBuf.data(), diskBuf.data(), ask) != 0) {
-            std::cerr << "Verify failed at byte offset " << processed << std::endl;
+        if (memcmp(fileBuf, diskBuf.data(), ask) != 0) {
+            std::cerr << "\nVerify failed at byte offset " << processed << std::endl;
             rc = 1;
             break;
         }
 
-        processed += got;
-        progress.update(processed);
+        processed += ask;
+        if (imageBytes > 0) {
+            progress.update(processed > imageBytes ? imageBytes : processed);
+        } else {
+            const uint64_t cp = src->compressedPos();
+            if (cp != compLast) { progress.update(cp); compLast = cp; }
+        }
     }
 
+    _aligned_free(fileBuf);
     cleanupDiskHandles(hVolume, hDisk);
-    CloseHandle(hImage);
     if (rc == 0) {
-        progress.done(processed);
+        progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
         std::cout << "Verify successful." << std::endl;
     }
     return rc;
