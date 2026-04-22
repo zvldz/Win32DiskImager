@@ -61,7 +61,7 @@ class MainWindow : public QMainWindow, public Ui::MainWindow
         void on_bWrite_clicked();
         void on_bRead_clicked();
         void on_bVerify_clicked();
-        void on_leFile_editingFinished();
+        void onImageFileEditingFinished();
         void on_bHashCopy_clicked();
 private slots:
         void on_cboxHashType_IdxChg();
@@ -77,6 +77,10 @@ private:
         void loadSettings();
         void initializeHomeDir();
         void updateHashControls();
+        void loadImageFileHistory();
+        void addImageFileToHistory(const QString &path);
+
+        static const int MAX_RECENT_IMAGE_FILES = 20;
 
         HANDLE hVolume;
         HANDLE hFile;

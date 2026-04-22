@@ -70,7 +70,14 @@
           <number>2</number>
          </property>
          <item>
-          <widget class="DroppableLineEdit" name="leFile"/>
+          <widget class="DroppableComboBox" name="leFile">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
          </item>
          <item>
           <widget class="QToolButton" name="tbBrowse">
@@ -395,9 +402,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>DroppableLineEdit</class>
-   <extends>QLineEdit</extends>
-   <header>droppablelineedit.h</header>
+   <class>DroppableComboBox</class>
+   <extends>QComboBox</extends>
+   <header>droppablecombobox.h</header>
   </customwidget>
  </customwidgets>
  <resources>

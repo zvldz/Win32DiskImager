@@ -1,0 +1,112 @@
+name: Build
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: msys2 {0}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2 + static Qt 6 + MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          release: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-qt6-static
+
+      # Static Qt in MSYS2 lives under /mingw64/qt6-static/. The GUI build uses
+      # compile-gui-static.bat's qmake path via QT_STATIC_BIN; here we invoke
+      # qmake directly from that directory so the rest is identical logic.
+      - name: Build GUI (static Qt)
+        run: |
+          set -euo pipefail
+          mkdir -p bin/gui-static-build
+          cd bin/gui-static-build
+          /mingw64/qt6-static/bin/qmake6 ../../src/DiskImager.pro "DESTDIR=.."
+          mingw32-make -j2
+
+      - name: Build CLI (native, no Qt)
+        run: |
+          set -euo pipefail
+          mkdir -p bin/cli-build
+          cd bin/cli-build
+          /mingw64/qt6-static/bin/qmake6 ../../src/DiskImagerCli.pro "DESTDIR=.."
+          mingw32-make -j2
+
+      - name: Read version from version.h
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAJOR=$(grep -oP '#define APP_VERSION_MAJOR\s+\K\d+' src/version.h)
+          MINOR=$(grep -oP '#define APP_VERSION_MINOR\s+\K\d+' src/version.h)
+          PATCH=$(grep -oP '#define APP_VERSION_PATCH\s+\K\d+' src/version.h)
+          V="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=${V}" >> "$GITHUB_OUTPUT"
+          echo "App version: ${V}"
+
+      # Inno Setup setup.iss expects a Release/ sibling directory.
+      # Static GUI needs no Qt DLLs / platforms plugin. Translations stay on
+      # disk so the runtime QTranslator::load("translations/diskimager_...")
+      # path (see main.cpp) keeps working.
+      - name: Stage files for installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p Release/translations
+          cp bin/Win32DiskImager.exe     Release/
+          cp bin/Win32DiskImager-cli.exe Release/
+          cp src/lang/*.qm               Release/translations/ 2>/dev/null || true
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress --confirm
+
+      - name: Build installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          "$ISCC" setup.iss
+          ls -la Output/
+
+      # Portable ZIP bundles — match the upstream artifact layout in bin/.
+      - name: Package portable zips
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $V = '${{ steps.version.outputs.version }}'
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          Compress-Archive -Path bin/Win32DiskImager.exe     -DestinationPath "artifacts/Win32DiskImager-$V.zip"     -Force
+          Compress-Archive -Path bin/Win32DiskImager-cli.exe -DestinationPath "artifacts/Win32DiskImager-cli-$V.zip" -Force
+          Copy-Item Output/*.exe artifacts/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Win32DiskImager-${{ steps.version.outputs.version }}
+          path: artifacts/*
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true

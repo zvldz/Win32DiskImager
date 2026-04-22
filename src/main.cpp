@@ -26,6 +26,7 @@
 #include <windows.h>
 #include <winioctl.h>
 #include "mainwindow.h"
+#include "version.h"
 
 
 int main(int argc, char *argv[])
@@ -35,7 +36,7 @@ int main(int argc, char *argv[])
     QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 #endif
     QApplication app(argc, argv);
-    app.setApplicationDisplayName(VER);
+    app.setApplicationDisplayName(APP_VERSION);
 
     QTranslator translator;
     if (translator.load("translations/diskimager_" + QLocale::system().name()))

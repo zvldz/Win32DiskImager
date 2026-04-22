@@ -5,3 +5,15 @@ build*/
 *.pro.user*
 *dll
 *qm
+
+# Local build outputs, deployed runtime files, debug launcher.
+# CI produces artifacts under Output/ and artifacts/ (ignored too).
+bin/
+Output/
+artifacts/
+
+# Editor/IDE and agent metadata.
+.claude/
+.vscode/
+.idea/
+CLAUDE.md

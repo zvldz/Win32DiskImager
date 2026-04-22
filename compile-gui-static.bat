@@ -17,20 +17,12 @@ if not exist "%QT_STATIC_BIN%\qmake6.exe" (
   exit /b 1
 )
 
-if "%MSYS_MINGW_BIN%"=="" set "MSYS_MINGW_BIN=C:\msys64\mingw64\bin"
-if exist "%MSYS_MINGW_BIN%\g++.exe" (
-  set "PATH=%MSYS_MINGW_BIN%;%PATH%"
-)
+rem Pin Qt to the explicitly-requested static toolchain so the helper only
+rem needs to resolve MinGW; auto-detection of a non-static Qt is suppressed.
+set "QT_BIN=%QT_STATIC_BIN%"
 
-set "PATH=%QT_STATIC_BIN%;%PATH%"
-
-where g++.exe >nul 2>nul
-if errorlevel 1 (
-  echo ERROR: g++.exe not found in PATH.
-  echo Set MSYS_MINGW_BIN to your MinGW bin path, e.g.:
-  echo   set MSYS_MINGW_BIN=C:\msys64\mingw64\bin
-  exit /b 1
-)
+call "%~dp0_detect-toolchain.bat"
+if errorlevel 1 exit /b 1
 
 set "ROOT_DIR=%~dp0"
 set "BIN_DIR=%ROOT_DIR%bin"

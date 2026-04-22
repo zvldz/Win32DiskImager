@@ -1,4 +1,5 @@
 #include "afxres.h"
+#include "version.h"
 
 #define IDI_APP_ICON 101
 IDI_APP_ICON ICON "images\\Win32DiskImager.ico"
@@ -6,8 +7,8 @@ IDI_APP_ICON ICON "images\\Win32DiskImager.ico"
 1 RT_MANIFEST "DiskImagerCli.manifest"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,0,0,0
- PRODUCTVERSION 2,0,0,0
+ FILEVERSION APP_VERSION_MAJOR,APP_VERSION_MINOR,APP_VERSION_PATCH,0
+ PRODUCTVERSION APP_VERSION_MAJOR,APP_VERSION_MINOR,APP_VERSION_PATCH,0
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -23,11 +24,11 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "FileDescription", "Win32DiskImager CLI"
-            VALUE "FileVersion", "2.0.0"
+            VALUE "FileVersion", APP_VERSION
             VALUE "InternalName", "Win32DiskImager-cli"
             VALUE "OriginalFilename", "Win32DiskImager-cli.exe"
             VALUE "ProductName", "Win32 Image Writer CLI"
-            VALUE "ProductVersion", "2.0.0"
+            VALUE "ProductVersion", APP_VERSION
         END
     END
     BLOCK "VarFileInfo"

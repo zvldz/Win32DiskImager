@@ -45,6 +45,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
     setupUi(this);
     setFixedSize(size());
+    if (QLineEdit *fileEdit = leFile->lineEdit()) {
+        connect(fileEdit, &QLineEdit::editingFinished,
+                this, &MainWindow::onImageFileEditingFinished);
+    }
+    loadImageFileHistory();
     elapsed_timer = new ElapsedTimer();
     statusbar->addPermanentWidget(elapsed_timer);   // "addpermanent" puts it on the RHS of the statusbar
     getLogicalDrives();
@@ -59,7 +64,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     {
         QString fileLocation = QApplication::arguments().at(1);
         QFileInfo fileInfo(fileLocation);
-        leFile->setText(fileInfo.absoluteFilePath());
+        leFile->setEditText(fileInfo.absoluteFilePath());
     }
     // Add supported hash types.
     cboxHashType->addItem("MD5",QVariant(QCryptographicHash::Md5));
@@ -139,6 +144,53 @@ void MainWindow::loadSettings()
     myFileType = userSettings.value("FileType").toString();
 }
 
+void MainWindow::loadImageFileHistory()
+{
+    QSettings userSettings("HKEY_CURRENT_USER\\Software\\Win32DiskImager", QSettings::NativeFormat);
+    const QStringList history = userSettings.value("ImageFileHistory/Items").toStringList();
+
+    const QString preserved = leFile->currentText();
+    QSignalBlocker blocker(leFile);
+    leFile->clear();
+    for (const QString &entry : history) {
+        leFile->addItem(entry);
+    }
+    leFile->setEditText(preserved);
+}
+
+void MainWindow::addImageFileToHistory(const QString &path)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QSettings userSettings("HKEY_CURRENT_USER\\Software\\Win32DiskImager", QSettings::NativeFormat);
+    QStringList history = userSettings.value("ImageFileHistory/Items").toStringList();
+
+    // Case-insensitive dedup keeps registry stable on Windows; the newest
+    // entry wins the preferred path casing.
+    history.erase(std::remove_if(history.begin(), history.end(),
+                                 [&path](const QString &e) {
+                                     return e.compare(path, Qt::CaseInsensitive) == 0;
+                                 }),
+                  history.end());
+    history.prepend(path);
+    while (history.size() > MAX_RECENT_IMAGE_FILES) {
+        history.removeLast();
+    }
+
+    userSettings.setValue("ImageFileHistory/Items", history);
+
+    // Reflect the new order in the combo-box without losing the edit text.
+    QSignalBlocker blocker(leFile);
+    const QString preserved = leFile->currentText();
+    leFile->clear();
+    for (const QString &entry : history) {
+        leFile->addItem(entry);
+    }
+    leFile->setEditText(preserved);
+}
+
 void MainWindow::initializeHomeDir()
 {
     myHomeDir = QDir::homePath();
@@ -166,9 +218,9 @@ void MainWindow::initializeHomeDir()
 
 void MainWindow::setReadWriteButtonState()
 {
-    bool fileSelected = !(leFile->text().isEmpty());
+    bool fileSelected = !(leFile->currentText().isEmpty());
     bool deviceSelected = (cboxDevice->count() > 0);
-    QFileInfo fi(leFile->text());
+    QFileInfo fi(leFile->currentText());
 
     // set read and write buttons according to status of file/device
     bRead->setEnabled(deviceSelected && fileSelected && (fi.exists() ? fi.isWritable() : true));
@@ -214,7 +266,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::on_tbBrowse_clicked()
 {
     // Use the location of already entered file
-    QString fileLocation = leFile->text();
+    QString fileLocation = leFile->currentText();
     QFileInfo fileinfo(fileLocation);
 
     // See if there is a user-defined file extension.
@@ -249,7 +301,7 @@ void MainWindow::on_tbBrowse_clicked()
 
         if (!fileLocation.isNull())
         {
-            leFile->setText(fileLocation);
+            leFile->setEditText(fileLocation);
             QFileInfo newFileInfo(fileLocation);
             myHomeDir = newFileInfo.absolutePath();
         }
@@ -299,9 +351,10 @@ void MainWindow::generateHash(char *filename, int hashish)
 }
 
 
-// on an "editingFinished" signal (IE: return press), if the lineedit
-// contains a valid file, update the controls
-void MainWindow::on_leFile_editingFinished()
+// When the user commits an edit in the image-file field (Enter or focus out),
+// refresh dependent controls. Connected explicitly in the ctor because
+// QComboBox does not itself emit editingFinished — the inner QLineEdit does.
+void MainWindow::onImageFileEditingFinished()
 {
     setReadWriteButtonState();
     updateHashControls();
@@ -333,13 +386,13 @@ void MainWindow::on_bCancel_clicked()
 void MainWindow::on_bWrite_clicked()
 {
     bool passfail = true;
-    if (!leFile->text().isEmpty())
+    if (!leFile->currentText().isEmpty())
     {
-        QFileInfo fileinfo(leFile->text());
+        QFileInfo fileinfo(leFile->currentText());
         if (fileinfo.exists() && fileinfo.isFile() &&
                 fileinfo.isReadable() && (fileinfo.size() > 0) )
         {
-            if (leFile->text().at(0) == cboxDevice->currentText().at(1))
+            if (leFile->currentText().at(0) == cboxDevice->currentText().at(1))
             {
                 QMessageBox::critical(this, tr("Write Error"), tr("Image file cannot be located on the target device."));
                 return;
@@ -395,7 +448,7 @@ void MainWindow::on_bWrite_clicked()
                 setReadWriteButtonState();
                 return;
             }
-            hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->text().utf16()), GENERIC_READ);
+            hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->currentText().utf16()), GENERIC_READ);
             if (hFile == INVALID_HANDLE_VALUE)
             {
                 removeLockOnVolume(hVolume);
@@ -594,6 +647,7 @@ void MainWindow::on_bWrite_clicked()
         bCancel->setEnabled(false);
         setReadWriteButtonState();
         if (passfail){
+            addImageFileToHistory(leFile->currentText());
             QMessageBox::information(this, tr("Complete"), tr("Write Successful."));
         }
 
@@ -613,12 +667,12 @@ void MainWindow::on_bWrite_clicked()
 void MainWindow::on_bRead_clicked()
 {
     QString myFile;
-    if (!leFile->text().isEmpty())
+    if (!leFile->currentText().isEmpty())
     {
-        myFile = leFile->text();
+        myFile = leFile->currentText();
         QFileInfo fileinfo(myFile);
         if (fileinfo.path()=="."){
-            myFile=(myHomeDir + "/" + leFile->text());
+            myFile=(myHomeDir + "/" + leFile->currentText());
         }
         // check whether source and target device is the same...
         if (myFile.at(0) == cboxDevice->currentText().at(1))
@@ -809,6 +863,7 @@ void MainWindow::on_bRead_clicked()
         if (status == STATUS_CANCELED){
             QMessageBox::information(this, tr("Complete"), tr("Read Canceled."));
         } else {
+            addImageFileToHistory(leFile->currentText());
             QMessageBox::information(this, tr("Complete"), tr("Read Successful."));
 
         }
@@ -830,13 +885,13 @@ void MainWindow::on_bRead_clicked()
 void MainWindow::on_bVerify_clicked()
 {
     bool passfail = true;
-    if (!leFile->text().isEmpty())
+    if (!leFile->currentText().isEmpty())
     {
-        QFileInfo fileinfo(leFile->text());
+        QFileInfo fileinfo(leFile->currentText());
         if (fileinfo.exists() && fileinfo.isFile() &&
                 fileinfo.isReadable() && (fileinfo.size() > 0) )
         {
-            if (leFile->text().at(0) == cboxDevice->currentText().at(1))
+            if (leFile->currentText().at(0) == cboxDevice->currentText().at(1))
             {
                 QMessageBox::critical(this, tr("Verify Error"), tr("Image file cannot be located on the target device."));
                 return;
@@ -877,7 +932,7 @@ void MainWindow::on_bVerify_clicked()
                 setReadWriteButtonState();
                 return;
             }
-            hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->text().utf16()), GENERIC_READ);
+            hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->currentText().utf16()), GENERIC_READ);
             if (hFile == INVALID_HANDLE_VALUE)
             {
                 removeLockOnVolume(hVolume);
@@ -1217,14 +1272,14 @@ bool MainWindow::nativeEvent(const QByteArray &type, void *vMsg, long *result)
 
 void MainWindow::updateHashControls()
 {
-    QFileInfo fileinfo(leFile->text());
+    QFileInfo fileinfo(leFile->currentText());
     bool validFile = (fileinfo.exists() && fileinfo.isFile() &&
                       fileinfo.isReadable() && (fileinfo.size() >0));
 
     bHashCopy->setEnabled(false);
     hashLabel->clear();
 
-    if (cboxHashType->currentIndex() != 0 && !leFile->text().isEmpty() && validFile)
+    if (cboxHashType->currentIndex() != 0 && !leFile->currentText().isEmpty() && validFile)
     {
             bHashGen->setEnabled(true);
     }
@@ -1245,6 +1300,6 @@ void MainWindow::on_cboxHashType_IdxChg()
 
 void MainWindow::on_bHashGen_clicked()
 {
-    generateHash(leFile->text().toLatin1().data(),cboxHashType->currentData().toInt());
+    generateHash(leFile->currentText().toLatin1().data(),cboxHashType->currentData().toInt());
 
 }

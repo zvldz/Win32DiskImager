@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "version.h"
+
 namespace {
 
 struct DiskGeometry {
@@ -735,7 +737,7 @@ bool parseArgs(int argc, char *argv[], CliOptions &opt)
             return false;
         }
         if (a == "--version") {
-            std::cout << "Win32DiskImager-cli 2.0" << std::endl;
+            std::cout << "Win32DiskImager-cli " APP_VERSION << std::endl;
             return false;
         }
 

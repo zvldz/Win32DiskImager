@@ -46,9 +46,6 @@ contains(QT_CONFIG, static) {
     QMAKE_LIBS += -lbz2
     QMAKE_LIBS += -lrpcrt4
 }
-VERSION = 2.0
-VERSTR = '\\"$${VERSION}\\"'
-DEFINES += VER=\"$${VERSTR}\"
 DEFINES += WINVER=0x0A00
 DEFINES += _WIN32_WINNT=0x0A00
 QMAKE_TARGET_PRODUCT = "Win32 Image Writer"
@@ -58,7 +55,7 @@ QMAKE_TARGET_COPYRIGHT = "Copyright (C) 2009-2017 Windows ImageWriter Team"
 # Input
 HEADERS += disk.h\
            mainwindow.h\
-           droppablelineedit.h \
+           droppablecombobox.h \
            elapsedtimer.h
 
 FORMS += mainwindow.ui
@@ -66,7 +63,7 @@ FORMS += mainwindow.ui
 SOURCES += disk.cpp\
            main.cpp\
            mainwindow.cpp\
-           droppablelineedit.cpp \
+           droppablecombobox.cpp \
            elapsedtimer.cpp
 
 RESOURCES += gui_icons.qrc translations.qrc

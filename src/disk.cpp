@@ -335,64 +335,35 @@ QString getDriveLabel(const char *drv)
     return(retVal);
 }
 
+// Probe used during drive enumeration. Failures are expected and normal for
+// virtual/user-mode filesystems (Google Drive, OneDrive, Dokany, VeraCrypt,
+// Subst, RamDisk, ...) that do not fully implement storage IOCTLs. Return
+// FALSE silently so the caller can skip the device — never show a dialog
+// from here, or the user gets a nag popup for every such drive at startup.
 BOOL GetDisksProperty(HANDLE hDevice, PSTORAGE_DEVICE_DESCRIPTOR pDevDesc,
                       DEVICE_NUMBER *devInfo)
 {
-    STORAGE_PROPERTY_QUERY Query; // input param for query
-    DWORD dwOutBytes; // IOCTL output length
-    BOOL bResult; // IOCTL return val
-    BOOL retVal = true;
-    DWORD cbBytesReturned;
+    STORAGE_PROPERTY_QUERY Query;
+    DWORD dwOutBytes;
 
-    // specify the query type
     Query.PropertyId = StorageDeviceProperty;
     Query.QueryType = PropertyStandardQuery;
 
-    // Query using IOCTL_STORAGE_QUERY_PROPERTY
-    bResult = ::DeviceIoControl(hDevice, IOCTL_STORAGE_QUERY_PROPERTY,
-                &Query, sizeof(STORAGE_PROPERTY_QUERY), pDevDesc,
-                pDevDesc->Size, &dwOutBytes, (LPOVERLAPPED)NULL);
-    if (bResult)
+    if (!::DeviceIoControl(hDevice, IOCTL_STORAGE_QUERY_PROPERTY,
+            &Query, sizeof(STORAGE_PROPERTY_QUERY), pDevDesc,
+            pDevDesc->Size, &dwOutBytes, (LPOVERLAPPED)NULL))
     {
-        bResult = ::DeviceIoControl(hDevice, IOCTL_STORAGE_GET_DEVICE_NUMBER,
-                    NULL, 0, devInfo, sizeof(DEVICE_NUMBER), &dwOutBytes,
-                    (LPOVERLAPPED)NULL);
-        if (!bResult)
-        {
-            retVal = false;
-            wchar_t *errormessage=NULL;
-            FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, GetLastError(), 0, (LPWSTR)&errormessage, 0, NULL);
-            QString errText = QString::fromUtf16((const char16_t *)errormessage);
-            QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("File Error"),
-                                  QObject::tr("An error occurred while getting the device number.\n"
-                                              "This usually means something is currently accessing the device;"
-                                              "please close all applications and try again.\n\nError %1: %2").arg(GetLastError()).arg(errText));
-            LocalFree(errormessage);
-        }
-    }
-    else
-    {
-        bResult = DeviceIoControl(hDevice, IOCTL_STORAGE_CHECK_VERIFY2, NULL, 0, NULL, 0, &cbBytesReturned,
-                            (LPOVERLAPPED) NULL);
-        if (bResult && GetLastError() == ERROR_INVALID_FUNCTION)
-        {
-            retVal = false;
-        }
-        else
-        {
-            wchar_t *errormessage=NULL;
-            FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, GetLastError(), 0, (LPWSTR)&errormessage, 0, NULL);
-            QString errText = QString::fromUtf16((const char16_t *)errormessage);
-            QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("File Error"),
-                                  QObject::tr("An error occurred while querying the properties.\n"
-                                              "This usually means something is currently accessing the device;"
-                                              " please close all applications and try again.\n\nError %1: %2").arg(GetLastError()).arg(errText));
-            LocalFree(errormessage);
-        }
-            retVal = false;
+        return FALSE;
     }
 
-    return(retVal);
+    if (!::DeviceIoControl(hDevice, IOCTL_STORAGE_GET_DEVICE_NUMBER,
+            NULL, 0, devInfo, sizeof(DEVICE_NUMBER), &dwOutBytes,
+            (LPOVERLAPPED)NULL))
+    {
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 // some routines fail if there's no trailing slash in a name,
@@ -447,6 +418,10 @@ bool GetMediaType(HANDLE hDevice)
     return false;
 }
 
+// Drive-enumeration probe: used from getLogicalDrives() and WM_DEVICECHANGE
+// to decide whether a volume should appear in the target combo-box. Must
+// stay silent on failure — any error dialog here fires once per non-target
+// drive at startup (Google Drive, OneDrive, Dokany volumes, etc.).
 bool checkDriveType(char *name, ULONG *pid)
 {
     HANDLE hDevice;
@@ -472,15 +447,10 @@ bool checkDriveType(char *name, ULONG *pid)
         hDevice = CreateFile(nameNoSlash, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
         if (hDevice == INVALID_HANDLE_VALUE)
         {
-            // for some driver-based devices (Subst, RamDisk), AccessDenied (5) is returned.
-            // maybe that should just be skipped instead of triggering an error dialog...
-            wchar_t *errormessage=NULL;
-            FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, GetLastError(), 0, (LPWSTR)&errormessage, 0, NULL);
-            QString errText = QString::fromUtf16((const char16_t *)errormessage);
-            QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("Volume Error"),
-                                  QObject::tr("An error occurred when attempting to get a handle on %3.\n"
-                                              "Error %1: %2").arg(GetLastError()).arg(errText).arg(nameWithSlash));
-            LocalFree(errormessage);
+            // Probe: driver-based devices (Google Drive / OneDrive / Dokany,
+            // Subst, RamDisk, ...) legitimately refuse this open with
+            // ACCESS_DENIED (5) or similar. Skip silently — dialogs belong
+            // in code paths that react to an explicit user action.
         }
         else
         {
