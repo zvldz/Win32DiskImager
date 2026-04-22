@@ -93,16 +93,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         initializeHomeDir();
     }
 
-    // Default filter covers raw .img plus the two compressed forms the Write
-    // path understands (.gz / .xz). ".iso" accepts hybrid ISO images that are
-    // sometimes distributed for SD write. "*.*" stays as an escape hatch.
-    const QString defaultFilter = tr("Disk images (*.img *.IMG *.iso *.ISO *.gz *.GZ *.xz *.XZ)");
+    // Qt's QFileDialog is case-insensitive on Windows, so one pattern per
+    // extension is enough — no need for *.img *.IMG etc.
+    const QString defaultFilter = tr("Disk images (*.img *.iso *.gz *.xz)");
     if (myFileType.isEmpty()) {
         myFileType = defaultFilter;
     }
     myFileTypeList << defaultFilter
-                   << tr("Raw images (*.img *.IMG *.iso *.ISO)")
-                   << tr("Compressed images (*.gz *.GZ *.xz *.XZ)")
+                   << tr("Raw images (*.img *.iso)")
+                   << tr("Compressed images (*.gz *.xz)")
                    << "*.*";
 }
 

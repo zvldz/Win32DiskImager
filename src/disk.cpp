@@ -256,12 +256,7 @@ bool writeSectorDataToHandle(HANDLE handle, char *data, unsigned long long start
         QString errText = QString::fromUtf16((const char16_t *)errormessage);
         QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("Write Error"),
                               QObject::tr("An error occurred when attempting to write data to handle.\n"
-                                          "Error %1: %2\n\n"
-                                          "(offset=%3, bytes=%4, buffer=%5)")
-                                  .arg(GetLastError()).arg(errText)
-                                  .arg(li.QuadPart)
-                                  .arg((qulonglong)(sectorsize * numsectors))
-                                  .arg((qulonglong)(uintptr_t)data, 0, 16));
+                                          "Error %1: %2").arg(GetLastError()).arg(errText));
         LocalFree(errormessage);
     }
     return (bResult);
