@@ -30,8 +30,12 @@
 - `--bytes` parsing: same as before. `--allocated-only` for `read` unchanged.
 
 #### Misc
-- GUI status-bar MB/s now formatted as `%.2f` (e.g. `85.32 MB/s`) instead of the default 6-significant-digit Qt rendering (`85.3214567`).
+- GUI status-bar MB/s now formatted as `%.2f` (e.g. `85.32 MB/s`) instead of the default 6-significant-digit Qt rendering (`85.3214567`). CLI progress line is formatted the same way.
 - `cli_main.cpp` direct I/O on the destination handle (`FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`) plus `_aligned_malloc` chunk buffer — same correctness fix the GUI got in 2.1.1.
+- `disk.cpp`: `SetFilePointer` → `SetFilePointerEx` (64-bit, proper error check) in `readSectorDataFromHandle` / `writeSectorDataToHandle`. The old 32-bit API treated the low-part as signed `LONG` — a latent problem for images ≥ 2 GB that surfaced once the direct-I/O path started exercising those code paths more aggressively.
+- Multi-threaded xz decoder (`lzma_stream_decoder_mt`) with up to 8 threads, falling back to single-threaded when unavailable. For modern CPUs on SD targets this changes nothing (SD is still the bottleneck), but on older CPUs or fast targets (UHS-II SD, USB 3.0 SSD) it prevents decode from becoming the bottleneck.
+- Browse-file filter dropped duplicate-case patterns (`*.IMG`, `*.ISO`, `*.GZ`, `*.XZ`). Qt's `QFileDialog` glob matching is case-insensitive on Windows, so the lowercase variants already match `FOO.IMG`.
+- Fixed a pipeline-refactor regression: the sector counter `i` was declared without initialisation and only got its value from the old `for (i = 0ul; ...)` header that the refactor dropped. `WriteFile` was called with whatever junk the stack slot held, producing insane offsets and `Error 87: The parameter is incorrect.` The counter is now explicitly zeroed before both the Write and Verify main loops.
 
 ## 2026-04-22
 
