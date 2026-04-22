@@ -264,18 +264,36 @@ bool writeSectorDataToHandle(HANDLE handle, char *data, unsigned long long start
 
 unsigned long long getNumberOfSectors(HANDLE handle, unsigned long long *sectorsize)
 {
-    DWORD junk;
-    DISK_GEOMETRY_EX diskgeometry;
-    BOOL bResult;
-    bResult = DeviceIoControl(handle, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0, &diskgeometry, sizeof(diskgeometry), &junk, NULL);
+    DWORD junk = 0;
+    DISK_GEOMETRY_EX diskgeometry = {};
+    BOOL bResult = FALSE;
+    // Retry on transient errors — something else (Google Drive / OneDrive /
+    // Explorer indexer, ...) can grab the disk for a second right after the
+    // user inserts the card. Gives up after ~2 s.
+    DWORD lastErr = 0;
+    for (int attempt = 0; attempt < 10; ++attempt)
+    {
+        bResult = DeviceIoControl(handle, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
+                                  NULL, 0, &diskgeometry, sizeof(diskgeometry),
+                                  &junk, NULL);
+        if (bResult) break;
+        lastErr = GetLastError();
+        const bool transient = (lastErr == ERROR_DEV_NOT_EXIST
+                             || lastErr == ERROR_ACCESS_DENIED
+                             || lastErr == ERROR_SHARING_VIOLATION
+                             || lastErr == ERROR_LOCK_VIOLATION
+                             || lastErr == ERROR_INVALID_FUNCTION);
+        if (!transient) break;
+        Sleep(200);
+    }
     if (!bResult)
     {
         wchar_t *errormessage=NULL;
-        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, GetLastError(), 0, (LPWSTR)&errormessage, 0, NULL);
+        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, lastErr, 0, (LPWSTR)&errormessage, 0, NULL);
         QString errText = QString::fromUtf16((const char16_t *)errormessage);
         QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("Device Error"),
                               QObject::tr("An error occurred when attempting to get the device's geometry.\n"
-                                          "Error %1: %2").arg(GetLastError()).arg(errText));
+                                          "Error %1: %2").arg(lastErr).arg(errText));
         LocalFree(errormessage);
         return 0;
     }

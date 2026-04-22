@@ -163,23 +163,35 @@ bool getVolumeDiskNumber(HANDLE hVolume, DWORD &diskNumber)
     return true;
 }
 
+// Transient errors we see when something else grabs the disk briefly right
+// after insertion — Google Drive / OneDrive / Explorer indexer all do this.
+// Retry on those; fail fast on real problems.
+bool isTransientDiskError(DWORD err)
+{
+    return err == ERROR_DEV_NOT_EXIST       // 55
+        || err == ERROR_ACCESS_DENIED       // 5
+        || err == ERROR_SHARING_VIOLATION   // 32
+        || err == ERROR_LOCK_VIOLATION      // 33
+        || err == ERROR_INVALID_FUNCTION;   // 1 (stale handle during replug)
+}
+
 bool getDiskGeometry(HANDLE hDisk, DiskGeometry &geometry)
 {
     DISK_GEOMETRY_EX dg = {};
     DWORD bytesReturned = 0;
-    if (!DeviceIoControl(hDisk,
-                         IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
-                         nullptr,
-                         0,
-                         &dg,
-                         sizeof(dg),
-                         &bytesReturned,
-                         nullptr)) {
-        return false;
+    for (int attempt = 0; attempt < 10; ++attempt) {
+        if (DeviceIoControl(hDisk,
+                            IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
+                            nullptr, 0, &dg, sizeof(dg),
+                            &bytesReturned, nullptr)) {
+            geometry.bytesPerSector = static_cast<uint64_t>(dg.Geometry.BytesPerSector);
+            geometry.totalBytes     = static_cast<uint64_t>(dg.DiskSize.QuadPart);
+            return geometry.bytesPerSector > 0;
+        }
+        if (!isTransientDiskError(GetLastError())) break;
+        Sleep(200);
     }
-    geometry.bytesPerSector = static_cast<uint64_t>(dg.Geometry.BytesPerSector);
-    geometry.totalBytes = static_cast<uint64_t>(dg.DiskSize.QuadPart);
-    return geometry.bytesPerSector > 0;
+    return false;
 }
 
 bool lockVolumeWithRetry(HANDLE hVolume, int retries = 100, DWORD delayMs = 100)
