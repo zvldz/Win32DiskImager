@@ -67,6 +67,24 @@ void printBanner()
     std::cout << "Win32DiskImager CLI " APP_VERSION << std::endl;
 }
 
+// "2m 15s" / "1h 5m 30s" — used by cmd* summaries and the total-time line
+// printed after an auto-chained write+verify.
+std::string formatElapsed(double seconds)
+{
+    uint64_t s = static_cast<uint64_t>(seconds);
+    const uint64_t h = s / 3600;
+    const uint64_t m = (s / 60) % 60;
+    s %= 60;
+    char buf[32];
+    if (h > 0)      std::snprintf(buf, sizeof(buf), "%lluh %llum %llus",
+                                  (unsigned long long)h, (unsigned long long)m, (unsigned long long)s);
+    else if (m > 0) std::snprintf(buf, sizeof(buf), "%llum %llus",
+                                  (unsigned long long)m, (unsigned long long)s);
+    else            std::snprintf(buf, sizeof(buf), "%llus",
+                                  (unsigned long long)s);
+    return buf;
+}
+
 void printUsage()
 {
     std::cout << "Usage:\n";
@@ -334,6 +352,12 @@ public:
     {
         render(processedBytes);           // force-draw the last state
         std::cout << '\n';
+    }
+
+    double elapsedSeconds() const
+    {
+        return std::chrono::duration_cast<std::chrono::duration<double>>(
+            std::chrono::steady_clock::now() - m_start).count();
     }
 
 private:
@@ -924,7 +948,7 @@ int cmdWrite(const std::string &imagePath, const std::string &device)
     cleanupDiskHandles(hVolume, hDisk);
     if (rc == 0) {
         progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
-        std::cout << "Write successful." << std::endl;
+        std::cout << "Write successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
     }
     return rc;
 }
@@ -1020,7 +1044,7 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     CloseHandle(hImage);
     if (rc == 0) {
         progress.done(processed);
-        std::cout << "Read successful." << std::endl;
+        std::cout << "Read successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
     }
     return rc;
 }
@@ -1156,7 +1180,7 @@ int cmdVerify(const std::string &imagePath, const std::string &device)
     cleanupDiskHandles(hVolume, hDisk);
     if (rc == 0) {
         progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
-        std::cout << "Verify successful." << std::endl;
+        std::cout << "Verify successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
     }
     return rc;
 }
@@ -1276,10 +1300,17 @@ int main(int argc, char *argv[])
     }
 
     if (opt.command == "write") {
-        const int rc = cmdWrite(opt.image, opt.device);
-        if (rc != 0 || opt.noVerify) return rc;
+        const auto totalStart = std::chrono::steady_clock::now();
+        const int wrc = cmdWrite(opt.image, opt.device);
+        if (wrc != 0 || opt.noVerify) return wrc;
         std::cout << std::endl;  // blank line between Write and auto-Verify
-        return cmdVerify(opt.image, opt.device);
+        const int vrc = cmdVerify(opt.image, opt.device);
+        if (vrc == 0) {
+            const double total = std::chrono::duration_cast<std::chrono::duration<double>>(
+                std::chrono::steady_clock::now() - totalStart).count();
+            std::cout << "\nTotal time: " << formatElapsed(total) << std::endl;
+        }
+        return vrc;
     }
     if (opt.command == "read") {
         const uint64_t bytes = opt.bytesSet ? opt.bytes : 0;
