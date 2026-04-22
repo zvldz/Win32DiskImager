@@ -3,10 +3,6 @@
     <asmv3:trustInfo>
         <asmv3:security>
             <asmv3:requestedPrivileges>
-                <!-- asInvoker: list / --help / --version run without UAC.
-                     write / read / verify check at runtime via
-                     isRunningAsAdmin() and tell the user to relaunch from
-                     an elevated shell when needed. -->
                 <asmv3:requestedExecutionLevel level="asInvoker" uiAccess="false" />
             </asmv3:requestedPrivileges>
         </asmv3:security>
