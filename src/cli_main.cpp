@@ -365,11 +365,11 @@ private:
             }
 
             std::snprintf(line, sizeof(line),
-                          "\r[%s] %5.1f%%  %6.1f MB/s  ETA %-8s",
+                          "\r[%s] %5.1f%%  %6.2f MB/s  ETA %-8s",
                           bar, pct, mbPerSec, eta);
         } else {
             std::snprintf(line, sizeof(line),
-                          "\rProcessed: %8.2f MB  Speed: %6.1f MB/s         ",
+                          "\rProcessed: %8.2f MB  Speed: %6.2f MB/s         ",
                           static_cast<double>(processedBytes) / (1024.0 * 1024.0),
                           mbPerSec);
         }
