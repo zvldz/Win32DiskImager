@@ -62,6 +62,11 @@ std::string lower(const std::string &s)
     return out;
 }
 
+void printBanner()
+{
+    std::cout << "Win32DiskImager CLI " APP_VERSION << std::endl;
+}
+
 void printUsage()
 {
     std::cout << "Usage:\n";
@@ -675,6 +680,45 @@ std::unique_ptr<ImageSource> openImageSource(const std::string &path, std::strin
     return ok ? std::move(s) : nullptr;
 }
 
+// Some old SDKs / MinGW headers ship without IOCTL_STORAGE_QUERY_PROPERTY.
+#ifndef IOCTL_STORAGE_QUERY_PROPERTY
+#define IOCTL_STORAGE_QUERY_PROPERTY CTL_CODE(IOCTL_STORAGE_BASE, 0x0500, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#endif
+
+// Returns the bus type byte from STORAGE_DEVICE_DESCRIPTOR. Returns false if
+// the device doesn't answer the IOCTL — typical for virtual filesystems
+// (Google Drive, OneDrive, Dokany, ...). Caller treats failure as "skip".
+bool queryDiskBusType(DWORD diskNumber, BYTE &busTypeOut)
+{
+    HANDLE h = openPhysicalDisk(diskNumber, 0);  // 0 access — query-only
+    if (h == INVALID_HANDLE_VALUE) return false;
+    STORAGE_PROPERTY_QUERY q = { StorageDeviceProperty, PropertyStandardQuery, {0} };
+    BYTE buf[1024] = {0};
+    DWORD got = 0;
+    const BOOL ok = DeviceIoControl(h, IOCTL_STORAGE_QUERY_PROPERTY,
+                                    &q, sizeof(q), buf, sizeof(buf), &got, nullptr);
+    CloseHandle(h);
+    if (!ok || got < sizeof(STORAGE_DEVICE_DESCRIPTOR)) return false;
+    auto *desc = reinterpret_cast<STORAGE_DEVICE_DESCRIPTOR *>(buf);
+    busTypeOut = static_cast<BYTE>(desc->BusType);
+    return true;
+}
+
+// Mirrors the filter the GUI applies in checkDriveType (src/disk.cpp). Only
+// devices that look like removable / USB / SD / MMC targets are listed —
+// system SSDs and virtual filesystems are skipped so the user can't pick
+// one by mistake.
+bool isWritableTarget(UINT driveType, BYTE busType)
+{
+    if (driveType == DRIVE_REMOVABLE) return busType != BusTypeSata;
+    if (driveType == DRIVE_FIXED) {
+        return busType == BusTypeUsb
+            || busType == BusTypeSd
+            || busType == BusTypeMmc;
+    }
+    return false;
+}
+
 int cmdList()
 {
     const DWORD mask = GetLogicalDrives();
@@ -684,6 +728,7 @@ int cmdList()
     }
 
     std::cout << "Available drives:" << std::endl;
+    int shown = 0;
     for (int i = 0; i < 26; ++i) {
         if ((mask & (1u << i)) == 0) {
             continue;
@@ -699,20 +744,24 @@ int cmdList()
 
         HANDLE hVolume = openVolume(letter, FILE_READ_ATTRIBUTES);
         if (hVolume == INVALID_HANDLE_VALUE) {
-            std::cout << "  " << static_cast<char>(letter) << ": (unavailable)" << std::endl;
-            continue;
+            continue;  // probe-style: silent skip (matches GUI behavior)
         }
-
         DWORD diskNumber = 0;
         const bool mapped = getVolumeDiskNumber(hVolume, diskNumber);
         CloseHandle(hVolume);
+        if (!mapped) continue;
+
+        BYTE busType = 0;
+        if (!queryDiskBusType(diskNumber, busType)) continue;
+        if (!isWritableTarget(type, busType)) continue;
 
         const char *typeStr = (type == DRIVE_REMOVABLE) ? "removable" : "fixed";
-        if (mapped) {
-            std::cout << "  " << static_cast<char>(letter) << ": (" << typeStr << ", PhysicalDrive" << diskNumber << ")" << std::endl;
-        } else {
-            std::cout << "  " << static_cast<char>(letter) << ": (" << typeStr << ", physical unknown)" << std::endl;
-        }
+        std::cout << "  " << static_cast<char>(letter) << ": ("
+                  << typeStr << ", PhysicalDrive" << diskNumber << ")" << std::endl;
+        ++shown;
+    }
+    if (shown == 0) {
+        std::cout << "  (no removable / USB / SD / MMC targets found)" << std::endl;
     }
     return 0;
 }
@@ -1180,6 +1229,8 @@ int main(int argc, char *argv[])
         printUsage();
         return 1;
     }
+
+    printBanner();
 
     if (opt.command == "list") {
         return cmdList();
