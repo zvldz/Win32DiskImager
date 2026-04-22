@@ -1,5 +1,38 @@
 # Changelog
 
+## 202X-XX-XX
+
+### Version 2.2.0
+
+#### Compressed image input (.gz / .xz)
+- New `ImageReader` interface (`src/imagereader.h`) with three implementations: `RawImageReader` (plain `.img`), `GzImageReader` (zlib via `gzopen_w` / `gzread`) and `XzImageReader` (liblzma via `lzma_stream_decoder` / `LZMA_CONCATENATED`). Factory in `imagereader.cpp` sniffs the first 6 bytes — magic bytes beat file extension, so a `.img` that's actually `.img.xz` still works.
+- Write and Verify in the GUI now drive off the reader; size checks use `uncompressedSize()` from the format's metadata (xz stream index, gz ISIZE trailer). When the size cannot be determined (rare — gz > 4 GB without a credible ISIZE), the loop iterates to EOF and aborts the moment device capacity is reached, instead of silently truncating.
+- The truncate pre-scan (warning that the extra bytes past the device size DOES / does not contain data) only runs for raw sources — compressed streams default to the pessimistic warning since they don't allow cheap random access.
+- Progress bar has two modes: sectors-written when uncompressed size is known, compressed-bytes percentage otherwise. Either way the bar moves smoothly from 0 to 100 — same fallback RPi Imager / balenaEtcher use.
+- Browse-file filter in the GUI extended: `Disk images (*.img *.IMG *.iso *.ISO *.gz *.GZ *.xz *.XZ)` becomes the default; raw-only and compressed-only filters available too.
+- The CLI gets a parallel, Qt-free `ImageSource` hierarchy (in `cli_main.cpp`) using the same magic-byte sniffing. `cmdWrite` and `cmdVerify` accept `.gz` / `.xz` transparently.
+
+#### Pipelined I/O
+- New `src/iopipeline.h` — a bounded (4-chunk) producer/consumer queue used by both the GUI and the CLI. A decoder thread fills the queue with `IoChunk`s; the main thread drains them to the device.
+- Write and Verify in both front-ends now overlap decompression with disk I/O. On a `.xz` source, prior versions hit a ~15-16 MB/s ceiling on Write because decode and `WriteFile` ran sequentially; with the pipeline the SD card is the bottleneck again (typically 30-40+ MB/s on V30, closer to spec on faster cards). Verify gets the same speedup since the decoder runs while the main thread reads the device and runs `memcmp`.
+- Cancel propagates via `ChunkQueue::requestAbort()`. The decoder thread is always `join()`ed before the operation function returns. Errors flow back to the main thread as `IoChunk::err`, never as a dead producer.
+- `lzma_stream_decoder_mt` (multi-threaded xz decode) intentionally **not** wired up in this release — the producer/consumer pipeline is enough on SD-card targets. Can be added later if a fast USB SSD is found to bottleneck on single-threaded decode.
+
+#### Auto-verify after Write
+- GUI: new `Verify after Write` checkbox next to `Read Only Allocated Partitions`, **default on**. After a successful Write, control chains into `on_bVerify_clicked()` so the user gets one combined `Verify Successful` dialog. Unchecking restores the legacy "Write only, click Verify separately" flow.
+- CLI: `write` runs `verify` afterwards by default — same as RPi Imager. Pass `--no-verify` to opt out. `printUsage()` documents the flag.
+
+#### CLI polish
+- Banner: `Win32DiskImager CLI X.Y.Z` printed once before any command runs (`list` / `write` / `read` / `verify`).
+- `list` now filters by storage bus type, mirroring the GUI's `checkDriveType`: `DRIVE_REMOVABLE && BusType != SATA`, or `DRIVE_FIXED && BusType in {USB, SD, MMC}`. System SSDs (C:, D:) and virtual filesystems (Google Drive, OneDrive) no longer show up — they aren't valid write targets and listing them invited footguns.
+- Manifest changed from `requireAdministrator` to `asInvoker`. `list`, `--help` and `--version` no longer trigger UAC. `write` / `read` / `verify` still need elevation; `isRunningAsAdmin()` produces a clear "relaunch from an elevated terminal" message instead.
+- Progress printer rewritten — fixed-format `%5.1f%%` percentage, 20-char ASCII bar (`[######....]`), right-justified speed, and an ETA derived from running average. Unknown-size fallback prints `Processed: NNN.NN MB  Speed: NN.N MB/s`.
+- `--bytes` parsing: same as before. `--allocated-only` for `read` unchanged.
+
+#### Misc
+- GUI status-bar MB/s now formatted as `%.2f` (e.g. `85.32 MB/s`) instead of the default 6-significant-digit Qt rendering (`85.3214567`).
+- `cli_main.cpp` direct I/O on the destination handle (`FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`) plus `_aligned_malloc` chunk buffer — same correctness fix the GUI got in 2.1.1.
+
 ## 2026-04-22
 
 ### Version 2.1.1
@@ -8,6 +41,8 @@
 - Direct I/O on the destination handle (hRawDisk for Write, hFile for Read) with `FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`. Matches the behavior of Raspberry Pi Imager / balenaEtcher: the Windows FS cache is bypassed, the status-bar MB/s now reflects real device throughput, and `"Done"` only appears once data has physically landed on the device — previously a sudden power loss or device removal in the post-`"Done"` flush window could leave the image corrupted.
 - Sector-aligned chunk buffer via `_aligned_malloc` / `_aligned_free` (required by `NO_BUFFERING`). Replaces `new[]` / `delete[]` in `readSectorDataFromHandle` and all per-chunk free sites in `on_bRead` / `on_bWrite` / `on_bVerify` and the destructor.
 - Adaptive chunk size: 4 MB target regardless of sector size. On 512-byte-sector media the per-syscall transfer grows from the legacy 512 KB (1024 × 512 B) to 4 MB; 4K-sector media keep their existing 4 MB chunk.
+
+## 2026-04-22
 
 ### Version 2.1.0
 
