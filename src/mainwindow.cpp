@@ -115,6 +115,12 @@ MainWindow* MainWindow::instance = NULL;
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
     setupUi(this);
+    // Reserve width for the worst-case Device label ("[X:\] 999TB" ≈ 13
+    // chars) *before* pinning the window size. Otherwise inserting a
+    // card at runtime (DBT_DEVICEARRIVAL) can't widen the combo — the
+    // fixed-size main window was already frozen around an empty combo.
+    cboxDevice->setMinimumContentsLength(13);
+    cboxDevice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     setFixedSize(size());
     if (QLineEdit *fileEdit = leFile->lineEdit()) {
         connect(fileEdit, &QLineEdit::editingFinished,
