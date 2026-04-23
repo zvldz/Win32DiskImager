@@ -418,6 +418,11 @@ private:
     std::chrono::steady_clock::time_point m_tick;
 };
 
+// If hVolume is passed in already valid (inherited from a prior cmdWrite
+// that handed off an open+locked+dismounted volume), the open/lock/dismount
+// steps are skipped. Closing the gap between Write and auto-Verify keeps
+// Google Drive / Windows Search / antivirus from latching onto the freshly-
+// written volume the moment a standalone Write would have released it.
 bool prepareDiskHandles(const std::string &device,
                         DWORD diskAccess,
                         HANDLE &hVolume,
@@ -426,41 +431,46 @@ bool prepareDiskHandles(const std::string &device,
                         DiskGeometry &geometry,
                         DWORD diskExtraFlags = 0)
 {
-    hVolume = INVALID_HANDLE_VALUE;
+    const bool inherited = (hVolume != INVALID_HANDLE_VALUE);
     hDisk = INVALID_HANDLE_VALUE;
 
-    wchar_t driveLetter = 0;
-    if (!parseDriveLetter(device, driveLetter)) {
-        std::cerr << "Invalid device. Use a drive letter such as E: or E." << std::endl;
-        return false;
-    }
+    if (!inherited) {
+        wchar_t driveLetter = 0;
+        if (!parseDriveLetter(device, driveLetter)) {
+            std::cerr << "Invalid device. Use a drive letter such as E: or E." << std::endl;
+            return false;
+        }
 
-    hVolume = openVolume(driveLetter, GENERIC_READ | GENERIC_WRITE);
-    if (hVolume == INVALID_HANDLE_VALUE) {
-        printWinError(L"Failed to open volume handle.", GetLastError());
-        return false;
+        hVolume = openVolume(driveLetter, GENERIC_READ | GENERIC_WRITE);
+        if (hVolume == INVALID_HANDLE_VALUE) {
+            printWinError(L"Failed to open volume handle.", GetLastError());
+            return false;
+        }
     }
 
     if (!getVolumeDiskNumber(hVolume, diskNumber)) {
         printWinError(L"Failed to map volume to physical disk.", GetLastError());
+        if (inherited) unlockVolume(hVolume);
         CloseHandle(hVolume);
         hVolume = INVALID_HANDLE_VALUE;
         return false;
     }
 
-    if (!lockVolumeWithRetry(hVolume)) {
-        printWinError(L"Failed to lock volume.", GetLastError());
-        CloseHandle(hVolume);
-        hVolume = INVALID_HANDLE_VALUE;
-        return false;
-    }
+    if (!inherited) {
+        if (!lockVolumeWithRetry(hVolume)) {
+            printWinError(L"Failed to lock volume.", GetLastError());
+            CloseHandle(hVolume);
+            hVolume = INVALID_HANDLE_VALUE;
+            return false;
+        }
 
-    if (!dismountVolumeWithRetry(hVolume)) {
-        printWinError(L"Failed to dismount volume.", GetLastError());
-        unlockVolume(hVolume);
-        CloseHandle(hVolume);
-        hVolume = INVALID_HANDLE_VALUE;
-        return false;
+        if (!dismountVolumeWithRetry(hVolume)) {
+            printWinError(L"Failed to dismount volume.", GetLastError());
+            unlockVolume(hVolume);
+            CloseHandle(hVolume);
+            hVolume = INVALID_HANDLE_VALUE;
+            return false;
+        }
     }
 
     hDisk = openPhysicalDisk(diskNumber, diskAccess, diskExtraFlags);
@@ -846,8 +856,13 @@ int cmdList()
     return 0;
 }
 
-int cmdWrite(const std::string &imagePath, const std::string &device)
+// If keepVolumeOut is non-null and the write succeeds, ownership of the
+// still-locked, still-dismounted volume handle is handed to the caller so
+// an auto-verify pass can reuse it without ever releasing the lock.
+int cmdWrite(const std::string &imagePath, const std::string &device,
+             HANDLE *keepVolumeOut = nullptr)
 {
+    if (keepVolumeOut) *keepVolumeOut = INVALID_HANDLE_VALUE;
     std::string srcErr;
     std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
     if (!src) {
@@ -977,7 +992,15 @@ int cmdWrite(const std::string &imagePath, const std::string &device)
     decoderThread.join();
 
     FlushFileBuffers(hDisk);
-    cleanupDiskHandles(hVolume, hDisk);
+    if (rc == 0 && keepVolumeOut) {
+        // Hand the still-locked volume to the chained verify so nothing
+        // (Google Drive / indexer / antivirus) grabs the freshly-written
+        // volume in the Write → Verify gap.
+        if (hDisk != INVALID_HANDLE_VALUE) CloseHandle(hDisk);
+        *keepVolumeOut = hVolume;
+    } else {
+        cleanupDiskHandles(hVolume, hDisk);
+    }
     if (rc == 0) {
         progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
         std::cout << "Write successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
@@ -1081,16 +1104,24 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     return rc;
 }
 
-int cmdVerify(const std::string &imagePath, const std::string &device)
+// If inheritVolume is passed in valid, it's the locked + dismounted handle
+// an auto-verify after Write handed over; prepareDiskHandles reuses it
+// instead of re-opening + re-locking.
+int cmdVerify(const std::string &imagePath, const std::string &device,
+              HANDLE inheritVolume = INVALID_HANDLE_VALUE)
 {
     std::string srcErr;
     std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
     if (!src) {
+        if (inheritVolume != INVALID_HANDLE_VALUE) {
+            unlockVolume(inheritVolume);
+            CloseHandle(inheritVolume);
+        }
         std::cerr << "Failed to open image: " << srcErr << std::endl;
         return 1;
     }
 
-    HANDLE hVolume = INVALID_HANDLE_VALUE;
+    HANDLE hVolume = inheritVolume;
     HANDLE hDisk = INVALID_HANDLE_VALUE;
     DWORD diskNumber = 0;
     DiskGeometry geometry;
@@ -1333,10 +1364,15 @@ int main(int argc, char *argv[])
 
     if (opt.command == "write") {
         const auto totalStart = std::chrono::steady_clock::now();
-        const int wrc = cmdWrite(opt.image, opt.device);
+        HANDLE keepVolume = INVALID_HANDLE_VALUE;
+        // When auto-verify is scheduled, ask cmdWrite to hand the locked
+        // volume straight to cmdVerify — no third party gets a foothold
+        // in the gap.
+        const int wrc = cmdWrite(opt.image, opt.device,
+                                 opt.noVerify ? nullptr : &keepVolume);
         if (wrc != 0 || opt.noVerify) return wrc;
         std::cout << std::endl;  // blank line between Write and auto-Verify
-        const int vrc = cmdVerify(opt.image, opt.device);
+        const int vrc = cmdVerify(opt.image, opt.device, keepVolume);
         if (vrc == 0) {
             const double total = std::chrono::duration_cast<std::chrono::duration<double>>(
                 std::chrono::steady_clock::now() - totalStart).count();

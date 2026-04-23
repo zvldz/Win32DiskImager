@@ -20,6 +20,7 @@
 #### Auto-verify after Write
 - GUI: new `Verify after Write` checkbox next to `Read Only Allocated Partitions`, **default on**. After a successful Write, control chains into `on_bVerify_clicked()` so the user gets one combined `Verify Successful` dialog. Unchecking restores the legacy "Write only, click Verify separately" flow.
 - CLI: `write` runs `verify` afterwards by default — same as RPi Imager. Pass `--no-verify` to opt out. `printUsage()` documents the flag.
+- Write hands the still-locked, still-dismounted volume directly to the chained Verify instead of unlocking + re-opening. Closes the tiny window where Google Drive / Windows Search / antivirus latched onto the freshly-written volume and made the Verify pass's first IOCTL fail with transient 5/55 errors. GUI uses a class-level flag (`m_verifyInheritsLock`); CLI threads the handle through `cmdWrite`'s new out-param and `cmdVerify`'s new inherit-volume param.
 
 #### CLI polish
 - Banner: `Win32DiskImager CLI X.Y.Z` printed once before any command runs (`list` / `write` / `read` / `verify`).

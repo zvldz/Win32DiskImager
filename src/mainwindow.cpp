@@ -746,11 +746,24 @@ void MainWindow::on_bWrite_clicked()
                 setReadWriteButtonState();
                 return;
             }
-            removeLockOnVolume(hVolume);
-            CloseHandle(hRawDisk);
-            CloseHandle(hVolume);
-            hRawDisk = INVALID_HANDLE_VALUE;
-            hVolume = INVALID_HANDLE_VALUE;
+            // If auto-verify is about to run, hand the still-locked, still-
+            // unmounted volume straight over to Verify. Otherwise there's a
+            // gap between unlock and Verify's re-lock where Google Drive /
+            // Windows Search / antivirus latches onto the freshly-written
+            // volume and starts poking at it.
+            const bool chainingVerify = (status != STATUS_CANCELED)
+                                        && cbVerifyAfterWrite->isChecked();
+            if (chainingVerify) {
+                CloseHandle(hRawDisk);
+                hRawDisk = INVALID_HANDLE_VALUE;
+                m_verifyInheritsLock = true;
+            } else {
+                removeLockOnVolume(hVolume);
+                CloseHandle(hRawDisk);
+                CloseHandle(hVolume);
+                hRawDisk = INVALID_HANDLE_VALUE;
+                hVolume = INVALID_HANDLE_VALUE;
+            }
             if (status == STATUS_CANCELED){
                 passfail = false;
             }
@@ -1047,33 +1060,43 @@ void MainWindow::on_bVerify_clicked()
             double mbpersec;
             unsigned long long i, lasti, availablesectors, numsectors, result;
             int volumeID = cboxDevice->currentText().at(1).toLatin1() - 'A';
-            hVolume = getHandleOnVolume(volumeID, GENERIC_READ | GENERIC_WRITE);
-            if (hVolume == INVALID_HANDLE_VALUE)
-            {
-                status = STATUS_IDLE;
-                bCancel->setEnabled(false);
-                setReadWriteButtonState();
-                return;
-            }
-            DWORD deviceID = getDeviceID(hVolume);
-            if (!getLockOnVolume(hVolume))
-            {
-                CloseHandle(hVolume);
-                status = STATUS_IDLE;
-                hVolume = INVALID_HANDLE_VALUE;
-                bCancel->setEnabled(false);
-                setReadWriteButtonState();
-                return;
-            }
-            if (!unmountVolume(hVolume))
-            {
-                removeLockOnVolume(hVolume);
-                CloseHandle(hVolume);
-                status = STATUS_IDLE;
-                hVolume = INVALID_HANDLE_VALUE;
-                bCancel->setEnabled(false);
-                setReadWriteButtonState();
-                return;
+            DWORD deviceID;
+            // If chained from auto-verify after Write, hVolume is already
+            // open, locked and dismounted. Reusing it keeps third-party
+            // watchers (Google Drive / indexer / antivirus) off the volume
+            // through the Write → Verify boundary.
+            if (m_verifyInheritsLock && hVolume != INVALID_HANDLE_VALUE) {
+                m_verifyInheritsLock = false;
+                deviceID = getDeviceID(hVolume);
+            } else {
+                hVolume = getHandleOnVolume(volumeID, GENERIC_READ | GENERIC_WRITE);
+                if (hVolume == INVALID_HANDLE_VALUE)
+                {
+                    status = STATUS_IDLE;
+                    bCancel->setEnabled(false);
+                    setReadWriteButtonState();
+                    return;
+                }
+                deviceID = getDeviceID(hVolume);
+                if (!getLockOnVolume(hVolume))
+                {
+                    CloseHandle(hVolume);
+                    status = STATUS_IDLE;
+                    hVolume = INVALID_HANDLE_VALUE;
+                    bCancel->setEnabled(false);
+                    setReadWriteButtonState();
+                    return;
+                }
+                if (!unmountVolume(hVolume))
+                {
+                    removeLockOnVolume(hVolume);
+                    CloseHandle(hVolume);
+                    status = STATUS_IDLE;
+                    hVolume = INVALID_HANDLE_VALUE;
+                    bCancel->setEnabled(false);
+                    setReadWriteButtonState();
+                    return;
+                }
             }
             hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->currentText().utf16()), GENERIC_READ);
             if (hFile == INVALID_HANDLE_VALUE)

@@ -96,6 +96,11 @@ private:
         // into an auto-verify. Verify's completion dialog uses it to report
         // Write + Verify + Total time instead of just Verify's own elapsed.
         qint64 m_writeElapsedMs = 0;
+        // When true, Write has just handed off a still-locked, still-mounted-
+        // out hVolume to the auto-verify pass. Verify reuses it instead of
+        // re-opening, so nothing (Google Drive / indexer / antivirus) gets a
+        // window to latch onto the freshly-written volume.
+        bool m_verifyInheritsLock = false;
         QClipboard *clipboard;
         void generateHash(char *filename, int hashish);
         QString myHomeDir;
