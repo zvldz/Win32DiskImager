@@ -69,9 +69,22 @@ static QString formatDeviceSize(unsigned long long bytes)
 // bold labels; centerButtons puts the single OK under the middle of
 // the dialog instead of flush-left where QMessageBox::information puts
 // it when content is wide (e.g. the Write+Verify table).
-static void showComplete(QWidget *parent, const QString &title, const QString &text)
+//
+// "%ZEBRA%" in text is replaced with a palette-derived row color — the
+// QApplication palette's AlternateBase is often out of sync with the
+// style's actual rendering on Windows (stays light even when the dialog
+// is drawn dark), so we derive the shade from the box's Window color
+// at render time.
+static void showComplete(QWidget *parent, const QString &title, QString text)
 {
-    QMessageBox box(QMessageBox::Information, title, text, QMessageBox::Ok, parent);
+    QMessageBox box(QMessageBox::Information, title, QString(), QMessageBox::Ok, parent);
+    if (text.contains(QStringLiteral("%ZEBRA%"))) {
+        const QColor base = box.palette().color(QPalette::Window);
+        const QColor alt = (base.lightness() < 128) ? base.lighter(130)
+                                                    : base.darker(108);
+        text.replace(QStringLiteral("%ZEBRA%"), alt.name());
+    }
+    box.setText(text);
     box.setTextFormat(Qt::RichText);
     box.setStyleSheet("QDialogButtonBox { qproperty-centerButtons: true; }");
     box.exec();
@@ -1385,31 +1398,30 @@ void MainWindow::on_bVerify_clicked()
             if (m_writeElapsedMs > 0) {
                 // Chained from an auto-verify — report both phases.
                 const qint64 totalMs = m_writeElapsedMs + verifyMs;
-                // Zebra color from the current palette so the dialog reads
-                // well in both light and dark system themes.
-                const QString altBg = QApplication::palette().color(QPalette::AlternateBase).name();
+                // %ZEBRA% placeholder is resolved inside showComplete()
+                // based on the actual dialog palette — QApplication's
+                // AlternateBase lies on Windows dark mode.
                 msg = tr("Write &amp; Verify Successful.<br><br>"
                          "<center>"
                          "<table cellspacing=\"0\" cellpadding=\"6\" "
                          "style=\"border: 1px solid gray;\">"
                          "<tr>"
-                         "<td bgcolor=\"%4\"><b>Write:</b>&nbsp;&nbsp;</td>"
-                         "<td bgcolor=\"%4\">%1</td>"
+                         "<td bgcolor=\"%ZEBRA%\"><b>Write:</b>&nbsp;&nbsp;</td>"
+                         "<td bgcolor=\"%ZEBRA%\">%1</td>"
                          "</tr>"
                          "<tr>"
                          "<td><b>Verify:</b>&nbsp;&nbsp;</td>"
                          "<td>%2</td>"
                          "</tr>"
                          "<tr>"
-                         "<td bgcolor=\"%4\"><b>Total:</b>&nbsp;&nbsp;</td>"
-                         "<td bgcolor=\"%4\">%3</td>"
+                         "<td bgcolor=\"%ZEBRA%\"><b>Total:</b>&nbsp;&nbsp;</td>"
+                         "<td bgcolor=\"%ZEBRA%\">%3</td>"
                          "</tr>"
                          "</table>"
                          "</center>")
                           .arg(formatElapsedMs(m_writeElapsedMs))
                           .arg(formatElapsedMs(verifyMs))
-                          .arg(formatElapsedMs(totalMs))
-                          .arg(altBg);
+                          .arg(formatElapsedMs(totalMs));
                 m_writeElapsedMs = 0;
             } else {
                 msg = tr("Verify Successful.<br><br><b>Elapsed:</b> %1").arg(formatElapsedMs(verifyMs));
