@@ -46,8 +46,10 @@
 
 #include <thread>
 
-// Compact "2.0 TB" / "32 GB" / "512 MB" for the device combo / list line.
-// Uses binary units (the convention Windows itself displays).
+// Compact "2TB" / "29GB" / "512MB" for the device combo. No space and
+// no fractional part — the combo width is fixed by the pinned window
+// size, so every saved character matters. Uses binary units (the
+// convention Windows itself displays).
 static QString formatDeviceSize(unsigned long long bytes)
 {
     if (bytes == 0) return QString();
@@ -56,10 +58,10 @@ static QString formatDeviceSize(unsigned long long bytes)
     constexpr double GB = MB * 1024.0;
     constexpr double TB = GB * 1024.0;
     const double b = (double)bytes;
-    if (b >= TB) return QString::number(b / TB, 'f', 1) + " TB";
-    if (b >= GB) return QString::number(b / GB, 'f', 1) + " GB";
-    if (b >= MB) return QString::number(b / MB, 'f', 0) + " MB";
-    return QString::number(b / KB, 'f', 0) + " KB";
+    if (b >= TB) return QString::number(b / TB, 'f', 0) + "TB";
+    if (b >= GB) return QString::number(b / GB, 'f', 0) + "GB";
+    if (b >= MB) return QString::number(b / MB, 'f', 0) + "MB";
+    return QString::number(b / KB, 'f', 0) + "KB";
 }
 
 // Format "2m 15s" / "1h 5m 30s" from a milliseconds value. Used by the
