@@ -64,6 +64,19 @@ static QString formatDeviceSize(unsigned long long bytes)
     return QString::number(b / KB, 'f', 0) + "KB";
 }
 
+// Centered-button, rich-text completion dialog. Used by all four success
+// paths (Write / Read / Verify / Write+Verify). Rich text renders the
+// bold labels; centerButtons puts the single OK under the middle of
+// the dialog instead of flush-left where QMessageBox::information puts
+// it when content is wide (e.g. the Write+Verify table).
+static void showComplete(QWidget *parent, const QString &title, const QString &text)
+{
+    QMessageBox box(QMessageBox::Information, title, text, QMessageBox::Ok, parent);
+    box.setTextFormat(Qt::RichText);
+    box.setStyleSheet("QDialogButtonBox { qproperty-centerButtons: true; }");
+    box.exec();
+}
+
 // Format "2m 15s" / "1h 5m 30s" from a milliseconds value. Used by the
 // completion dialogs to report how long Read / Write / (Write + Verify)
 // actually took.
@@ -799,7 +812,7 @@ void MainWindow::on_bWrite_clicked()
                 on_bVerify_clicked();
                 return;  // verify handles its own close-on-EXIT and timer stop
             }
-            QMessageBox::information(this, tr("Complete"),
+            showComplete(this, tr("Complete"),
                 tr("Write Successful.<br><br><b>Elapsed:</b> %1").arg(formatElapsedMs(writeMs)));
         }
 
@@ -1020,7 +1033,7 @@ void MainWindow::on_bRead_clicked()
             QMessageBox::information(this, tr("Complete"), tr("Read Canceled."));
         } else {
             addImageFileToHistory(leFile->currentText());
-            QMessageBox::information(this, tr("Complete"),
+            showComplete(this, tr("Complete"),
                 tr("Read Successful.<br><br><b>Elapsed:</b> %1").arg(formatElapsedMs(elapsed_timer->ms())));
         }
         updateHashControls();
@@ -1372,30 +1385,36 @@ void MainWindow::on_bVerify_clicked()
             if (m_writeElapsedMs > 0) {
                 // Chained from an auto-verify — report both phases.
                 const qint64 totalMs = m_writeElapsedMs + verifyMs;
+                // Zebra color from the current palette so the dialog reads
+                // well in both light and dark system themes.
+                const QString altBg = QApplication::palette().color(QPalette::AlternateBase).name();
                 msg = tr("Write &amp; Verify Successful.<br><br>"
+                         "<center>"
                          "<table cellspacing=\"0\" cellpadding=\"6\" "
-                         "style=\"border: 1px solid #888;\">"
+                         "style=\"border: 1px solid gray;\">"
                          "<tr>"
-                         "<td bgcolor=\"#f0f0f0\"><b>Write:</b>&nbsp;&nbsp;</td>"
-                         "<td bgcolor=\"#f0f0f0\">%1</td>"
+                         "<td bgcolor=\"%4\"><b>Write:</b>&nbsp;&nbsp;</td>"
+                         "<td bgcolor=\"%4\">%1</td>"
                          "</tr>"
                          "<tr>"
                          "<td><b>Verify:</b>&nbsp;&nbsp;</td>"
                          "<td>%2</td>"
                          "</tr>"
                          "<tr>"
-                         "<td bgcolor=\"#f0f0f0\"><b>Total:</b>&nbsp;&nbsp;</td>"
-                         "<td bgcolor=\"#f0f0f0\">%3</td>"
+                         "<td bgcolor=\"%4\"><b>Total:</b>&nbsp;&nbsp;</td>"
+                         "<td bgcolor=\"%4\">%3</td>"
                          "</tr>"
-                         "</table>")
+                         "</table>"
+                         "</center>")
                           .arg(formatElapsedMs(m_writeElapsedMs))
                           .arg(formatElapsedMs(verifyMs))
-                          .arg(formatElapsedMs(totalMs));
+                          .arg(formatElapsedMs(totalMs))
+                          .arg(altBg);
                 m_writeElapsedMs = 0;
             } else {
                 msg = tr("Verify Successful.<br><br><b>Elapsed:</b> %1").arg(formatElapsedMs(verifyMs));
             }
-            QMessageBox::information(this, tr("Complete"), msg);
+            showComplete(this, tr("Complete"), msg);
         }
     }
     else
