@@ -46,6 +46,22 @@
 
 #include <thread>
 
+// Compact "2.0 TB" / "32 GB" / "512 MB" for the device combo / list line.
+// Uses binary units (the convention Windows itself displays).
+static QString formatDeviceSize(unsigned long long bytes)
+{
+    if (bytes == 0) return QString();
+    constexpr double KB = 1024.0;
+    constexpr double MB = KB * 1024.0;
+    constexpr double GB = MB * 1024.0;
+    constexpr double TB = GB * 1024.0;
+    const double b = (double)bytes;
+    if (b >= TB) return QString::number(b / TB, 'f', 1) + " TB";
+    if (b >= GB) return QString::number(b / GB, 'f', 1) + " GB";
+    if (b >= MB) return QString::number(b / MB, 'f', 0) + " MB";
+    return QString::number(b / KB, 'f', 0) + " KB";
+}
+
 // Format "2m 15s" / "1h 5m 30s" from a milliseconds value. Used by the
 // completion dialogs to report how long Read / Write / (Write + Verify)
 // actually took.
@@ -769,7 +785,7 @@ void MainWindow::on_bWrite_clicked()
                 return;  // verify handles its own close-on-EXIT and timer stop
             }
             QMessageBox::information(this, tr("Complete"),
-                tr("Write Successful.\n\nElapsed: %1").arg(formatElapsedMs(writeMs)));
+                tr("Write Successful.<br><br><b>Elapsed:</b> %1").arg(formatElapsedMs(writeMs)));
         }
 
     }
@@ -990,7 +1006,7 @@ void MainWindow::on_bRead_clicked()
         } else {
             addImageFileToHistory(leFile->currentText());
             QMessageBox::information(this, tr("Complete"),
-                tr("Read Successful.\n\nElapsed: %1").arg(formatElapsedMs(elapsed_timer->ms())));
+                tr("Read Successful.<br><br><b>Elapsed:</b> %1").arg(formatElapsedMs(elapsed_timer->ms())));
         }
         updateHashControls();
     }
@@ -1331,13 +1347,28 @@ void MainWindow::on_bVerify_clicked()
             if (m_writeElapsedMs > 0) {
                 // Chained from an auto-verify — report both phases.
                 const qint64 totalMs = m_writeElapsedMs + verifyMs;
-                msg = tr("Write & Verify Successful.\n\nWrite: %1\nVerify: %2\nTotal: %3")
+                msg = tr("Write &amp; Verify Successful.<br><br>"
+                         "<table cellspacing=\"0\" cellpadding=\"6\" "
+                         "style=\"border: 1px solid #888;\">"
+                         "<tr>"
+                         "<td bgcolor=\"#f0f0f0\"><b>Write:</b>&nbsp;&nbsp;</td>"
+                         "<td bgcolor=\"#f0f0f0\">%1</td>"
+                         "</tr>"
+                         "<tr>"
+                         "<td><b>Verify:</b>&nbsp;&nbsp;</td>"
+                         "<td>%2</td>"
+                         "</tr>"
+                         "<tr>"
+                         "<td bgcolor=\"#f0f0f0\"><b>Total:</b>&nbsp;&nbsp;</td>"
+                         "<td bgcolor=\"#f0f0f0\">%3</td>"
+                         "</tr>"
+                         "</table>")
                           .arg(formatElapsedMs(m_writeElapsedMs))
                           .arg(formatElapsedMs(verifyMs))
                           .arg(formatElapsedMs(totalMs));
                 m_writeElapsedMs = 0;
             } else {
-                msg = tr("Verify Successful.\n\nElapsed: %1").arg(formatElapsedMs(verifyMs));
+                msg = tr("Verify Successful.<br><br><b>Elapsed:</b> %1").arg(formatElapsedMs(verifyMs));
             }
             QMessageBox::information(this, tr("Complete"), msg);
         }
@@ -1363,6 +1394,7 @@ void MainWindow::getLogicalDrives()
     unsigned long driveMask = GetLogicalDrives();
     int i = 0;
     ULONG pID;
+    unsigned long long sizeBytes;
 
     cboxDevice->clear();
 
@@ -1374,9 +1406,12 @@ void MainWindow::getLogicalDrives()
             // we've shifted
             char drivename[] = "\\\\.\\A:\\";
             drivename[4] += i;
-            if (checkDriveType(drivename, &pID))
+            if (checkDriveType(drivename, &pID, &sizeBytes))
             {
-                cboxDevice->addItem(QString("[%1:\\]").arg(drivename[4]), (qulonglong)pID);
+                QString label = QString("[%1:\\]").arg(drivename[4]);
+                const QString sz = formatDeviceSize(sizeBytes);
+                if (!sz.isEmpty()) label += QStringLiteral(" ") + sz;
+                cboxDevice->addItem(label, (qulonglong)pID);
             }
         }
         driveMask >>= 1;
@@ -1427,16 +1462,20 @@ bool MainWindow::nativeEvent(const QByteArray &type, void *vMsg, long *result)
                     char ALET = FirstDriveFromMask(lpdbv->dbcv_unitmask);
                     // add device to combo box (after sanity check that
                     // it's not already there, which it shouldn't be)
-                    QString qs = QString("[%1:\\]").arg(ALET);
-                    if (cboxDevice->findText(qs) == -1)
+                    QString qsPrefix = QString("[%1:\\]").arg(ALET);
+                    if (cboxDevice->findText(qsPrefix, Qt::MatchStartsWith) == -1)
                     {
                         ULONG pID;
+                        unsigned long long sizeBytes;
                         char longname[] = "\\\\.\\A:\\";
                         longname[4] = ALET;
                         // checkDriveType gets the physicalID
-                        if (checkDriveType(longname, &pID))
+                        if (checkDriveType(longname, &pID, &sizeBytes))
                         {
-                            cboxDevice->addItem(qs, (qulonglong)pID);
+                            QString label = qsPrefix;
+                            const QString sz = formatDeviceSize(sizeBytes);
+                            if (!sz.isEmpty()) label += QStringLiteral(" ") + sz;
+                            cboxDevice->addItem(label, (qulonglong)pID);
                             setReadWriteButtonState();
                         }
                     }
@@ -1454,7 +1493,9 @@ bool MainWindow::nativeEvent(const QByteArray &type, void *vMsg, long *result)
                     //  and remove it from there....
                     //  "removeItem" ignores the request if the index is
                     //  out of range, and findText returns -1 if the item isn't found.
-                    cboxDevice->removeItem(cboxDevice->findText(QString("[%1:\\]").arg(ALET)));
+                    // Items now carry a size suffix ('[E:\\] 32 GB'), so
+                    // match only the '[X:\\]' prefix.
+                    cboxDevice->removeItem(cboxDevice->findText(QString("[%1:\\]").arg(ALET), Qt::MatchStartsWith));
                     setReadWriteButtonState();
                 }
             }

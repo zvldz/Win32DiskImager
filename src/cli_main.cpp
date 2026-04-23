@@ -733,23 +733,51 @@ std::unique_ptr<ImageSource> openImageSource(const std::string &path, std::strin
 #define IOCTL_STORAGE_QUERY_PROPERTY CTL_CODE(IOCTL_STORAGE_BASE, 0x0500, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #endif
 
-// Returns the bus type byte from STORAGE_DEVICE_DESCRIPTOR. Returns false if
-// the device doesn't answer the IOCTL — typical for virtual filesystems
-// (Google Drive, OneDrive, Dokany, ...). Caller treats failure as "skip".
-bool queryDiskBusType(DWORD diskNumber, BYTE &busTypeOut)
+// Bus type + size for `list`. Returns false if the device doesn't answer
+// either IOCTL — typical for virtual filesystems (Google Drive, OneDrive,
+// Dokany, ...). Caller treats failure as "skip". Size left at 0 on partial
+// failure so the list still renders without a capacity column.
+bool queryDiskInfo(DWORD diskNumber, BYTE &busTypeOut, uint64_t &sizeBytesOut)
 {
+    busTypeOut = 0;
+    sizeBytesOut = 0;
     HANDLE h = openPhysicalDisk(diskNumber, 0);  // 0 access — query-only
     if (h == INVALID_HANDLE_VALUE) return false;
     STORAGE_PROPERTY_QUERY q = { StorageDeviceProperty, PropertyStandardQuery, {0} };
     BYTE buf[1024] = {0};
     DWORD got = 0;
-    const BOOL ok = DeviceIoControl(h, IOCTL_STORAGE_QUERY_PROPERTY,
-                                    &q, sizeof(q), buf, sizeof(buf), &got, nullptr);
-    CloseHandle(h);
-    if (!ok || got < sizeof(STORAGE_DEVICE_DESCRIPTOR)) return false;
+    if (!DeviceIoControl(h, IOCTL_STORAGE_QUERY_PROPERTY,
+                         &q, sizeof(q), buf, sizeof(buf), &got, nullptr)
+            || got < sizeof(STORAGE_DEVICE_DESCRIPTOR)) {
+        CloseHandle(h);
+        return false;
+    }
     auto *desc = reinterpret_cast<STORAGE_DEVICE_DESCRIPTOR *>(buf);
     busTypeOut = static_cast<BYTE>(desc->BusType);
+
+    DISK_GEOMETRY_EX dg = {};
+    if (DeviceIoControl(h, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
+                        nullptr, 0, &dg, sizeof(dg), &got, nullptr)) {
+        sizeBytesOut = static_cast<uint64_t>(dg.DiskSize.QuadPart);
+    }
+    CloseHandle(h);
     return true;
+}
+
+std::string formatDeviceSize(uint64_t bytes)
+{
+    if (bytes == 0) return {};
+    constexpr double KB = 1024.0;
+    constexpr double MB = KB * 1024.0;
+    constexpr double GB = MB * 1024.0;
+    constexpr double TB = GB * 1024.0;
+    const double b = (double)bytes;
+    char buf[32];
+    if (b >= TB)      std::snprintf(buf, sizeof(buf), "%.1f TB", b / TB);
+    else if (b >= GB) std::snprintf(buf, sizeof(buf), "%.1f GB", b / GB);
+    else if (b >= MB) std::snprintf(buf, sizeof(buf), "%.0f MB", b / MB);
+    else              std::snprintf(buf, sizeof(buf), "%.0f KB", b / KB);
+    return buf;
 }
 
 // Mirrors the filter the GUI applies in checkDriveType (src/disk.cpp). Only
@@ -800,12 +828,16 @@ int cmdList()
         if (!mapped) continue;
 
         BYTE busType = 0;
-        if (!queryDiskBusType(diskNumber, busType)) continue;
+        uint64_t sizeBytes = 0;
+        if (!queryDiskInfo(diskNumber, busType, sizeBytes)) continue;
         if (!isWritableTarget(type, busType)) continue;
 
         const char *typeStr = (type == DRIVE_REMOVABLE) ? "removable" : "fixed";
         std::cout << "  " << static_cast<char>(letter) << ": ("
-                  << typeStr << ", PhysicalDrive" << diskNumber << ")" << std::endl;
+                  << typeStr << ", PhysicalDrive" << diskNumber;
+        const std::string sizeStr = formatDeviceSize(sizeBytes);
+        if (!sizeStr.empty()) std::cout << ", " << sizeStr;
+        std::cout << ")" << std::endl;
         ++shown;
     }
     if (shown == 0) {

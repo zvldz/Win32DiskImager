@@ -465,8 +465,9 @@ bool GetMediaType(HANDLE hDevice)
 // to decide whether a volume should appear in the target combo-box. Must
 // stay silent on failure — any error dialog here fires once per non-target
 // drive at startup (Google Drive, OneDrive, Dokany volumes, etc.).
-bool checkDriveType(char *name, ULONG *pid)
+bool checkDriveType(char *name, ULONG *pid, unsigned long long *sizeBytes)
 {
+    if (sizeBytes) *sizeBytes = 0;
     HANDLE hDevice;
     PSTORAGE_DEVICE_DESCRIPTOR pDevDesc;
     DEVICE_NUMBER deviceInfo;
@@ -524,6 +525,14 @@ bool checkDriveType(char *name, ULONG *pid)
                     {
                         *pid = deviceInfo.DeviceNumber;
                         retVal = true;
+                    }
+                }
+                if (retVal && sizeBytes) {
+                    GET_LENGTH_INFORMATION lenInfo;
+                    if (DeviceIoControl(hDevice, IOCTL_DISK_GET_LENGTH_INFO,
+                                        NULL, 0, &lenInfo, sizeof(lenInfo),
+                                        &cbBytesReturned, NULL)) {
+                        *sizeBytes = (unsigned long long)lenInfo.Length.QuadPart;
                     }
                 }
             }

@@ -24,6 +24,7 @@
 #### CLI polish
 - Banner: `Win32DiskImager CLI X.Y.Z` printed once before any command runs (`list` / `write` / `read` / `verify`).
 - `list` now filters by storage bus type, mirroring the GUI's `checkDriveType`: `DRIVE_REMOVABLE && BusType != SATA`, or `DRIVE_FIXED && BusType in {USB, SD, MMC}`. System SSDs (C:, D:) and virtual filesystems (Google Drive, OneDrive) no longer show up — they aren't valid write targets and listing them invited footguns.
+- `list` now also prints device capacity per drive: `E: (removable, PhysicalDrive2, 32 GB)`. Size is queried via `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` and formatted as KB / MB / GB / TB depending on magnitude.
 - Manifest changed from `requireAdministrator` to `asInvoker`. `list`, `--help` and `--version` no longer trigger UAC. `write` / `read` / `verify` still need elevation; `isRunningAsAdmin()` produces a clear "relaunch from an elevated terminal" message instead.
 - Progress printer rewritten — fixed-format `%5.1f%%` percentage, 20-char ASCII bar (`[######....]`), right-justified speed, and an ETA derived from running average. Unknown-size fallback prints `Processed: NNN.NN MB  Speed: NN.N MB/s`.
 - `--bytes` parsing: same as before. `--allocated-only` for `read` unchanged.
@@ -40,6 +41,8 @@
 - CLI prints an explicit `Writing:` / `Reading:` / `Verifying:` header on its own line before the progress bar, and inserts a blank line between a Write and its auto-chained Verify.
 - GUI: removed the fake resize grip in the bottom-right corner. The window is pinned via `setFixedSize`, but Qt still drew the diagonal grip in the status-bar and flipped the cursor to the resize arrow on hover. `sizeGripEnabled=false` on the statusbar widget kills the affordance.
 - GUI: Read / Write / Verify button state now refreshes on every keystroke in the Image File combo (`QComboBox::editTextChanged`), not only on `editingFinished`. Pressing Tab right after typing a path no longer skips past buttons that were about to become enabled.
+- GUI: Device dropdown entries now include capacity: `[E:\] 32 GB`. `checkDriveType` was extended with an optional `sizeBytes` out-param populated via `IOCTL_DISK_GET_LENGTH_INFO`; the combo's add/remove handlers use `Qt::MatchStartsWith` so lookup-by-drive-letter still works with the appended size.
+- GUI: completion dialogs (`Write Successful`, `Read Successful`, `Verify Successful`) now bold the `Elapsed:` label via rich-text HTML. `Write & Verify Successful` renders the Write / Verify / Total breakdown as a bordered table with alternating row shading — easier to scan than a three-line flat list.
 
 #### Reliability
 - `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` is now retried through a short transient-error window (10 × 200 ms). Google Drive / OneDrive / the Explorer indexer can briefly grab a freshly-inserted SD card, during which the IOCTL returns `ERROR_DEV_NOT_EXIST (55)` or `ERROR_ACCESS_DENIED (5)`. Previously the tool bailed out with `"Failed to get disk geometry"` and the user had to retry by hand. Applied to both `cli_main.cpp::getDiskGeometry` and `disk.cpp::getNumberOfSectors`.

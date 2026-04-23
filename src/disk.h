@@ -65,6 +65,9 @@ bool writeSectorDataToHandle(HANDLE handle, char *data, unsigned long long start
 unsigned long long getNumberOfSectors(HANDLE handle, unsigned long long *sectorsize);
 unsigned long long getFileSizeInSectors(HANDLE handle, unsigned long long sectorsize);
 bool spaceAvailable(char *location, unsigned long long spaceneeded);
-bool checkDriveType(char *name, ULONG *pid);
+// If sizeBytes is non-null and the probe succeeds, it receives the total
+// device capacity in bytes (taken from IOCTL_DISK_GET_LENGTH_INFO on the
+// volume handle). Callers that don't want the size can pass nullptr.
+bool checkDriveType(char *name, ULONG *pid, unsigned long long *sizeBytes = nullptr);
 
 #endif // DISK_H
