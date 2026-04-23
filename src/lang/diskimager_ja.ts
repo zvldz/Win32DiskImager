@@ -134,70 +134,70 @@
         <translation>終了</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="260"/>
-        <location filename="../mainwindow.cpp" line="270"/>
-        <location filename="../mainwindow.cpp" line="280"/>
+        <location filename="../mainwindow.cpp" line="330"/>
+        <location filename="../mainwindow.cpp" line="340"/>
+        <location filename="../mainwindow.cpp" line="350"/>
         <source>Exit?</source>
         <translation>終了しますか？</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="260"/>
+        <location filename="../mainwindow.cpp" line="330"/>
         <source>Exiting now will result in a corrupt image file.
 Are you sure you want to exit?</source>
         <translation>終了すると、破損したイメージファイルが作成されます。
 本当に終了してもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="270"/>
+        <location filename="../mainwindow.cpp" line="340"/>
         <source>Exiting now will result in a corrupt disk.
 Are you sure you want to exit?</source>
         <translation>終了すると、破損したディスクが作成されます。
 本当に終了してもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="306"/>
+        <location filename="../mainwindow.cpp" line="376"/>
         <source>Select a disk image</source>
         <translation>イメージを選択</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="349"/>
+        <location filename="../mainwindow.cpp" line="419"/>
         <source>Generating...</source>
         <translation>生成中...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="391"/>
-        <location filename="../mainwindow.cpp" line="400"/>
+        <location filename="../mainwindow.cpp" line="461"/>
+        <location filename="../mainwindow.cpp" line="470"/>
         <source>Cancel?</source>
         <translation>キャンセル？</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="391"/>
+        <location filename="../mainwindow.cpp" line="461"/>
         <source>Canceling now will result in a corrupt destination.
 Are you sure you want to cancel?</source>
         <translation>いまキャンセルすると、宛先が破損します。
 本当にキャンセルしてもよろしいです？</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="421"/>
-        <location filename="../mainwindow.cpp" line="784"/>
-        <location filename="../mainwindow.cpp" line="888"/>
+        <location filename="../mainwindow.cpp" line="491"/>
+        <location filename="../mainwindow.cpp" line="869"/>
+        <location filename="../mainwindow.cpp" line="973"/>
         <source>Write Error</source>
         <translation>書き込みエラー</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="421"/>
-        <location filename="../mainwindow.cpp" line="784"/>
-        <location filename="../mainwindow.cpp" line="1005"/>
+        <location filename="../mainwindow.cpp" line="491"/>
+        <location filename="../mainwindow.cpp" line="869"/>
+        <location filename="../mainwindow.cpp" line="1089"/>
         <source>Image file cannot be located on the target device.</source>
         <translation>イメージファイルをデバイスに配置できません。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="431"/>
+        <location filename="../mainwindow.cpp" line="501"/>
         <source>Confirm overwrite</source>
         <translation>上書きの確認</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="431"/>
+        <location filename="../mainwindow.cpp" line="501"/>
         <source>Writing to a physical device can corrupt the device.
 (Target Device: %1 &quot;%2&quot;)
 Are you sure you want to continue?</source>
@@ -206,226 +206,212 @@ Are you sure you want to continue?</source>
 続行してもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="77"/>
+        <location filename="../mainwindow.cpp" line="840"/>
+        <source>Write Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
+        <translation>書き込みに成功しました。&lt;br&gt;&lt;br&gt;&lt;b&gt;経過時間:&lt;/b&gt; %1</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="1061"/>
+        <source>Read Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
+        <translation>読み込みに成功しました。&lt;br&gt;&lt;br&gt;&lt;b&gt;経過時間:&lt;/b&gt; %1</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="1415"/>
+        <source>Write &amp;amp; Verify Successful.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Write:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verify:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Total:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;</source>
+        <translation>書き込みと検証に成功しました。&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;書き込み:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;検証:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;合計:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="1437"/>
+        <source>Verify Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
+        <translation>検証に成功しました。&lt;br&gt;&lt;br&gt;&lt;b&gt;経過時間:&lt;/b&gt; %1</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="147"/>
         <source>Waiting for a task.</source>
         <translation>タスクを待っています。</translation>
     </message>
     <message>
-        <source>Disk Images (*.img *.IMG)</source>
-        <translation type="vanished">ディスクイメージ (*.img *.IMG)</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="280"/>
+        <location filename="../mainwindow.cpp" line="350"/>
         <source>Exiting now will cancel verifying image.
 Are you sure you want to exit?</source>
         <translation>終了すると、照合がキャンセルされます。
 本当に終了してもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="400"/>
+        <location filename="../mainwindow.cpp" line="470"/>
         <source>Cancel Verify.
 Are you sure you want to cancel?</source>
         <translation>照合をキャンセルします。
 本当にキャンセルしてもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="584"/>
+        <location filename="../mainwindow.cpp" line="654"/>
         <source>Not enough available space!</source>
         <translation>空き容量が足りません！</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="360"/>
-        <location filename="../mainwindow.cpp" line="527"/>
-        <location filename="../mainwindow.cpp" line="706"/>
-        <location filename="../mainwindow.cpp" line="728"/>
-        <location filename="../mainwindow.cpp" line="733"/>
-        <location filename="../mainwindow.cpp" line="738"/>
-        <location filename="../mainwindow.cpp" line="761"/>
-        <location filename="../mainwindow.cpp" line="1092"/>
-        <location filename="../mainwindow.cpp" line="1273"/>
-        <location filename="../mainwindow.cpp" line="1296"/>
-        <location filename="../mainwindow.cpp" line="1301"/>
-        <location filename="../mainwindow.cpp" line="1306"/>
-        <location filename="../mainwindow.cpp" line="1319"/>
+        <location filename="../mainwindow.cpp" line="430"/>
+        <location filename="../mainwindow.cpp" line="597"/>
+        <location filename="../mainwindow.cpp" line="775"/>
+        <location filename="../mainwindow.cpp" line="810"/>
+        <location filename="../mainwindow.cpp" line="815"/>
+        <location filename="../mainwindow.cpp" line="820"/>
+        <location filename="../mainwindow.cpp" line="846"/>
+        <location filename="../mainwindow.cpp" line="1186"/>
+        <location filename="../mainwindow.cpp" line="1366"/>
+        <location filename="../mainwindow.cpp" line="1389"/>
+        <location filename="../mainwindow.cpp" line="1394"/>
+        <location filename="../mainwindow.cpp" line="1399"/>
+        <location filename="../mainwindow.cpp" line="1444"/>
         <source>File Error</source>
         <translation>ファイルエラー</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="104"/>
+        <location filename="../mainwindow.cpp" line="174"/>
         <source>Disk images (*.img *.iso *.gz *.xz)</source>
         <translation>ディスクイメージ (*.img *.iso *.gz *.xz)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="109"/>
+        <location filename="../mainwindow.cpp" line="179"/>
         <source>Raw images (*.img *.iso)</source>
         <translation>非圧縮イメージ (*.img *.iso)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="110"/>
+        <location filename="../mainwindow.cpp" line="180"/>
         <source>Compressed images (*.gz *.xz)</source>
         <translation>圧縮イメージ (*.gz *.xz)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="360"/>
+        <location filename="../mainwindow.cpp" line="430"/>
         <source>Unable to open file for hashing.</source>
         <translation>ハッシュ計算のためにファイルを開けません。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="528"/>
-        <location filename="../mainwindow.cpp" line="1093"/>
+        <location filename="../mainwindow.cpp" line="598"/>
+        <location filename="../mainwindow.cpp" line="1187"/>
         <source>The selected image file is empty.</source>
         <translation>選択したイメージファイルは空です。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="615"/>
-        <source>Writing: %p%</source>
-        <translation>書き込み中: %p%</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="616"/>
+        <location filename="../mainwindow.cpp" line="685"/>
         <source>Writing...</source>
         <translation>書き込み中...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="688"/>
+        <location filename="../mainwindow.cpp" line="757"/>
         <source>Writing: %1 MB/s</source>
         <translation>書き込み中: %1 MB/s</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="728"/>
-        <location filename="../mainwindow.cpp" line="1296"/>
+        <location filename="../mainwindow.cpp" line="810"/>
+        <location filename="../mainwindow.cpp" line="1389"/>
         <source>The selected file does not exist.</source>
         <translation>選択したファイルは存在しません。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="733"/>
-        <location filename="../mainwindow.cpp" line="1301"/>
+        <location filename="../mainwindow.cpp" line="815"/>
+        <location filename="../mainwindow.cpp" line="1394"/>
         <source>You do not have permision to read the selected file.</source>
         <translation>選択したファイルを読み込むための権限がありません。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="738"/>
-        <location filename="../mainwindow.cpp" line="1306"/>
+        <location filename="../mainwindow.cpp" line="820"/>
+        <location filename="../mainwindow.cpp" line="1399"/>
         <source>The specified file contains no data.</source>
         <translation>指定されたファイルにはデータが含まれていません。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="742"/>
-        <location filename="../mainwindow.cpp" line="969"/>
-        <location filename="../mainwindow.cpp" line="1310"/>
+        <location filename="../mainwindow.cpp" line="824"/>
+        <location filename="../mainwindow.cpp" line="1053"/>
+        <location filename="../mainwindow.cpp" line="1403"/>
         <source>Done.</source>
         <translation>完了しました。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="755"/>
-        <location filename="../mainwindow.cpp" line="973"/>
-        <location filename="../mainwindow.cpp" line="976"/>
-        <location filename="../mainwindow.cpp" line="1314"/>
+        <location filename="../mainwindow.cpp" line="839"/>
+        <location filename="../mainwindow.cpp" line="1057"/>
+        <location filename="../mainwindow.cpp" line="1060"/>
+        <location filename="../mainwindow.cpp" line="1439"/>
         <source>Complete</source>
         <translation>完成</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="755"/>
-        <source>Write Successful.</source>
-        <translation>書き込み成功。</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="761"/>
-        <location filename="../mainwindow.cpp" line="1319"/>
+        <location filename="../mainwindow.cpp" line="846"/>
+        <location filename="../mainwindow.cpp" line="1444"/>
         <source>Please specify an image file to use.</source>
         <translation>使用するイメージファイルを指定してください。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="790"/>
+        <location filename="../mainwindow.cpp" line="875"/>
         <source>Confirm Overwrite</source>
         <translation>上書きの確認</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="790"/>
+        <location filename="../mainwindow.cpp" line="875"/>
         <source>Are you sure you want to overwrite the specified file?</source>
         <translation>ファイルを上書きしてもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="888"/>
+        <location filename="../mainwindow.cpp" line="973"/>
         <source>Disk is not large enough for the specified image.</source>
         <translation>指定されたイメージに対し ディスク容量が十分ではありません。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="910"/>
-        <source>Reading: %p%</source>
-        <translation>読み取り中: %p%</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="911"/>
+        <location filename="../mainwindow.cpp" line="995"/>
         <source>Reading...</source>
         <translation>読み取り中...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="953"/>
+        <location filename="../mainwindow.cpp" line="1037"/>
         <source>Reading: %1 MB/s</source>
         <translation>読み取り中: %1 MB/s</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="973"/>
+        <location filename="../mainwindow.cpp" line="1057"/>
         <source>Read Canceled.</source>
         <translation>読み込みがキャンセルされました。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="976"/>
-        <source>Read Successful.</source>
-        <translation>読み込み成功。</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="983"/>
+        <location filename="../mainwindow.cpp" line="1067"/>
         <source>File Info</source>
         <translation>ファイル情報</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="983"/>
+        <location filename="../mainwindow.cpp" line="1067"/>
         <source>Please specify a file to save data to.</source>
         <translation>データを保存するファイルを指定してください。</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1005"/>
+        <location filename="../mainwindow.cpp" line="1089"/>
         <source>Verify Error</source>
         <translation>照合エラー</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1141"/>
+        <location filename="../mainwindow.cpp" line="1235"/>
         <source>Size Mismatch!</source>
         <translation>サイズが合いません！</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1170"/>
-        <source>Verifying: %p%</source>
-        <translation>検証中: %p%</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="1171"/>
+        <location filename="../mainwindow.cpp" line="1264"/>
         <source>Verifying...</source>
         <translation>検証中...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1236"/>
-        <location filename="../mainwindow.cpp" line="1243"/>
+        <location filename="../mainwindow.cpp" line="1329"/>
+        <location filename="../mainwindow.cpp" line="1336"/>
         <source>Verify Failure</source>
         <translation>照合失敗</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1236"/>
-        <location filename="../mainwindow.cpp" line="1243"/>
+        <location filename="../mainwindow.cpp" line="1329"/>
+        <location filename="../mainwindow.cpp" line="1336"/>
         <source>Verification failed at sector: %1</source>
         <translation>セクター：%1で照合に失敗しました</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1255"/>
+        <location filename="../mainwindow.cpp" line="1348"/>
         <source>Verifying: %1 MB/s</source>
         <translation>検証中: %1 MB/s</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="1314"/>
-        <source>Verify Successful.</source>
-        <translation>照合に成功しました。</translation>
     </message>
 </context>
 <context>
@@ -480,12 +466,6 @@ Error %1: %2</source>
         <location filename="../disk.cpp" line="140"/>
         <source>Lock Error</source>
         <translation>ロックエラー</translation>
-    </message>
-    <message>
-        <source>An error occurred when attempting to lock the volume.
-Error %1: %2</source>
-        <translation type="vanished">ボリュームをロックしようとしたときにエラーが発生しました。
-エラー%1：%2</translation>
     </message>
     <message>
         <location filename="../disk.cpp" line="141"/>
@@ -583,32 +563,6 @@ Checking of free space will be skipped.</source>
         <translation>ドライブ%1の空きスペースを取得できませんでした。
 エラー%2：%3
 空き容量の確認はスキップされます。</translation>
-    </message>
-    <message>
-        <source>An error occurred while getting the device number.
-This usually means something is currently accessing the device;please close all applications and try again.
-
-Error %1: %2</source>
-        <translation type="vanished">デバイス番号の取得中にエラーが発生しました。
-これは、通常、デバイスに現在アクセスしていることを意味します。すべてのアプリケーションを閉じて、もう一度やり直してください。
-
-エラー%1：%2</translation>
-    </message>
-    <message>
-        <source>An error occurred while querying the properties.
-This usually means something is currently accessing the device; please close all applications and try again.
-
-Error %1: %2</source>
-        <translation type="vanished">プロパティの確認中にエラーが発生しました。
-これは通常、何かが現在デバイスにアクセスしていることを意味します。 すべてのアプリケーションを閉じてもう一度やり直してください。
-
-エラー%1：%2</translation>
-    </message>
-    <message>
-        <source>An error occurred when attempting to get a handle on %3.
-Error %1: %2</source>
-        <translation type="vanished">%3のハンドルを取得しようとしたときにエラーが発生しました。
-エラー%1：%2</translation>
     </message>
     <message>
         <location filename="../gzimagereader.cpp" line="66"/>

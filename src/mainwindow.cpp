@@ -77,7 +77,12 @@ static QString formatDeviceSize(unsigned long long bytes)
 // at render time.
 static void showComplete(QWidget *parent, const QString &title, QString text)
 {
-    QMessageBox box(QMessageBox::Information, title, QString(), QMessageBox::Ok, parent);
+    // NoIcon removes the big left-side icon so the content (including the
+    // centered Write+Verify table) is truly centered relative to the
+    // dialog. The info indicator moves to the title bar via setWindowIcon,
+    // keeping the "this is a success dialog" visual cue.
+    QMessageBox box(QMessageBox::NoIcon, title, QString(), QMessageBox::Ok, parent);
+    box.setWindowIcon(box.style()->standardIcon(QStyle::SP_MessageBoxInformation));
     if (text.contains(QStringLiteral("%ZEBRA%"))) {
         const QColor base = box.palette().color(QPalette::Window);
         const QColor alt = (base.lightness() < 128) ? base.lighter(130)
@@ -1409,8 +1414,7 @@ void MainWindow::on_bVerify_clicked()
                 // AlternateBase lies on Windows dark mode.
                 msg = tr("Write &amp; Verify Successful.<br><br>"
                          "<center>"
-                         "<table cellspacing=\"0\" cellpadding=\"6\" "
-                         "style=\"border: 1px solid gray;\">"
+                         "<table cellspacing=\"0\" cellpadding=\"6\">"
                          "<tr>"
                          "<td bgcolor=\"%ZEBRA%\"><b>Write:</b>&nbsp;&nbsp;</td>"
                          "<td bgcolor=\"%ZEBRA%\">%1</td>"

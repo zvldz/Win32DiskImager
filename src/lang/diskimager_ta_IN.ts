@@ -134,291 +134,277 @@
         <translation>வெளியேறு</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="77"/>
+        <location filename="../mainwindow.cpp" line="147"/>
         <source>Waiting for a task.</source>
         <translation>ஒரு பணி காத்திருக்கிறது.</translation>
     </message>
     <message>
-        <source>Disk Images (*.img *.IMG)</source>
-        <translation type="vanished">வட்டு படங்கள் (*.img *.IMG)</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="260"/>
-        <location filename="../mainwindow.cpp" line="270"/>
-        <location filename="../mainwindow.cpp" line="280"/>
+        <location filename="../mainwindow.cpp" line="330"/>
+        <location filename="../mainwindow.cpp" line="340"/>
+        <location filename="../mainwindow.cpp" line="350"/>
         <source>Exit?</source>
         <translation>வெளியேறு?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="260"/>
+        <location filename="../mainwindow.cpp" line="330"/>
         <source>Exiting now will result in a corrupt image file.
 Are you sure you want to exit?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="270"/>
+        <location filename="../mainwindow.cpp" line="340"/>
         <source>Exiting now will result in a corrupt disk.
 Are you sure you want to exit?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="280"/>
+        <location filename="../mainwindow.cpp" line="350"/>
         <source>Exiting now will cancel verifying image.
 Are you sure you want to exit?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="306"/>
+        <location filename="../mainwindow.cpp" line="376"/>
         <source>Select a disk image</source>
         <translation>ஒரு வட்டு படத்தை தேர்ந்தெடு</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="349"/>
+        <location filename="../mainwindow.cpp" line="419"/>
         <source>Generating...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="391"/>
-        <location filename="../mainwindow.cpp" line="400"/>
+        <location filename="../mainwindow.cpp" line="461"/>
+        <location filename="../mainwindow.cpp" line="470"/>
         <source>Cancel?</source>
         <translation>ரத்து?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="391"/>
+        <location filename="../mainwindow.cpp" line="461"/>
         <source>Canceling now will result in a corrupt destination.
 Are you sure you want to cancel?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="400"/>
+        <location filename="../mainwindow.cpp" line="470"/>
         <source>Cancel Verify.
 Are you sure you want to cancel?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="421"/>
-        <location filename="../mainwindow.cpp" line="784"/>
-        <location filename="../mainwindow.cpp" line="888"/>
+        <location filename="../mainwindow.cpp" line="491"/>
+        <location filename="../mainwindow.cpp" line="869"/>
+        <location filename="../mainwindow.cpp" line="973"/>
         <source>Write Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="421"/>
-        <location filename="../mainwindow.cpp" line="784"/>
-        <location filename="../mainwindow.cpp" line="1005"/>
+        <location filename="../mainwindow.cpp" line="491"/>
+        <location filename="../mainwindow.cpp" line="869"/>
+        <location filename="../mainwindow.cpp" line="1089"/>
         <source>Image file cannot be located on the target device.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="431"/>
+        <location filename="../mainwindow.cpp" line="501"/>
         <source>Confirm overwrite</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="431"/>
+        <location filename="../mainwindow.cpp" line="501"/>
         <source>Writing to a physical device can corrupt the device.
 (Target Device: %1 &quot;%2&quot;)
 Are you sure you want to continue?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="584"/>
+        <location filename="../mainwindow.cpp" line="654"/>
         <source>Not enough available space!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="360"/>
-        <location filename="../mainwindow.cpp" line="527"/>
-        <location filename="../mainwindow.cpp" line="706"/>
-        <location filename="../mainwindow.cpp" line="728"/>
-        <location filename="../mainwindow.cpp" line="733"/>
-        <location filename="../mainwindow.cpp" line="738"/>
-        <location filename="../mainwindow.cpp" line="761"/>
-        <location filename="../mainwindow.cpp" line="1092"/>
-        <location filename="../mainwindow.cpp" line="1273"/>
-        <location filename="../mainwindow.cpp" line="1296"/>
-        <location filename="../mainwindow.cpp" line="1301"/>
-        <location filename="../mainwindow.cpp" line="1306"/>
-        <location filename="../mainwindow.cpp" line="1319"/>
+        <location filename="../mainwindow.cpp" line="840"/>
+        <source>Write Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
+        <translation>எழுதுதல் வெற்றிகரமாக.&lt;br&gt;&lt;br&gt;&lt;b&gt;நேரம்:&lt;/b&gt; %1</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="1061"/>
+        <source>Read Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
+        <translation>படித்தல் வெற்றிகரமாக.&lt;br&gt;&lt;br&gt;&lt;b&gt;நேரம்:&lt;/b&gt; %1</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="1415"/>
+        <source>Write &amp;amp; Verify Successful.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Write:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verify:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Total:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;</source>
+        <translation>எழுதுதல் மற்றும் சரிபார்ப்பு வெற்றிகரமாக.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;எழுதுதல்:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;சரிபார்:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;மொத்தம்:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="1437"/>
+        <source>Verify Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
+        <translation>சரிபார்ப்பு வெற்றிகரமாக.&lt;br&gt;&lt;br&gt;&lt;b&gt;நேரம்:&lt;/b&gt; %1</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="430"/>
+        <location filename="../mainwindow.cpp" line="597"/>
+        <location filename="../mainwindow.cpp" line="775"/>
+        <location filename="../mainwindow.cpp" line="810"/>
+        <location filename="../mainwindow.cpp" line="815"/>
+        <location filename="../mainwindow.cpp" line="820"/>
+        <location filename="../mainwindow.cpp" line="846"/>
+        <location filename="../mainwindow.cpp" line="1186"/>
+        <location filename="../mainwindow.cpp" line="1366"/>
+        <location filename="../mainwindow.cpp" line="1389"/>
+        <location filename="../mainwindow.cpp" line="1394"/>
+        <location filename="../mainwindow.cpp" line="1399"/>
+        <location filename="../mainwindow.cpp" line="1444"/>
         <source>File Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="104"/>
+        <location filename="../mainwindow.cpp" line="174"/>
         <source>Disk images (*.img *.iso *.gz *.xz)</source>
         <translation>வட்டு படிமங்கள் (*.img *.iso *.gz *.xz)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="109"/>
+        <location filename="../mainwindow.cpp" line="179"/>
         <source>Raw images (*.img *.iso)</source>
         <translation>மூல படிமங்கள் (*.img *.iso)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="110"/>
+        <location filename="../mainwindow.cpp" line="180"/>
         <source>Compressed images (*.gz *.xz)</source>
         <translation>அழுத்திய படிமங்கள் (*.gz *.xz)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="360"/>
+        <location filename="../mainwindow.cpp" line="430"/>
         <source>Unable to open file for hashing.</source>
         <translation>ஹாஷ் செய்வதற்காக கோப்பைத் திறக்க முடியவில்லை.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="528"/>
-        <location filename="../mainwindow.cpp" line="1093"/>
+        <location filename="../mainwindow.cpp" line="598"/>
+        <location filename="../mainwindow.cpp" line="1187"/>
         <source>The selected image file is empty.</source>
         <translation>தேர்ந்தெடுத்த படிம கோப்பு காலியானது.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="615"/>
-        <source>Writing: %p%</source>
-        <translation>எழுதுகிறது: %p%</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="616"/>
+        <location filename="../mainwindow.cpp" line="685"/>
         <source>Writing...</source>
         <translation>எழுதுகிறது...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="688"/>
+        <location filename="../mainwindow.cpp" line="757"/>
         <source>Writing: %1 MB/s</source>
         <translation>எழுதுகிறது: %1 MB/s</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="728"/>
-        <location filename="../mainwindow.cpp" line="1296"/>
+        <location filename="../mainwindow.cpp" line="810"/>
+        <location filename="../mainwindow.cpp" line="1389"/>
         <source>The selected file does not exist.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="733"/>
-        <location filename="../mainwindow.cpp" line="1301"/>
+        <location filename="../mainwindow.cpp" line="815"/>
+        <location filename="../mainwindow.cpp" line="1394"/>
         <source>You do not have permision to read the selected file.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="738"/>
-        <location filename="../mainwindow.cpp" line="1306"/>
+        <location filename="../mainwindow.cpp" line="820"/>
+        <location filename="../mainwindow.cpp" line="1399"/>
         <source>The specified file contains no data.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="742"/>
-        <location filename="../mainwindow.cpp" line="969"/>
-        <location filename="../mainwindow.cpp" line="1310"/>
+        <location filename="../mainwindow.cpp" line="824"/>
+        <location filename="../mainwindow.cpp" line="1053"/>
+        <location filename="../mainwindow.cpp" line="1403"/>
         <source>Done.</source>
         <translation>முடிந்தது.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="755"/>
-        <location filename="../mainwindow.cpp" line="973"/>
-        <location filename="../mainwindow.cpp" line="976"/>
-        <location filename="../mainwindow.cpp" line="1314"/>
+        <location filename="../mainwindow.cpp" line="839"/>
+        <location filename="../mainwindow.cpp" line="1057"/>
+        <location filename="../mainwindow.cpp" line="1060"/>
+        <location filename="../mainwindow.cpp" line="1439"/>
         <source>Complete</source>
         <translation>முடி</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="755"/>
-        <source>Write Successful.</source>
-        <translation>வெற்றிகரமாக எழுது.</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="761"/>
-        <location filename="../mainwindow.cpp" line="1319"/>
+        <location filename="../mainwindow.cpp" line="846"/>
+        <location filename="../mainwindow.cpp" line="1444"/>
         <source>Please specify an image file to use.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="790"/>
+        <location filename="../mainwindow.cpp" line="875"/>
         <source>Confirm Overwrite</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="790"/>
+        <location filename="../mainwindow.cpp" line="875"/>
         <source>Are you sure you want to overwrite the specified file?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="888"/>
+        <location filename="../mainwindow.cpp" line="973"/>
         <source>Disk is not large enough for the specified image.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="910"/>
-        <source>Reading: %p%</source>
-        <translation>படிக்கிறது: %p%</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="911"/>
+        <location filename="../mainwindow.cpp" line="995"/>
         <source>Reading...</source>
         <translation>படிக்கிறது...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="953"/>
+        <location filename="../mainwindow.cpp" line="1037"/>
         <source>Reading: %1 MB/s</source>
         <translation>படிக்கிறது: %1 MB/s</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="973"/>
+        <location filename="../mainwindow.cpp" line="1057"/>
         <source>Read Canceled.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="976"/>
-        <source>Read Successful.</source>
-        <translation>வெற்றிகரமாக படி.</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="983"/>
+        <location filename="../mainwindow.cpp" line="1067"/>
         <source>File Info</source>
         <translation>கோப்பன் தகவல்</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="983"/>
+        <location filename="../mainwindow.cpp" line="1067"/>
         <source>Please specify a file to save data to.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1005"/>
+        <location filename="../mainwindow.cpp" line="1089"/>
         <source>Verify Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1141"/>
+        <location filename="../mainwindow.cpp" line="1235"/>
         <source>Size Mismatch!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1170"/>
-        <source>Verifying: %p%</source>
-        <translation>சரிபார்க்கிறது: %p%</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="1171"/>
+        <location filename="../mainwindow.cpp" line="1264"/>
         <source>Verifying...</source>
         <translation>சரிபார்க்கிறது...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1236"/>
-        <location filename="../mainwindow.cpp" line="1243"/>
+        <location filename="../mainwindow.cpp" line="1329"/>
+        <location filename="../mainwindow.cpp" line="1336"/>
         <source>Verify Failure</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1236"/>
-        <location filename="../mainwindow.cpp" line="1243"/>
+        <location filename="../mainwindow.cpp" line="1329"/>
+        <location filename="../mainwindow.cpp" line="1336"/>
         <source>Verification failed at sector: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1255"/>
+        <location filename="../mainwindow.cpp" line="1348"/>
         <source>Verifying: %1 MB/s</source>
         <translation>சரிபார்க்கிறது: %1 MB/s</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="1314"/>
-        <source>Verify Successful.</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
