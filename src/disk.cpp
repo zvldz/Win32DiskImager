@@ -528,11 +528,15 @@ bool checkDriveType(char *name, ULONG *pid, unsigned long long *sizeBytes)
                     }
                 }
                 if (retVal && sizeBytes) {
-                    GET_LENGTH_INFORMATION lenInfo;
-                    if (DeviceIoControl(hDevice, IOCTL_DISK_GET_LENGTH_INFO,
-                                        NULL, 0, &lenInfo, sizeof(lenInfo),
+                    // IOCTL_DISK_GET_LENGTH_INFO silently fails on some
+                    // drivers through a handle opened with FILE_READ_ATTRIBUTES
+                    // only. GEOMETRY_EX works with zero access and matches
+                    // what the CLI uses in queryDiskInfo().
+                    DISK_GEOMETRY_EX dg = {};
+                    if (DeviceIoControl(hDevice, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
+                                        NULL, 0, &dg, sizeof(dg),
                                         &cbBytesReturned, NULL)) {
-                        *sizeBytes = (unsigned long long)lenInfo.Length.QuadPart;
+                        *sizeBytes = (unsigned long long)dg.DiskSize.QuadPart;
                     }
                 }
             }
