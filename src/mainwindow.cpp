@@ -92,6 +92,12 @@ static void showComplete(QWidget *parent, const QString &title, QString text)
     box.setText(text);
     box.setTextFormat(Qt::RichText);
     box.setStyleSheet("QDialogButtonBox { qproperty-centerButtons: true; }");
+    // QMessageBox's label defaults to AlignLeft, which prevents inline
+    // <center> from reaching block-level children (the Write+Verify
+    // table). Force AlignHCenter on the label so the entire content —
+    // both the heading and the table — is centered in the dialog.
+    for (QLabel *lbl : box.findChildren<QLabel*>())
+        lbl->setAlignment(Qt::AlignHCenter);
     box.exec();
 }
 
