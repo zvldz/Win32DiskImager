@@ -120,11 +120,13 @@ MainWindow* MainWindow::instance = NULL;
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
     setupUi(this);
-    // Reserve width for the worst-case Device label ("[X:\] 999TB" ≈ 13
-    // chars) *before* pinning the window size. Otherwise inserting a
-    // card at runtime (DBT_DEVICEARRIVAL) can't widen the combo — the
-    // fixed-size main window was already frozen around an empty combo.
-    cboxDevice->setMinimumContentsLength(13);
+    // Reserve width for the common-case Device label ("[X:\] 64GB" ≈
+    // 10 chars) *before* pinning the window size. Labels at 128GB and
+    // above (11 chars) get elided in the combo but still render full
+    // in the dropdown. Without this reservation the fixed-size window
+    // was frozen around an empty combo, so inserting a card at runtime
+    // (DBT_DEVICEARRIVAL) couldn't widen the combo at all.
+    cboxDevice->setMinimumContentsLength(10);
     cboxDevice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     setFixedSize(size());
     if (QLineEdit *fileEdit = leFile->lineEdit()) {
