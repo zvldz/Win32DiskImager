@@ -385,9 +385,23 @@ void MainWindow::on_tbBrowse_clicked()
     dialog.setNameFilters(fileTypesList);
     dialog.setFileMode(QFileDialog::AnyFile);
     dialog.setViewMode(QFileDialog::Detail);
+    // Native QFileDialog on Windows often ignores selectFile() when given
+    // a full path — it remembers the last-used directory instead. Split
+    // the path explicitly: setDirectory + selectFile(name only) puts the
+    // user into the file's actual folder regardless of native quirks.
     if (fileinfo.exists())
     {
-        dialog.selectFile(fileLocation);
+        dialog.setDirectory(fileinfo.absoluteDir());
+        dialog.selectFile(fileinfo.fileName());
+    }
+    else if (!fileLocation.isEmpty() && QDir(fileinfo.absolutePath()).exists())
+    {
+        // User typed (or pasted) a path whose directory exists but the
+        // file itself doesn't yet — useful for Read targets.
+        dialog.setDirectory(fileinfo.absolutePath());
+        if (!fileinfo.fileName().isEmpty()) {
+            dialog.selectFile(fileinfo.fileName());
+        }
     }
     else
     {

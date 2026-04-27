@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-04-24
+
+### Version 2.2.1
+
+#### GUI
+- Browse dialog now opens directly in the folder of the currently selected Image File (whether the path was picked from history, dropped onto the field or typed). Native `QFileDialog` on Windows would frequently ignore `selectFile(fullPath)` and fall back to its own last-used directory; the fix splits the input into `setDirectory(folder)` + `selectFile(name)` so the dialog lands in the right place even on first open.
+
 ## 2026-04-23
 
 ### Version 2.2.0
