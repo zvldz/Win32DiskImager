@@ -45,42 +45,6 @@ The provided batch files auto-detect Qt and MinGW in common locations
 (MSYS2 `C:\msys64\mingw64\bin`, the Qt online installer under `C:\Qt`).
 Set `QT_BIN` and / or `MINGW_BIN` to override.
 
-## Build
-
-### GUI build
-
-From repository root:
-
-```bat
-compile.bat
-```
-
-Output:
-- `bin\Win32DiskImager.exe`
-
-### CLI build
-
-From repository root:
-
-```bat
-compile-cli.bat
-```
-
-Output:
-- `bin\Win32DiskImager-cli.exe`
-
-### Static GUI build (Qt static toolchain)
-
-Set `QT_STATIC_BIN` first, then run:
-
-```bat
-set QT_STATIC_BIN=C:\Qt\6.x.x\mingw_64_static\bin
-compile-gui-static.bat
-```
-
-Output:
-- `bin\Win32DiskImager.exe`
-
 ## Usage
 
 ### GUI
@@ -136,6 +100,42 @@ Win32DiskImager-cli.exe verify --device E: --image C:\images\raspi.img
 - `_detect-toolchain.bat` - Qt / MinGW auto-discovery used by the above
 - `setup.iss` - Inno Setup installer script
 - `.github/workflows/release.yml` - CI that publishes the static GUI / CLI / installer
+
+## Build
+
+### GUI build
+
+From repository root:
+
+```bat
+compile.bat
+```
+
+Output:
+- `bin\Win32DiskImager.exe`
+
+### CLI build
+
+From repository root:
+
+```bat
+compile-cli.bat
+```
+
+Output:
+- `bin\Win32DiskImager-cli.exe`
+
+### Static GUI build (Qt static toolchain)
+
+Set `QT_STATIC_BIN` first, then run:
+
+```bat
+set QT_STATIC_BIN=C:\Qt\6.x.x\mingw_64_static\bin
+compile-gui-static.bat
+```
+
+Output:
+- `bin\Win32DiskImager.exe`
 
 ## License
 
