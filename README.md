@@ -1,6 +1,6 @@
 # Win32DiskImager
 
-Win32DiskImager is a Windows utility for writing raw disk images (`.img` and related files) to removable media (SD cards, USB flash drives) and reading devices back into image files.
+Win32DiskImager is a Windows utility for writing raw disk images (`.img`, `.iso`) to removable media (SD cards, USB flash drives) and reading devices back into image files. Compressed images (`.gz`, `.xz`) are decompressed on the fly — no need to expand to a temp file first.
 
 This repository contains:
 - A Qt-based GUI application (`Win32DiskImager.exe`)
@@ -15,15 +15,18 @@ This repository contains:
 
 ## Features
 
-- Major improvement: Windows 11 compatibility (`WINVER`/`_WIN32_WINNT` set to `0x0A00`) and updated library/toolchain support (Qt 6 + modern MinGW builds)
-- Write image file to a physical device
-- Read physical device to image file
-- Verify image against device
-- Optional read limit in CLI (`--bytes`)
-- Optional allocated-only read mode in CLI (`--allocated-only`, MBR-based)
-- Image hash generation in GUI (MD5, SHA1, SHA256)
-- Recently-used **Image File history** in the GUI (editable drop-down, up to 20 entries; saved on successful Read/Write, persisted in `HKCU\Software\Win32DiskImager\ImageFileHistory`)
-- Multi-language UI translations (`src/lang/*.ts`)
+- Write image file to a physical device, read physical device into an image file, verify image against device.
+- Compressed image input (`.gz`, `.xz`) for Write and Verify — format detected by magic bytes, not file extension. Multi-threaded xz decoder used when available.
+- Pipelined I/O: a decoder thread runs in parallel with the device I/O, so on `.xz` sources the SD card stays the bottleneck instead of decompression.
+- Auto-verify after Write — GUI shows a single combined success dialog, CLI runs `verify` automatically (opt out with `--no-verify`).
+- Direct, write-through I/O on the destination handle (`FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`) — reported MB/s reflects real device throughput, and "Write successful" only appears once data has actually landed on the device.
+- System idle-sleep suppressed for the duration of Write / Read / Verify, so a multi-minute SD card operation isn't interrupted by a laptop's sleep timer.
+- Device dropdown / `list` output shows each removable target with its capacity (`[E:\] 58GB` / `E: (removable, PhysicalDrive2, 29.3 GB)`).
+- CLI progress with ASCII bar, MB/s and ETA; GUI progress bar reflects actual sectors written even for compressed sources of known size.
+- Recently-used **Image File history** in the GUI (editable drop-down, up to 20 entries; saved on successful Read / Write, persisted in `HKCU\Software\Win32DiskImager\ImageFileHistory`).
+- Image hash generation in the GUI (MD5, SHA1, SHA256).
+- Optional read limit in CLI (`--bytes`) and allocated-only read mode (`--allocated-only`, MBR-based).
+- Multi-language UI translations (`src/lang/*.ts`).
 
 ## Requirements
 
@@ -83,14 +86,16 @@ Output:
 ### GUI
 
 Run `Win32DiskImager.exe`, then:
-1. Choose an image file.
-2. Select a target device.
+1. Choose an image file (`.img`, `.iso`, `.gz`, or `.xz`).
+2. Select a target device — the dropdown shows each removable drive with its capacity.
 3. Choose `Write`, `Read`, or `Verify`.
 
 The GUI also supports:
-- Drag/drop file path input
-- Hash generation and copy
-- Auto-refresh of removable devices
+- `Verify after Write` checkbox (default on) — chains a verify pass automatically after a successful write.
+- Drag/drop file path input.
+- Image File history drop-down (last 20 entries).
+- Hash generation and copy.
+- Auto-refresh of removable devices.
 
 ### CLI
 
