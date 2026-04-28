@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-XX-XX
+
+### Version 2.2.2
+
+#### Convenience
+- After a successful Write (or chained Write + Verify), the volume is auto-ejected via `IOCTL_STORAGE_EJECT_MEDIA` so the card shows as "Safely Removed" in Windows — no need to click the tray icon before pulling it. Standalone Read and standalone Verify are left untouched (the user may still want the card mounted afterwards). Eject is best-effort — silent on bus types that don't support it. Helper added as `ejectVolume()` in `disk.h`. Both success dialogs ("Write Successful", "Write & Verify Successful") now also tell the user "Card can be safely removed." in italics; the CLI prints the same line.
+
 ## 2026-04-28
 
 ### Version 2.2.1

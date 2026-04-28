@@ -1001,11 +1001,23 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
         if (hDisk != INVALID_HANDLE_VALUE) CloseHandle(hDisk);
         *keepVolumeOut = hVolume;
     } else {
+        // Standalone Write success — eject so the user can pull the
+        // card immediately. Eject must run while the volume is still
+        // locked + dismounted, before cleanupDiskHandles releases it.
+        if (rc == 0 && hVolume != INVALID_HANDLE_VALUE) {
+            DWORD junk = 0;
+            DeviceIoControl(hVolume, IOCTL_STORAGE_EJECT_MEDIA,
+                            NULL, 0, NULL, 0, &junk, NULL);
+        }
         cleanupDiskHandles(hVolume, hDisk);
     }
     if (rc == 0) {
         progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
         std::cout << "Write successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
+        // Eject already issued above when this is a standalone write.
+        if (!keepVolumeOut) {
+            std::cout << "Card can be safely removed." << std::endl;
+        }
     }
     return rc;
 }
@@ -1244,10 +1256,22 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
     queue.requestAbort();
     decoderThread.join();
 
+    // Eject only when this Verify was chained from a Write (auto-verify
+    // path). Standalone user-initiated Verify must NOT eject — the user
+    // may want to do something else with the card afterwards.
+    const bool chainedFromWrite = (inheritVolume != INVALID_HANDLE_VALUE);
+    if (rc == 0 && chainedFromWrite && hVolume != INVALID_HANDLE_VALUE) {
+        DWORD junk = 0;
+        DeviceIoControl(hVolume, IOCTL_STORAGE_EJECT_MEDIA,
+                        NULL, 0, NULL, 0, &junk, NULL);
+    }
     cleanupDiskHandles(hVolume, hDisk);
     if (rc == 0) {
         progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
         std::cout << "Verify successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
+        if (chainedFromWrite) {
+            std::cout << "Card can be safely removed." << std::endl;
+        }
     }
     return rc;
 }

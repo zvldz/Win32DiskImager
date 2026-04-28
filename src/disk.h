@@ -60,6 +60,11 @@ bool getLockOnVolume(HANDLE handle);
 bool removeLockOnVolume(HANDLE handle);
 bool unmountVolume(HANDLE handle);
 bool isVolumeUnmounted(HANDLE handle);
+// Issues IOCTL_STORAGE_EJECT_MEDIA on a volume that's already locked +
+// dismounted. Used after a successful Write so the user can pull the
+// card immediately (the volume shows as "Safely Removed" in Windows).
+// Silent on failure — eject is best-effort, never blocking.
+bool ejectVolume(HANDLE handle);
 char *readSectorDataFromHandle(HANDLE handle, unsigned long long startsector, unsigned long long numsectors, unsigned long long sectorsize);
 bool writeSectorDataToHandle(HANDLE handle, char *data, unsigned long long startsector, unsigned long long numsectors, unsigned long long sectorsize);
 unsigned long long getNumberOfSectors(HANDLE handle, unsigned long long *sectorsize);

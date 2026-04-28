@@ -819,6 +819,12 @@ void MainWindow::on_bWrite_clicked()
                 hRawDisk = INVALID_HANDLE_VALUE;
                 m_verifyInheritsLock = true;
             } else {
+                // Standalone Write success — eject so the user can pull the
+                // card immediately. Eject must run while the volume is still
+                // locked + dismounted, before removeLockOnVolume.
+                if (status != STATUS_CANCELED) {
+                    ejectVolume(hVolume);
+                }
                 removeLockOnVolume(hVolume);
                 CloseHandle(hRawDisk);
                 CloseHandle(hVolume);
@@ -861,7 +867,8 @@ void MainWindow::on_bWrite_clicked()
                 return;  // verify handles its own close-on-EXIT and timer stop
             }
             showComplete(this, tr("Complete"),
-                tr("Write Successful.<br><br><b>Elapsed:</b> %1").arg(formatElapsedMs(writeMs)));
+                tr("Write Successful.<br><br><b>Elapsed:</b> %1<br><br>"
+                   "<i>Card can be safely removed.</i>").arg(formatElapsedMs(writeMs)));
         }
 
     }
@@ -1400,6 +1407,13 @@ void MainWindow::on_bVerify_clicked()
                 setReadWriteButtonState();
                 return;
             }
+            // Eject only when this Verify was chained from a successful
+            // Write — m_writeElapsedMs > 0 is the marker. Standalone
+            // user-initiated Verify must NOT eject; the user may want to
+            // do something else with the card afterwards.
+            if (status != STATUS_CANCELED && m_writeElapsedMs > 0) {
+                ejectVolume(hVolume);
+            }
             removeLockOnVolume(hVolume);
             CloseHandle(hRawDisk);
             CloseHandle(hVolume);
@@ -1454,7 +1468,8 @@ void MainWindow::on_bVerify_clicked()
                          "<td bgcolor=\"%ZEBRA%\">%3</td>"
                          "</tr>"
                          "</table>"
-                         "</center>")
+                         "</center>"
+                         "<br><i>Card can be safely removed.</i>")
                           .arg(formatElapsedMs(m_writeElapsedMs))
                           .arg(formatElapsedMs(verifyMs))
                           .arg(formatElapsedMs(totalMs));

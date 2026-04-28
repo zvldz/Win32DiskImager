@@ -191,6 +191,14 @@ bool isVolumeUnmounted(HANDLE handle)
     return (!bResult);
 }
 
+bool ejectVolume(HANDLE handle)
+{
+    DWORD junk;
+    // Silent on failure: not all bus types support eject, and we don't
+    // want to block the success dialog over a best-effort convenience.
+    return DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, NULL, 0, NULL, 0, &junk, NULL) != 0;
+}
+
 // Sector-aligned buffer: FILE_FLAG_NO_BUFFERING on the device/file handle
 // requires both the buffer address and transfer size to be a multiple of the
 // sector size. Freeing must go through _aligned_free (see callers).
