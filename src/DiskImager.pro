@@ -31,15 +31,11 @@ QMAKE_CXXFLAGS += -Wall -Wextra
 DEFINES -= UNICODE
 QT += widgets
 contains(QT_CONFIG, static) {
-    # Link the plugins required for a single-binary static Qt build.
-    QTPLUGIN += qwindows
-    QTPLUGIN += qgif
-    QTPLUGIN += qico
-    QTPLUGIN += qjpeg
-    QTPLUGIN += qnetworklistmanager
-    QTPLUGIN += qmodernwindowsstyle
+    # MSYS2 qt6-static auto-includes the standard Windows plugins
+    # (qwindows / qgif / qico / qjpeg / qnetworklistmanager /
+    # qmodernwindowsstyle / qschannelbackend), so we only force the
+    # one that isn't auto-added.
     QTPLUGIN += qcertonlybackend
-    QTPLUGIN += qschannelbackend
     # Static library link order matters; repeat these at the end to resolve
     # transitive symbols from harfbuzz/freetype.
     QMAKE_LIBS += -lgraphite2
