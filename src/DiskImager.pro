@@ -27,6 +27,7 @@ RCC_DIR = $$OUT_PWD/rcc
 UI_DIR = $$OUT_PWD/ui
 #CONFIG += release
 QMAKE_LFLAGS += -static -static-libgcc -static-libstdc++
+QMAKE_CXXFLAGS += -Wall -Wextra
 DEFINES -= UNICODE
 QT += widgets
 contains(QT_CONFIG, static) {

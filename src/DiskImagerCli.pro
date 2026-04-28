@@ -9,6 +9,7 @@ UI_DIR = $$OUT_PWD/ui
 CONFIG += console c++17
 CONFIG -= app_bundle qt
 QMAKE_LFLAGS += -static -static-libgcc -static-libstdc++
+QMAKE_CXXFLAGS += -Wall -Wextra
 DEFINES += WINVER=0x0A00
 DEFINES += _WIN32_WINNT=0x0A00
 
