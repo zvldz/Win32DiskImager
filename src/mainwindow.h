@@ -73,6 +73,11 @@ private:
         // find attached devices
         void getLogicalDrives();
         void setReadWriteButtonState();
+        // Closes any open hVolume / hFile / hRawDisk (with lock release on
+        // hVolume) and resets the UI back to idle. Replaces the long
+        // identical cleanup blocks that used to be duplicated in every
+        // early-return path of Write / Read / Verify.
+        void cleanupHandlesAndUI();
         void saveSettings();
         void loadSettings();
         void initializeHomeDir();
