@@ -40,6 +40,7 @@
 #include "disk.h"
 #include "imagereader.h"
 #include "iopipeline.h"
+#include "keepawake.h"
 #include "rawimagereader.h"
 #include "mainwindow.h"
 #include "elapsedtimer.h"
@@ -501,6 +502,7 @@ void MainWindow::on_bCancel_clicked()
 
 void MainWindow::on_bWrite_clicked()
 {
+    KeepAwake keepAwake;  // suppress idle sleep until this scope exits
     bool passfail = true;
     if (!leFile->currentText().isEmpty())
     {
@@ -877,6 +879,7 @@ void MainWindow::on_bWrite_clicked()
 
 void MainWindow::on_bRead_clicked()
 {
+    KeepAwake keepAwake;  // suppress idle sleep until this scope exits
     QString myFile;
     if (!leFile->currentText().isEmpty())
     {
@@ -1099,6 +1102,7 @@ void MainWindow::on_bRead_clicked()
 // Verify image with device
 void MainWindow::on_bVerify_clicked()
 {
+    KeepAwake keepAwake;  // suppress idle sleep until this scope exits
     bool passfail = true;
     if (!leFile->currentText().isEmpty())
     {

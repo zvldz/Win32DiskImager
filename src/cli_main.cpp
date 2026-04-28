@@ -22,6 +22,7 @@
 #include <lzma.h>
 
 #include "iopipeline.h"
+#include "keepawake.h"
 #include "version.h"
 
 namespace {
@@ -862,6 +863,7 @@ int cmdList()
 int cmdWrite(const std::string &imagePath, const std::string &device,
              HANDLE *keepVolumeOut = nullptr)
 {
+    KeepAwake keepAwake;  // suppress idle sleep for the whole operation
     if (keepVolumeOut) *keepVolumeOut = INVALID_HANDLE_VALUE;
     std::string srcErr;
     std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
@@ -1010,6 +1012,7 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
 
 int cmdRead(const std::string &imagePath, const std::string &device, uint64_t requestedBytes, bool allocatedOnly)
 {
+    KeepAwake keepAwake;  // suppress idle sleep for the whole operation
     // Direct I/O on the destination image file: "Read successful" means the
     // bytes are on disk (no ghost flush after the CLI exits).
     HANDLE hImage = openImageFileWrite(imagePath, FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
@@ -1110,6 +1113,7 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
 int cmdVerify(const std::string &imagePath, const std::string &device,
               HANDLE inheritVolume = INVALID_HANDLE_VALUE)
 {
+    KeepAwake keepAwake;  // suppress idle sleep for the whole operation
     std::string srcErr;
     std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
     if (!src) {

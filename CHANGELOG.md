@@ -1,11 +1,14 @@
 # Changelog
 
-## 2026-04-24
+## 2026-04-28
 
 ### Version 2.2.1
 
 #### GUI
 - Browse dialog now opens directly in the folder of the currently selected Image File (whether the path was picked from history, dropped onto the field or typed). Native `QFileDialog` on Windows would frequently ignore `selectFile(fullPath)` and fall back to its own last-used directory; the fix splits the input into `setDirectory(folder)` + `selectFile(name)` so the dialog lands in the right place even on first open.
+
+#### Reliability
+- Long-running Write / Read / Verify operations now suppress system idle-sleep via `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` for as long as the operation is in flight. A multi-minute SD-card write on a laptop with a 10-minute sleep timer no longer gets cut in half. Implemented as a tiny RAII guard (`src/keepawake.h`) so any exit path — success, error, cancel, exception — automatically releases the request. Applied symmetrically in the GUI (`on_b{Write,Read,Verify}_clicked`) and the CLI (`cmd{Write,Read,Verify}`).
 
 ## 2026-04-23
 
