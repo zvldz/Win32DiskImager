@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <thread>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <malloc.h>
@@ -1141,8 +1142,19 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
     HANDLE hDisk = INVALID_HANDLE_VALUE;
     DWORD diskNumber = 0;
     DiskGeometry geometry;
-    if (!prepareDiskHandles(device, GENERIC_READ, hVolume, hDisk, diskNumber, geometry)) {
+    // NO_BUFFERING on the read handle — symmetric with the write side and
+    // keeps any stale block-cache page from masking the real device data.
+    if (!prepareDiskHandles(device, GENERIC_READ, hVolume, hDisk, diskNumber, geometry,
+                            FILE_FLAG_NO_BUFFERING)) {
         return 1;
+    }
+    // When chained from a successful Write, give the SD controller a moment
+    // to flush its cache / FTL state before we start reading. Mitigates the
+    // "fail just before 100%" pattern where Verify catches the controller
+    // mid-flush near the end of the image.
+    if (inheritVolume != INVALID_HANDLE_VALUE && hVolume != INVALID_HANDLE_VALUE) {
+        FlushFileBuffers(hVolume);
+        Sleep(1500);
     }
 
     const uint64_t imageBytes = src->uncompressedSize();  // 0 if unknown
@@ -1239,8 +1251,36 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
             rc = 1;
             break;
         }
-        if (memcmp(c->data, diskBuf.data(), c->length) != 0) {
-            std::cerr << "\nVerify failed at byte offset " << processed << std::endl;
+        bool mismatch = (memcmp(c->data, diskBuf.data(), c->length) != 0);
+        if (mismatch) {
+            // Transient mismatch retry: SD controllers / cheap adapters
+            // occasionally return a stale or noisy chunk. Seek back to
+            // the start of this chunk, wait briefly, re-read and compare
+            // again. If it now matches, treat as recovered.
+            for (int attempt = 0; attempt < 3 && mismatch; ++attempt) {
+                Sleep(500);
+                LARGE_INTEGER back;
+                back.QuadPart = -(LONGLONG)c->length;
+                if (!SetFilePointerEx(hDisk, back, nullptr, FILE_CURRENT)) break;
+                if (!readExact(hDisk, diskBuf.data(), (DWORD)c->length)) break;
+                mismatch = (memcmp(c->data, diskBuf.data(), c->length) != 0);
+            }
+        }
+        if (mismatch) {
+            // Show absolute byte offset, then a relative position so the
+            // user can spot fake-card boundaries (e.g. "fail at 8 GB on
+            // a supposed 64 GB card") at a glance.
+            std::cerr << "\nVerify failed at byte " << processed;
+            if (imageBytes > 0) {
+                const double pct = 100.0 * (double)processed / (double)imageBytes;
+                std::cerr << " of " << imageBytes
+                          << " (" << std::fixed << std::setprecision(pct < 10.0 ? 1 : 0)
+                          << pct << "% / " << formatDeviceSize(processed)
+                          << " of " << formatDeviceSize(imageBytes) << ")";
+            } else {
+                std::cerr << " (" << formatDeviceSize(processed) << " processed)";
+            }
+            std::cerr << std::endl;
             rc = 1;
             break;
         }

@@ -7,6 +7,14 @@
 #### Convenience
 - After a successful Write (or chained Write + Verify), the volume is auto-ejected via `IOCTL_STORAGE_EJECT_MEDIA` so the card shows as "Safely Removed" in Windows — no need to click the tray icon before pulling it. Standalone Read and standalone Verify are left untouched (the user may still want the card mounted afterwards). Eject is best-effort — silent on bus types that don't support it. Helper added as `ejectVolume()` in `disk.h`. Both success dialogs ("Write Successful", "Write & Verify Successful") now also tell the user "Card can be safely removed." in italics; the CLI prints the same line.
 
+#### Diagnostics
+- Verify-failure message now reports both the absolute sector / byte offset **and** a relative position — e.g. `Verification failed at sector 16777216 of 30523392 (55% / 8.00 GB of 14.6 GB)`. Hitting the fail right around an even GB boundary on an SD card whose advertised capacity is much larger is the classic signature of a counterfeit card with a remapped controller; the diagnostic makes that obvious at a glance. Applied symmetrically in the GUI (`mainwindow.cpp::verifyFailMessage`) and the CLI (`cli_main.cpp::cmdVerify`).
+
+#### Verify reliability
+- Verify now opens the device handle with `FILE_FLAG_NO_BUFFERING`, symmetric with the Write side. Previously the Write side bypassed the OS block cache but the Verify read went through it, so a stale page from before the just-finished Write could mask the real device data.
+- When Verify is chained from a successful Write, it now issues `FlushFileBuffers` on the volume and waits 1.5 s before starting reads. SD controllers batch-flush their internal cache and FTL state to NAND lazily; without this delay, reads close to the end of the image had a higher chance of catching the controller mid-flush — the recurring "fail just before 100%" pattern. Same behavior in GUI and CLI.
+- Per-chunk retry on memcmp mismatch: up to 3 re-reads with a 500 ms wait between attempts, both in GUI (re-issuing `readSectorDataFromHandle`) and CLI (seeking back via `SetFilePointerEx(FILE_CURRENT, -length)` and re-reading). Recovers from transient flakiness — typical when an SD card sits in a passive microSD→SD adapter, where SD-bus signal integrity degrades and reads occasionally come back wrong on the first try. A real, persistent mismatch still surfaces as a `Verify Failure` with the diagnostic position info above.
+
 ## 2026-04-28
 
 ### Version 2.2.1

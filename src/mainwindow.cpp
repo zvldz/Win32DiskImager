@@ -102,6 +102,40 @@ static void showComplete(QWidget *parent, const QString &title, QString text)
     box.exec();
 }
 
+// Pretty-print a byte count for the verify-failure dialog. KB/MB/GB
+// scales with magnitude; GB uses two decimals because the diagnostic
+// is comparing it against fake-card size thresholds (e.g. "fail at
+// 8 GB on a 'fake 64 GB' card").
+static QString formatBytesPretty(double bytes)
+{
+    if (bytes >= 1024.0 * 1024.0 * 1024.0)
+        return QString("%1 GB").arg(bytes / (1024.0 * 1024.0 * 1024.0), 0, 'f', 2);
+    if (bytes >= 1024.0 * 1024.0)
+        return QString("%1 MB").arg(bytes / (1024.0 * 1024.0), 0, 'f', 0);
+    if (bytes >= 1024.0)
+        return QString("%1 KB").arg(bytes / 1024.0, 0, 'f', 0);
+    return QString("%1 B").arg((qint64)bytes);
+}
+
+// Verify-failure message body: gives the exact sector AND the relative
+// position so the user can tell whether the mismatch is at the start
+// (FS / partition layout problem), in the middle (bad block) or right
+// at a "fake-card" boundary (counterfeit smaller-than-advertised SD).
+static QString verifyFailMessage(unsigned long long sectorAt,
+                                 unsigned long long sectorTotal,
+                                 unsigned long long sectorSize)
+{
+    const double bytesDone = (double)sectorAt * (double)sectorSize;
+    const double bytesTotal = (double)sectorTotal * (double)sectorSize;
+    const double percent = (sectorTotal > 0)
+                           ? (100.0 * (double)sectorAt / (double)sectorTotal) : 0.0;
+    return QObject::tr("Verification failed at sector %1 of %2\n(%3% / %4 of %5).")
+        .arg(sectorAt).arg(sectorTotal)
+        .arg(percent, 0, 'f', percent < 10.0 ? 1 : 0)
+        .arg(formatBytesPretty(bytesDone))
+        .arg(formatBytesPretty(bytesTotal));
+}
+
 // Format "2m 15s" / "1h 5m 30s" from a milliseconds value. Used by the
 // completion dialogs to report how long Read / Write / (Write + Verify)
 // actually took.
@@ -1179,7 +1213,12 @@ void MainWindow::on_bVerify_clicked()
                 setReadWriteButtonState();
                 return;
             }
-            hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ);
+            // NO_BUFFERING: read straight through OS block cache so we're
+            // honest with the device controller — symmetric with the
+            // Write-side handle and avoids reading any stale cache page
+            // that lingered from before the just-finished Write.
+            hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ,
+                                         FILE_FLAG_NO_BUFFERING);
             if (hRawDisk == INVALID_HANDLE_VALUE)
             {
                 removeLockOnVolume(hVolume);
@@ -1191,6 +1230,15 @@ void MainWindow::on_bVerify_clicked()
                 bCancel->setEnabled(false);
                 setReadWriteButtonState();
                 return;
+            }
+            // When Verify is chained from a successful Write, give the SD
+            // controller a moment to flush its internal cache / FTL state
+            // to NAND before we start reading. Without this, reads near
+            // the end of the image have a higher chance of catching the
+            // controller mid-flush — the classic "fail just before 100%".
+            if (m_writeElapsedMs > 0) {
+                FlushFileBuffers(hVolume);
+                Sleep(1500);
             }
             availablesectors = getNumberOfSectors(hRawDisk, &sectorsize);
             if (!availablesectors)
@@ -1359,14 +1407,29 @@ void MainWindow::on_bVerify_clicked()
                 sectorData2 = readSectorDataFromHandle(hRawDisk, i, chunk, sectorsize);
                 if (sectorData2 == NULL)
                 {
-                    QMessageBox::critical(this, tr("Verify Failure"), tr("Verification failed at sector: %1").arg(i));
+                    QMessageBox::critical(this, tr("Verify Failure"), verifyFailMessage(i, numsectors, sectorsize));
                     verifyError = true;
                     break;
                 }
                 result = memcmp(c->data, sectorData2, c->length);
                 if (result)
                 {
-                    QMessageBox::critical(this, tr("Verify Failure"), tr("Verification failed at sector: %1").arg(i));
+                    // Transient mismatch retry: SD controllers / cheap
+                    // adapters occasionally return a stale or noisy sector
+                    // on first read. Wait briefly and re-read the same
+                    // chunk; if it now matches, treat as recovered.
+                    for (int attempt = 0; attempt < 3 && result; ++attempt) {
+                        _aligned_free(sectorData2);
+                        sectorData2 = NULL;
+                        Sleep(500);
+                        sectorData2 = readSectorDataFromHandle(hRawDisk, i, chunk, sectorsize);
+                        if (sectorData2 == NULL) break;
+                        result = memcmp(c->data, sectorData2, c->length);
+                    }
+                }
+                if (result)
+                {
+                    QMessageBox::critical(this, tr("Verify Failure"), verifyFailMessage(i, numsectors, sectorsize));
                     passfail = false;
                     _aligned_free(sectorData2);
                     sectorData2 = NULL;
