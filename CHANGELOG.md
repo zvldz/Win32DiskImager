@@ -10,6 +10,11 @@
 #### Diagnostics
 - Verify-failure message now reports both the absolute sector / byte offset **and** a relative position — e.g. `Verification failed at sector 16777216 of 30523392 (55% / 8.00 GB of 14.6 GB)`. Hitting the fail right around an even GB boundary on an SD card whose advertised capacity is much larger is the classic signature of a counterfeit card with a remapped controller; the diagnostic makes that obvious at a glance. Applied symmetrically in the GUI (`mainwindow.cpp::verifyFailMessage`) and the CLI (`cli_main.cpp::cmdVerify`).
 
+#### Allocated-only read robustness
+- The `Read Only Allocated Partitions` checkbox (GUI) and `--allocated-only` flag (CLI) now sanity-check the boot sector before parsing. Two new fallbacks:
+  - If the 0x55AA MBR signature is missing — the device has no recognisable partition table and we'd otherwise be parsing 16-byte windows of garbage. Falls back to a full disk read with an info dialog (CLI: stderr message).
+  - If a GPT protective MBR is detected (any primary entry of type 0xEE) — native GPT parsing is a planned task; same fallback behavior so the operation completes instead of producing a malformed image.
+
 #### Verify reliability
 - Verify now opens the device handle with `FILE_FLAG_NO_BUFFERING`, symmetric with the Write side. Previously the Write side bypassed the OS block cache but the Verify read went through it, so a stale page from before the just-finished Write could mask the real device data.
 - When Verify is chained from a successful Write, it now issues `FlushFileBuffers` on the volume and waits 1.5 s before starting reads. SD controllers batch-flush their internal cache and FTL state to NAND lazily; without this delay, reads close to the end of the image had a higher chance of catching the controller mid-flush — the recurring "fail just before 100%" pattern. Same behavior in GUI and CLI.

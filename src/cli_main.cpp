@@ -297,8 +297,15 @@ uint32_t readLe32(const char *p)
            (static_cast<uint32_t>(u[3]) << 24);
 }
 
-bool getAllocatedReadBytesFromMbr(HANDLE hDisk, const DiskGeometry &geometry, uint64_t &bytesToRead)
+// Returns true on success and writes the byte range to read. Returns
+// false on a true I/O error. If the disk is recognised but unsupported
+// for allocated-only (no MBR signature or a GPT protective MBR), the
+// `reason` out-string is set and the caller should fall back to a full
+// disk read instead of treating it as an error.
+bool getAllocatedReadBytesFromMbr(HANDLE hDisk, const DiskGeometry &geometry,
+                                  uint64_t &bytesToRead, std::string &reason)
 {
+    reason.clear();
     if (geometry.bytesPerSector == 0) {
         return false;
     }
@@ -311,6 +318,21 @@ bool getAllocatedReadBytesFromMbr(HANDLE hDisk, const DiskGeometry &geometry, ui
     std::vector<char> sector(static_cast<size_t>(geometry.bytesPerSector), 0);
     if (!readExact(hDisk, sector.data(), static_cast<DWORD>(geometry.bytesPerSector))) {
         return false;
+    }
+
+    // 0x55AA at the end of the boot sector is the standard MBR signature.
+    if ((uint8_t)sector[0x1FE] != 0x55 || (uint8_t)sector[0x1FF] != 0xAA) {
+        reason = "no MBR signature";
+        return false;
+    }
+    // A type 0xEE primary entry is the GPT protective MBR. Native GPT
+    // parsing is a planned task — see TODO.md. Until then we recognise
+    // the disk and tell the caller to fall back to a full read.
+    for (int i = 0; i < 4; ++i) {
+        if ((uint8_t)sector[0x1BE + 16*i + 4] == 0xEE) {
+            reason = "GPT-partitioned disk";
+            return false;
+        }
     }
 
     uint64_t numSectors = 1;
@@ -1046,13 +1068,20 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     uint64_t bytesToRead = geometry.totalBytes;
     if (allocatedOnly) {
         uint64_t allocatedBytes = 0;
-        if (!getAllocatedReadBytesFromMbr(hDisk, geometry, allocatedBytes)) {
+        std::string reason;
+        if (getAllocatedReadBytesFromMbr(hDisk, geometry, allocatedBytes, reason)) {
+            bytesToRead = allocatedBytes;
+        } else if (!reason.empty()) {
+            // Recognised but unsupported (no MBR signature / GPT) —
+            // tell the user and fall back to a full disk read.
+            std::cerr << "--allocated-only not supported: " << reason
+                      << "; falling back to full disk read." << std::endl;
+        } else {
             printWinError(L"Failed to compute allocated partition range from MBR.", GetLastError());
             cleanupDiskHandles(hVolume, hDisk);
             CloseHandle(hImage);
             return 1;
         }
-        bytesToRead = allocatedBytes;
     }
     if (requestedBytes != 0) {
         bytesToRead = (requestedBytes < bytesToRead) ? requestedBytes : bytesToRead;

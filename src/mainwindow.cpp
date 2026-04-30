@@ -953,16 +953,46 @@ void MainWindow::on_bRead_clicked()
         {
             // Read MBR partition table
             sectorData = readSectorDataFromHandle(hRawDisk, 0, 1ul, 512ul);
-            numsectors = 1ul;
-            // Read partition information
-            for (i=0ul; i<4ul; i++)
-            {
-                uint32_t partitionStartSector = *((uint32_t*) (sectorData + 0x1BE + 8 + 16*i));
-                uint32_t partitionNumSectors = *((uint32_t*) (sectorData + 0x1BE + 12 + 16*i));
-                // Set numsectors to end of last partition
-                if (partitionStartSector + partitionNumSectors > numsectors)
+            // Validate the 0x55AA MBR signature and detect GPT (protective
+            // MBR carries a type 0xEE entry). Without a valid MBR we'd be
+            // parsing 16-byte windows of garbage; for GPT, native parsing
+            // is a planned task — see TODO.md. Both cases fall back to a
+            // full disk read and inform the user.
+            const bool sigValid = sectorData != nullptr
+                                  && (uint8_t)sectorData[0x1FE] == 0x55
+                                  && (uint8_t)sectorData[0x1FF] == 0xAA;
+            bool isGpt = false;
+            if (sigValid) {
+                for (int p = 0; p < 4; ++p) {
+                    if ((uint8_t)sectorData[0x1BE + 16*p + 4] == 0xEE) {
+                        isGpt = true;
+                        break;
+                    }
+                }
+            }
+            if (!sigValid || isGpt) {
+                QMessageBox::information(this, tr("Allocated-only fallback"),
+                    isGpt
+                        ? tr("GPT-partitioned disk detected. 'Read Only Allocated "
+                             "Partitions' currently parses MBR tables only — "
+                             "falling back to a full disk read.")
+                        : tr("No valid MBR signature on this device. 'Read Only "
+                             "Allocated Partitions' falls back to a full disk read."));
+                _aligned_free(sectorData);
+                sectorData = NULL;
+                // numsectors stays at the full-disk value from getNumberOfSectors.
+            } else {
+                numsectors = 1ul;
+                // Walk the four primary partition entries; numsectors becomes
+                // the end LBA of the highest-ending partition.
+                for (i=0ul; i<4ul; i++)
                 {
-                    numsectors = partitionStartSector + partitionNumSectors;
+                    uint32_t partitionStartSector = *((uint32_t*) (sectorData + 0x1BE + 8 + 16*i));
+                    uint32_t partitionNumSectors = *((uint32_t*) (sectorData + 0x1BE + 12 + 16*i));
+                    if (partitionStartSector + partitionNumSectors > numsectors)
+                    {
+                        numsectors = partitionStartSector + partitionNumSectors;
+                    }
                 }
             }
         }
