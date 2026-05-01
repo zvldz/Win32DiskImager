@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-XX-XX
+## 2026-05-01
 
 ### Version 2.2.3
 
