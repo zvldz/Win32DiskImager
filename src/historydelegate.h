@@ -10,6 +10,9 @@
 #define HISTORYDELEGATE_H
 
 #include <QStyledItemDelegate>
+#include <QPointer>
+
+class QAbstractItemView;
 
 class HistoryItemDelegate : public QStyledItemDelegate
 {
@@ -17,17 +20,21 @@ class HistoryItemDelegate : public QStyledItemDelegate
 public:
     explicit HistoryItemDelegate(QObject *parent = nullptr);
 
+    // Sets this as the view's delegate AND installs an event filter on
+    // its viewport so we can intercept the click before QComboBox
+    // swallows it as a row-selection.
+    void attachTo(QAbstractItemView *view);
+
     void paint(QPainter *p, const QStyleOptionViewItem &option,
                const QModelIndex &index) const override;
-    bool editorEvent(QEvent *event, QAbstractItemModel *model,
-                     const QStyleOptionViewItem &option,
-                     const QModelIndex &index) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 signals:
     void removeRequested(int row);
 
 private:
-    static QRect closeButtonRect(const QStyleOptionViewItem &option);
+    static QRect closeButtonRect(const QRect &rowRect);
+    QPointer<QAbstractItemView> m_view;
 };
 
 #endif // HISTORYDELEGATE_H

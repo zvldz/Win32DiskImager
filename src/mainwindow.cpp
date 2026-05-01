@@ -183,7 +183,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             this, [this](const QString &) { setReadWriteButtonState(); });
     // ✕ button on each history dropdown row → confirm + remove.
     auto *historyDelegate = new HistoryItemDelegate(this);
-    leFile->view()->setItemDelegate(historyDelegate);
+    historyDelegate->attachTo(leFile->view());
     connect(historyDelegate, &HistoryItemDelegate::removeRequested,
             this, &MainWindow::onHistoryRemoveRequested);
     loadImageFileHistory();

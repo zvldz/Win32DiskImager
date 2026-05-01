@@ -4,19 +4,32 @@
 
 #include "historydelegate.h"
 
-#include <QPainter>
+#include <QAbstractItemView>
 #include <QMouseEvent>
+#include <QPainter>
 
 HistoryItemDelegate::HistoryItemDelegate(QObject *parent)
     : QStyledItemDelegate(parent)
 {}
 
-QRect HistoryItemDelegate::closeButtonRect(const QStyleOptionViewItem &option)
+void HistoryItemDelegate::attachTo(QAbstractItemView *view)
+{
+    m_view = view;
+    if (!view) return;
+    view->setItemDelegate(this);
+    // QComboBox installs its own event filter on the popup's viewport
+    // and treats any mouse press there as a row-selection. Intercept
+    // the press *before* it gets there so a click on our ✕ doesn't
+    // double as a "select this entry" action.
+    view->viewport()->installEventFilter(this);
+}
+
+QRect HistoryItemDelegate::closeButtonRect(const QRect &rowRect)
 {
     // Square area on the right edge, sized to the row height.
-    const int sz = option.rect.height();
-    return QRect(option.rect.right() - sz + 1, option.rect.top(),
-                 sz - 1, option.rect.height());
+    const int sz = rowRect.height();
+    return QRect(rowRect.right() - sz + 1, rowRect.top(),
+                 sz - 1, rowRect.height());
 }
 
 void HistoryItemDelegate::paint(QPainter *p,
@@ -31,7 +44,7 @@ void HistoryItemDelegate::paint(QPainter *p,
     QStyledItemDelegate::paint(p, opt, index);
 
     // Render a muted ✕ glyph on the right of the row.
-    const QRect r = closeButtonRect(option);
+    const QRect r = closeButtonRect(option.rect);
     p->save();
     QPen pen = p->pen();
     pen.setColor(option.palette.color(QPalette::Disabled, QPalette::WindowText));
@@ -40,23 +53,27 @@ void HistoryItemDelegate::paint(QPainter *p,
     p->restore();
 }
 
-bool HistoryItemDelegate::editorEvent(QEvent *event,
-                                      QAbstractItemModel *model,
-                                      const QStyleOptionViewItem &option,
-                                      const QModelIndex &index)
+bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
 {
-    // Intercept clicks that land on the ✕: emit, don't let the click
-    // propagate to row-selection.
-    if (event->type() == QEvent::MouseButtonRelease ||
-        event->type() == QEvent::MouseButtonPress)
-    {
-        auto *me = static_cast<QMouseEvent *>(event);
-        if (closeButtonRect(option).contains(me->pos())) {
-            if (event->type() == QEvent::MouseButtonRelease) {
-                emit removeRequested(index.row());
+    if (m_view && obj == m_view->viewport()) {
+        // Catch press AND release that land on the ✕. We swallow both
+        // so QComboBox doesn't see a "click", which would otherwise
+        // close the popup and select the entry being deleted.
+        if (event->type() == QEvent::MouseButtonPress ||
+            event->type() == QEvent::MouseButtonRelease)
+        {
+            auto *me = static_cast<QMouseEvent *>(event);
+            const QModelIndex idx = m_view->indexAt(me->pos());
+            if (idx.isValid()) {
+                const QRect rowRect = m_view->visualRect(idx);
+                if (closeButtonRect(rowRect).contains(me->pos())) {
+                    if (event->type() == QEvent::MouseButtonRelease) {
+                        emit removeRequested(idx.row());
+                    }
+                    return true;
+                }
             }
-            return true;  // consume both press and release on the ✕
         }
     }
-    return QStyledItemDelegate::editorEvent(event, model, option, index);
+    return QStyledItemDelegate::eventFilter(obj, event);
 }
