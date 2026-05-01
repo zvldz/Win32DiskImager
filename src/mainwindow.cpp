@@ -43,7 +43,30 @@
 #include "iopipeline.h"
 #include "keepawake.h"
 #include "rawimagereader.h"
+#include "updatechecker.h"
 #include "mainwindow.h"
+
+#include <QDateTime>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFile>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QProcess>
+#include <QProgressDialog>
+#include <QStandardPaths>
+#include <QUrl>
+
+// Inno Setup uninstall key for our AppId — see setup.iss. We use it to
+// distinguish an installed deployment (InstallLocation matches our exe
+// dir → full auto-update path) from a standalone zip-extracted one.
+static const char kUninstallKey[] =
+    "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{3DFFA293-DF2C-4B23-92E5-3433BDC310E1}_is1";
+// System-menu command id for our injected "Check for Updates..." entry.
+// Values 0xF000..0xFFFF are reserved by the system for standard
+// SC_* commands; we stay well below that range.
+static const unsigned int kCheckUpdatesSysCommandId = 0x0100;
 #include "elapsedtimer.h"
 
 #include <thread>
@@ -202,6 +225,36 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         QString fileLocation = QApplication::arguments().at(1);
         QFileInfo fileInfo(fileLocation);
         leFile->setEditText(fileInfo.absoluteFilePath());
+    }
+
+    // Update checker — wires both manual ("Check for Updates..." in the
+    // system menu, opened with right-click on the title bar) and the
+    // weekly background poll into the same UpdateChecker instance.
+    m_updateChecker = new UpdateChecker(this);
+    connect(m_updateChecker, &UpdateChecker::updateAvailable,
+            this, &MainWindow::onUpdateAvailable);
+    connect(m_updateChecker, &UpdateChecker::noUpdateAvailable,
+            this, &MainWindow::onNoUpdateAvailable);
+    connect(m_updateChecker, &UpdateChecker::checkFailed,
+            this, &MainWindow::onUpdateCheckFailed);
+
+    // Append "Check for Updates..." into the window's native system menu.
+    if (HMENU sysMenu = GetSystemMenu(reinterpret_cast<HWND>(winId()), FALSE)) {
+        AppendMenuW(sysMenu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(sysMenu, MF_STRING, kCheckUpdatesSysCommandId,
+                    L"Check for Updates...");
+    }
+
+    // Auto-check at most once a week. Stays silent on no-update / failure.
+    {
+        QSettings s("HKEY_CURRENT_USER\\Software\\Win32DiskImager",
+                    QSettings::NativeFormat);
+        const qint64 last = s.value("Settings/LastUpdateCheck", 0).toLongLong();
+        const qint64 now = QDateTime::currentSecsSinceEpoch();
+        if (now - last > 7 * 24 * 60 * 60) {
+            m_updateChecker->check(/*forced=*/false);
+            s.setValue("Settings/LastUpdateCheck", now);
+        }
     }
     // Add supported hash types.
     cboxHashType->addItem("MD5",QVariant(QCryptographicHash::Md5));
@@ -1528,6 +1581,143 @@ char FirstDriveFromMask (ULONG unitmask)
     return (i + 'A');
 }
 
+bool MainWindow::isInstalledHere() const
+{
+    QSettings reg(kUninstallKey, QSettings::NativeFormat);
+    const QString loc = reg.value("InstallLocation").toString();
+    if (loc.isEmpty()) return false;
+    const QString here = QDir::cleanPath(QCoreApplication::applicationDirPath());
+    return QDir::cleanPath(loc).compare(here, Qt::CaseInsensitive) == 0;
+}
+
+void MainWindow::onUpdateAvailable(const QString &tag, const QString &installerUrl)
+{
+    const QString releasesPage = QString(
+        "https://github.com/zvldz/Win32DiskImager/releases/tag/v%1").arg(tag);
+
+    if (isInstalledHere() && !installerUrl.isEmpty()) {
+        // Installed via the Inno Setup installer — offer the in-app
+        // download + auto-launch flow.
+        const QString text = tr("A new version is available: <b>%1</b><br>"
+                                "Current version: %2<br><br>"
+                                "Download and install now?")
+                                 .arg(tag, QStringLiteral(APP_VERSION));
+        QMessageBox box(QMessageBox::Question, tr("Update available"), text,
+                        QMessageBox::Yes | QMessageBox::No, this);
+        box.setTextFormat(Qt::RichText);
+        if (box.exec() == QMessageBox::Yes) {
+            downloadAndRunInstaller(installerUrl, tag);
+        }
+        return;
+    }
+
+    // Standalone deployment (zip-extracted, or missing installer asset)
+    // — point the user at the GitHub release page; we won't try to
+    // overwrite an arbitrary install layout from inside the app.
+    const QString text = tr("A new version is available: <b>%1</b><br>"
+                            "Current version: %2<br><br>"
+                            "Open the release page on GitHub?")
+                             .arg(tag, QStringLiteral(APP_VERSION));
+    QMessageBox box(QMessageBox::Information, tr("Update available"), text,
+                    QMessageBox::Yes | QMessageBox::No, this);
+    box.setTextFormat(Qt::RichText);
+    if (box.exec() == QMessageBox::Yes) {
+        QDesktopServices::openUrl(QUrl(releasesPage));
+    }
+}
+
+void MainWindow::onNoUpdateAvailable()
+{
+    const QString text = tr("You are running the latest version "
+                            "(<b>%1</b>).<br><br>"
+                            "<a href=\"https://github.com/zvldz/Win32DiskImager/releases\">"
+                            "View all releases on GitHub</a>")
+                             .arg(QStringLiteral(APP_VERSION));
+    QMessageBox box(QMessageBox::Information, tr("Up to date"), text,
+                    QMessageBox::Ok, this);
+    box.setTextFormat(Qt::RichText);
+    box.exec();
+}
+
+void MainWindow::onUpdateCheckFailed(const QString &error)
+{
+    QMessageBox::warning(this, tr("Update check failed"),
+                         tr("Could not check for updates:\n%1").arg(error));
+}
+
+void MainWindow::downloadAndRunInstaller(const QString &url, const QString &version)
+{
+    const QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    const QString outPath = QDir(tempDir).filePath(
+        QString("Win32DiskImager-setup-%1.exe").arg(version));
+
+    auto *file = new QFile(outPath);
+    if (!file->open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, tr("Download failed"),
+                             tr("Could not write to %1").arg(outPath));
+        delete file;
+        return;
+    }
+
+    auto *progress = new QProgressDialog(
+        tr("Downloading installer..."), tr("Cancel"), 0, 100, this);
+    progress->setWindowModality(Qt::WindowModal);
+    progress->setAutoClose(false);
+    progress->setMinimumDuration(0);
+
+    QNetworkRequest req((QUrl(url)));
+    req.setHeader(QNetworkRequest::UserAgentHeader,
+                  QByteArray("Win32DiskImager-UpdateChecker"));
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    auto *nam = new QNetworkAccessManager(this);
+    auto *reply = nam->get(req);
+
+    connect(reply, &QNetworkReply::downloadProgress, progress,
+            [progress](qint64 received, qint64 total) {
+                if (total > 0) {
+                    progress->setValue(int((received * 100) / total));
+                }
+            });
+    connect(reply, &QNetworkReply::readyRead, file,
+            [reply, file]() { file->write(reply->readAll()); });
+    connect(progress, &QProgressDialog::canceled, reply, &QNetworkReply::abort);
+
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, file, progress, outPath, nam]() {
+                file->write(reply->readAll());
+                file->flush();
+                file->close();
+                progress->close();
+                progress->deleteLater();
+                const bool aborted = (reply->error() == QNetworkReply::OperationCanceledError);
+                const bool ok = (reply->error() == QNetworkReply::NoError);
+                reply->deleteLater();
+                nam->deleteLater();
+                if (!ok) {
+                    QFile::remove(outPath);
+                    delete file;
+                    if (!aborted) {
+                        QMessageBox::warning(this, tr("Download failed"),
+                                             tr("Could not download the installer."));
+                    }
+                    return;
+                }
+                delete file;
+                // Hand off to the installer and quit so it can replace the
+                // running exe. /SILENT or /VERYSILENT could be passed here
+                // if we wanted unattended; keeping it interactive so the
+                // user can confirm the install path.
+                if (!QProcess::startDetached(outPath, QStringList())) {
+                    QMessageBox::warning(this, tr("Update failed"),
+                                         tr("Could not launch the installer."));
+                    return;
+                }
+                QApplication::quit();
+            });
+}
+
 // register to receive notifications when USB devices are inserted or removed
 // adapted from http://www.known-issues.net/qt/qt-detect-event-windows.html
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -1538,6 +1728,13 @@ bool MainWindow::nativeEvent(const QByteArray &type, void *vMsg, long *result)
 {
     Q_UNUSED(type);
     MSG *msg = (MSG*)vMsg;
+    if (msg->message == WM_SYSCOMMAND
+        && (msg->wParam & 0xFFF0) == kCheckUpdatesSysCommandId)
+    {
+        if (m_updateChecker) m_updateChecker->check(/*forced=*/true);
+        if (result) *result = 0;
+        return true;
+    }
     if(msg->message == WM_DEVICECHANGE)
     {
         PDEV_BROADCAST_HDR lpdb = (PDEV_BROADCAST_HDR)msg->lParam;

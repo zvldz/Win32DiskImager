@@ -70,6 +70,10 @@ private slots:
         // entry from both the combo and the registry-backed list.
         // Wired up to HistoryItemDelegate::removeRequested.
         void onHistoryRemoveRequested(int row);
+        // UpdateChecker signal handlers — see updatechecker.h.
+        void onUpdateAvailable(const QString &tag, const QString &installerUrl);
+        void onNoUpdateAvailable();
+        void onUpdateCheckFailed(const QString &error);
 protected:
         MainWindow(QWidget* = NULL);
 private:
@@ -77,6 +81,13 @@ private:
         // find attached devices
         void getLogicalDrives();
         void setReadWriteButtonState();
+        // True iff we were launched from the directory the Inno Setup
+        // installer recorded as InstallLocation in HKLM. False for
+        // standalone (zip-extract) deployments — those get a "open
+        // GitHub release page" flow instead of an in-app installer
+        // download.
+        bool isInstalledHere() const;
+        void downloadAndRunInstaller(const QString &url, const QString &version);
         // Closes any open hVolume / hFile / hRawDisk (with lock release on
         // hVolume) and resets the UI back to idle. Replaces the long
         // identical cleanup blocks that used to be duplicated in every
@@ -110,6 +121,9 @@ private:
         // re-opening, so nothing (Google Drive / indexer / antivirus) gets a
         // window to latch onto the freshly-written volume.
         bool m_verifyInheritsLock = false;
+        // Set up in the constructor; lives for the whole window lifetime
+        // and emits update{Available,NotAvailable,Failed}.
+        class UpdateChecker *m_updateChecker = nullptr;
         QClipboard *clipboard;
         void generateHash(char *filename, int hashish);
         QString myHomeDir;

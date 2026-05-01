@@ -29,7 +29,7 @@ UI_DIR = $$OUT_PWD/ui
 QMAKE_LFLAGS += -static -static-libgcc -static-libstdc++
 QMAKE_CXXFLAGS += -Wall -Wextra
 DEFINES -= UNICODE
-QT += widgets
+QT += widgets network
 contains(QT_CONFIG, static) {
     # MSYS2 qt6-static auto-includes the standard Windows plugins
     # (qwindows / qgif / qico / qjpeg / qnetworklistmanager /
@@ -58,7 +58,8 @@ HEADERS += disk.h\
            imagereader.h \
            rawimagereader.h \
            gzimagereader.h \
-           xzimagereader.h
+           xzimagereader.h \
+           updatechecker.h
 
 FORMS += mainwindow.ui
 
@@ -71,7 +72,8 @@ SOURCES += disk.cpp\
            imagereader.cpp \
            rawimagereader.cpp \
            gzimagereader.cpp \
-           xzimagereader.cpp
+           xzimagereader.cpp \
+           updatechecker.cpp
 
 # zlib + liblzma are pulled in for on-the-fly .gz / .xz image decompression.
 LIBS += -lz -llzma
