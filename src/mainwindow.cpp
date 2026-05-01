@@ -44,6 +44,7 @@
 #include "keepawake.h"
 #include "rawimagereader.h"
 #include "updatechecker.h"
+#include "version.h"
 #include "mainwindow.h"
 
 #include <QDateTime>
