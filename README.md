@@ -150,3 +150,10 @@ Output:
   transitively by static Qt) and the full LGPL compliance statement are
   documented in `THIRD_PARTY_LICENSES.md`.
 - Additional legal text: `License.txt`
+
+## Acknowledgments
+
+This project is a fork of a fork:
+- Original upstream: [Win32 Disk Imager](https://sourceforge.net/projects/win32diskimager/) by Justin Davis and the ImageWriter contributors (2009-2017).
+- Intermediate fork: [Win32DiskImager — Native Version](https://github.com/ripper121/Win32DiskImager) by Stefan S. ([ripper121](https://github.com/ripper121)), which modernised the build for Qt 6 / MinGW and added Windows 10/11 compatibility plus several reliability fixes.
+- This fork continues from the Native Version with further GUI / CLI improvements (compressed image input, pipelined I/O, auto-verify, auto-eject, auto-update checker, ...). Full provenance and license attribution: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
