@@ -2,6 +2,14 @@
 
 ## 2026-05-01
 
+### Version 2.2.5
+
+Test release. Used to verify that the auto-update flow shipped in
+2.2.4 correctly downloads `Win32DiskImager-setup-2.2.5.exe` and
+hands off to the installer.
+
+## 2026-05-01
+
 ### Version 2.2.4
 
 #### GUI
