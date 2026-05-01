@@ -4,6 +4,9 @@
 
 ### Version 2.2.2
 
+#### GUI
+- Image File history dropdown gets a small ✕ on the right side of every entry. Clicking it asks for confirmation and removes the entry from both the combo and `HKCU\Software\Win32DiskImager\ImageFileHistory`. New `HistoryItemDelegate` (`src/historydelegate.{h,cpp}`) installed on the combo's view; the click is intercepted in `editorEvent`, so it doesn't fall through to row-selection.
+
 #### Convenience
 - After a successful Write (or chained Write + Verify), the volume is auto-ejected via `IOCTL_STORAGE_EJECT_MEDIA` so the card shows as "Safely Removed" in Windows — no need to click the tray icon before pulling it. Standalone Read and standalone Verify are left untouched (the user may still want the card mounted afterwards). Eject is best-effort — silent on bus types that don't support it. Helper added as `ejectVolume()` in `disk.h`. Both success dialogs ("Write Successful", "Write & Verify Successful") now also tell the user "Card can be safely removed." in italics; the CLI prints the same line.
 

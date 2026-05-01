@@ -38,6 +38,7 @@
 #include <sstream>
 
 #include "disk.h"
+#include "historydelegate.h"
 #include "imagereader.h"
 #include "iopipeline.h"
 #include "keepawake.h"
@@ -180,6 +181,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     // become enabled.
     connect(leFile, &QComboBox::editTextChanged,
             this, [this](const QString &) { setReadWriteButtonState(); });
+    // ✕ button on each history dropdown row → confirm + remove.
+    auto *historyDelegate = new HistoryItemDelegate(this);
+    leFile->view()->setItemDelegate(historyDelegate);
+    connect(historyDelegate, &HistoryItemDelegate::removeRequested,
+            this, &MainWindow::onHistoryRemoveRequested);
     loadImageFileHistory();
     elapsed_timer = new ElapsedTimer();
     statusbar->addPermanentWidget(elapsed_timer);   // "addpermanent" puts it on the RHS of the statusbar
@@ -326,6 +332,39 @@ void MainWindow::addImageFileToHistory(const QString &path)
         leFile->addItem(entry);
     }
     leFile->setEditText(preserved);
+}
+
+void MainWindow::onHistoryRemoveRequested(int row)
+{
+    if (row < 0 || row >= leFile->count()) {
+        return;
+    }
+    const QString path = leFile->itemText(row);
+    // Close the popup before showing the modal dialog so the user
+    // sees the question against the main window, not stacked over the
+    // dropdown.
+    leFile->hidePopup();
+    if (QMessageBox::question(this, tr("Remove from history?"),
+            tr("Remove this entry from the Image File history?\n\n%1").arg(path),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No) != QMessageBox::Yes) {
+        return;
+    }
+
+    // Drop the row from the combo without disturbing the edit text.
+    QSignalBlocker blocker(leFile);
+    const QString preserved = leFile->currentText();
+    leFile->removeItem(row);
+    leFile->setEditText(preserved);
+
+    // Persist the trimmed list back to the registry.
+    QSettings userSettings("HKEY_CURRENT_USER\\Software\\Win32DiskImager",
+                           QSettings::NativeFormat);
+    QStringList history;
+    for (int i = 0; i < leFile->count(); ++i) {
+        history.append(leFile->itemText(i));
+    }
+    userSettings.setValue("ImageFileHistory/Items", history);
 }
 
 void MainWindow::initializeHomeDir()

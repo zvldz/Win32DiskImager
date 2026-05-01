@@ -66,6 +66,10 @@ class MainWindow : public QMainWindow, public Ui::MainWindow
 private slots:
         void on_cboxHashType_IdxChg();
         void on_bHashGen_clicked();
+        // Confirms with the user, then removes one Image File history
+        // entry from both the combo and the registry-backed list.
+        // Wired up to HistoryItemDelegate::removeRequested.
+        void onHistoryRemoveRequested(int row);
 protected:
         MainWindow(QWidget* = NULL);
 private:

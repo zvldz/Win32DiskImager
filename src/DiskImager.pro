@@ -54,6 +54,7 @@ HEADERS += disk.h\
            mainwindow.h\
            droppablecombobox.h \
            elapsedtimer.h \
+           historydelegate.h \
            imagereader.h \
            rawimagereader.h \
            gzimagereader.h \
@@ -66,6 +67,7 @@ SOURCES += disk.cpp\
            mainwindow.cpp\
            droppablecombobox.cpp \
            elapsedtimer.cpp \
+           historydelegate.cpp \
            imagereader.cpp \
            rawimagereader.cpp \
            gzimagereader.cpp \
