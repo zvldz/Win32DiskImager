@@ -4,6 +4,9 @@
 
 ### Version 2.3.0
 
+#### Build / Auto-update
+- CI builds that aren't from a tag push (manual `workflow_dispatch` / dev artifacts) now bake a `-dev` SemVer pre-release suffix into the binary — the running exe reports `2.3.0-dev` instead of `2.3.0`, and the installer asset is named accordingly. The update checker's version comparison was upgraded to SemVer rules: numeric core first, and on a tie a bare version ranks above one carrying a pre-release suffix. Net effect: a dev build correctly identifies a freshly published `2.3.0` release as newer than itself and offers the update, instead of silently treating "same numbers" as "already up to date".
+
 ## 2026-05-01
 
 ### Version 2.2.5
