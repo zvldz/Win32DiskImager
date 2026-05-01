@@ -81,12 +81,6 @@ private:
         // find attached devices
         void getLogicalDrives();
         void setReadWriteButtonState();
-        // True iff we were launched from the directory the Inno Setup
-        // installer recorded as InstallLocation in HKLM. False for
-        // standalone (zip-extract) deployments — those get a "open
-        // GitHub release page" flow instead of an in-app installer
-        // download.
-        bool isInstalledHere() const;
         void downloadAndRunInstaller(const QString &url, const QString &version);
         // Closes any open hVolume / hFile / hRawDisk (with lock release on
         // hVolume) and resets the UI back to idle. Replaces the long

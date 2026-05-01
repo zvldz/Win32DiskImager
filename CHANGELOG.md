@@ -2,6 +2,13 @@
 
 ## 2026-05-01
 
+### Version 2.2.4
+
+#### GUI
+- Auto-update now downloads and runs the installer in one step. Confirming the "Update available" dialog streams `Win32DiskImager-setup-X.Y.Z.exe` to `%TEMP%`, hands off to Inno Setup and quits so the install can proceed in place. Inno Setup prompts for the install location itself, so the same flow works whether the running copy was previously installer-deployed or extracted from a zip. If a release has no installer asset attached, the dialog falls back to opening the GitHub release page in the browser.
+
+## 2026-05-01
+
 ### Version 2.2.3
 
 #### CLI

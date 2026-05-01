@@ -59,11 +59,6 @@
 #include <QStandardPaths>
 #include <QUrl>
 
-// Inno Setup uninstall key for our AppId — see setup.iss. We use it to
-// distinguish an installed deployment (InstallLocation matches our exe
-// dir → full auto-update path) from a standalone zip-extracted one.
-static const char kUninstallKey[] =
-    "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{3DFFA293-DF2C-4B23-92E5-3433BDC310E1}_is1";
 // System-menu command id for our injected "Check for Updates..." entry.
 // Values 0xF000..0xFFFF are reserved by the system for standard
 // SC_* commands; we stay well below that range.
@@ -1582,48 +1577,39 @@ char FirstDriveFromMask (ULONG unitmask)
     return (i + 'A');
 }
 
-bool MainWindow::isInstalledHere() const
-{
-    QSettings reg(kUninstallKey, QSettings::NativeFormat);
-    const QString loc = reg.value("InstallLocation").toString();
-    if (loc.isEmpty()) return false;
-    const QString here = QDir::cleanPath(QCoreApplication::applicationDirPath());
-    return QDir::cleanPath(loc).compare(here, Qt::CaseInsensitive) == 0;
-}
-
 void MainWindow::onUpdateAvailable(const QString &tag, const QString &installerUrl)
 {
-    const QString releasesPage = QString(
-        "https://github.com/zvldz/Win32DiskImager/releases/tag/v%1").arg(tag);
-
-    if (isInstalledHere() && !installerUrl.isEmpty()) {
-        // Installed via the Inno Setup installer — offer the in-app
-        // download + auto-launch flow.
+    // Always offer the in-app download + auto-launch flow. Inno Setup
+    // is happy to be invoked over an existing install or as a fresh
+    // install — it presents its own path picker either way. The only
+    // case we can't handle is "release has no installer asset", in
+    // which case fall back to opening the release page in a browser.
+    if (installerUrl.isEmpty()) {
+        const QString page = QString(
+            "https://github.com/zvldz/Win32DiskImager/releases/tag/v%1").arg(tag);
         const QString text = tr("A new version is available: <b>%1</b><br>"
                                 "Current version: %2<br><br>"
-                                "Download and install now?")
+                                "No installer asset is attached to this release. "
+                                "Open the release page on GitHub?")
                                  .arg(tag, QString::fromLatin1(APP_VERSION));
-        QMessageBox box(QMessageBox::Question, tr("Update available"), text,
+        QMessageBox box(QMessageBox::Information, tr("Update available"), text,
                         QMessageBox::Yes | QMessageBox::No, this);
         box.setTextFormat(Qt::RichText);
         if (box.exec() == QMessageBox::Yes) {
-            downloadAndRunInstaller(installerUrl, tag);
+            QDesktopServices::openUrl(QUrl(page));
         }
         return;
     }
 
-    // Standalone deployment (zip-extracted, or missing installer asset)
-    // — point the user at the GitHub release page; we won't try to
-    // overwrite an arbitrary install layout from inside the app.
     const QString text = tr("A new version is available: <b>%1</b><br>"
                             "Current version: %2<br><br>"
-                            "Open the release page on GitHub?")
+                            "Download and install now?")
                              .arg(tag, QString::fromLatin1(APP_VERSION));
-    QMessageBox box(QMessageBox::Information, tr("Update available"), text,
+    QMessageBox box(QMessageBox::Question, tr("Update available"), text,
                     QMessageBox::Yes | QMessageBox::No, this);
     box.setTextFormat(Qt::RichText);
     if (box.exec() == QMessageBox::Yes) {
-        QDesktopServices::openUrl(QUrl(releasesPage));
+        downloadAndRunInstaller(installerUrl, tag);
     }
 }
 
