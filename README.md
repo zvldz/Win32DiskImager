@@ -23,7 +23,8 @@ This repository contains:
 - System idle-sleep suppressed for the duration of Write / Read / Verify, so a multi-minute SD card operation isn't interrupted by a laptop's sleep timer.
 - Device dropdown / `list` output shows each removable target with its capacity (`[E:\] 58GB` / `E: (removable, PhysicalDrive2, 29.3 GB)`).
 - CLI progress with ASCII bar, MB/s and ETA; GUI progress bar reflects actual sectors written even for compressed sources of known size.
-- Recently-used **Image File history** in the GUI (editable drop-down, up to 20 entries; saved on successful Read / Write, persisted in `HKCU\Software\Win32DiskImager\ImageFileHistory`).
+- Recently-used **Image File history** in the GUI (editable drop-down, up to 20 entries; saved on successful Read / Write, persisted in `HKCU\Software\Win32DiskImager\ImageFileHistory`). Each entry has a ✕ button that removes it after confirmation.
+- **Auto-update checker** in the GUI: weekly background poll against the GitHub releases API, plus an on-demand `Check for Updates...` entry in the window's system menu (right-click on the title bar). For the installer-deployed app the updater downloads `Win32DiskImager-setup-X.Y.Z.exe` and hands off; for a standalone (zip-extracted) deployment it just opens the GitHub release page.
 - Image hash generation in the GUI (MD5, SHA1, SHA256).
 - Optional read limit in CLI (`--bytes`) and allocated-only read mode (`--allocated-only`, MBR-based).
 - Multi-language UI translations (`src/lang/*.ts`).
