@@ -4,8 +4,10 @@
 
 #include <windows.h>
 #include <winioctl.h>
+#include <winhttp.h>
 
 #include <algorithm>
+#include <sstream>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -94,11 +96,13 @@ void printUsage()
     std::cout << "  Win32DiskImager-cli.exe write  --device E: --image C:\\path\\image.img[.gz|.xz] [--no-verify]\n";
     std::cout << "  Win32DiskImager-cli.exe read   --device E: --image C:\\path\\backup.img [--bytes N] [--allocated-only]\n";
     std::cout << "  Win32DiskImager-cli.exe verify --device E: --image C:\\path\\image.img[.gz|.xz]\n";
+    std::cout << "  Win32DiskImager-cli.exe check-updates\n";
     std::cout << "\n";
     std::cout << "write / verify accept plain .img, gzipped .img.gz and xz-compressed .img.xz.\n";
     std::cout << "Format is detected by magic bytes, not file extension.\n";
     std::cout << "\n";
     std::cout << "`write` runs a verify pass afterwards by default; pass --no-verify to skip it.\n";
+    std::cout << "`check-updates` queries the GitHub releases API and prints the latest tag.\n";
 }
 
 std::wstring formatWinError(DWORD code)
@@ -829,6 +833,125 @@ bool isWritableTarget(UINT driveType, BYTE busType)
     return false;
 }
 
+// Compares two dotted version strings numerically.
+// "2.2.10" > "2.2.9" — text-sort would get this wrong. Returns
+// negative / zero / positive.
+int compareVersionStrings(const std::string &a, const std::string &b)
+{
+    auto split = [](const std::string &s) {
+        std::vector<int> v;
+        std::stringstream ss(s);
+        std::string tok;
+        while (std::getline(ss, tok, '.')) v.push_back(std::atoi(tok.c_str()));
+        return v;
+    };
+    const auto av = split(a), bv = split(b);
+    const size_t n = std::max(av.size(), bv.size());
+    for (size_t i = 0; i < n; ++i) {
+        const int x = (i < av.size()) ? av[i] : 0;
+        const int y = (i < bv.size()) ? bv[i] : 0;
+        if (x != y) return x - y;
+    }
+    return 0;
+}
+
+// Pulls the latest release tag from the GitHub REST API via WinHTTP,
+// strips the leading "v" and writes it to outTag. Returns false (and
+// sets a human-readable error in outErr) on any transport / parse
+// failure. Stays Qt-free so the CLI binary keeps the same dependency
+// footprint as the rest of cli_main.cpp.
+bool fetchLatestReleaseTag(std::string &outTag, std::string &outErr)
+{
+    outTag.clear();
+    outErr.clear();
+
+    HINTERNET hSession = WinHttpOpen(L"Win32DiskImager-cli",
+                                     WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                     WINHTTP_NO_PROXY_NAME,
+                                     WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) { outErr = "WinHttpOpen failed"; return false; }
+    HINTERNET hConnect = WinHttpConnect(hSession, L"api.github.com",
+                                        INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (!hConnect) {
+        outErr = "WinHttpConnect failed";
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+    HINTERNET hRequest = WinHttpOpenRequest(
+        hConnect, L"GET",
+        L"/repos/zvldz/Win32DiskImager/releases/latest",
+        nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+        WINHTTP_FLAG_SECURE);
+    if (!hRequest) {
+        outErr = "WinHttpOpenRequest failed";
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+    // GitHub rejects requests without these.
+    const wchar_t *headers =
+        L"Accept: application/vnd.github+json\r\n";
+    BOOL ok = WinHttpSendRequest(hRequest, headers, (DWORD)-1L,
+                                 WINHTTP_NO_REQUEST_DATA, 0, 0, 0)
+              && WinHttpReceiveResponse(hRequest, nullptr);
+    if (!ok) {
+        outErr = "WinHttp send/receive failed";
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+    std::string body;
+    DWORD avail = 0;
+    while (WinHttpQueryDataAvailable(hRequest, &avail) && avail > 0) {
+        std::vector<char> buf(avail);
+        DWORD read = 0;
+        if (!WinHttpReadData(hRequest, buf.data(), avail, &read)) break;
+        body.append(buf.data(), read);
+    }
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+
+    // Tiny ad-hoc JSON pluck for "tag_name": "...".
+    const std::string key = "\"tag_name\"";
+    size_t p = body.find(key);
+    if (p == std::string::npos) {
+        outErr = "Response missing tag_name";
+        return false;
+    }
+    p = body.find('"', p + key.size() + 1);  // first " after the colon
+    if (p == std::string::npos) { outErr = "Malformed tag_name"; return false; }
+    const size_t q = body.find('"', p + 1);
+    if (q == std::string::npos) { outErr = "Malformed tag_name"; return false; }
+    std::string tag = body.substr(p + 1, q - p - 1);
+    if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) tag.erase(0, 1);
+    if (tag.empty()) { outErr = "Empty tag"; return false; }
+    outTag = tag;
+    return true;
+}
+
+int cmdCheckUpdates()
+{
+    std::string tag, err;
+    if (!fetchLatestReleaseTag(tag, err)) {
+        std::cerr << "Could not check for updates: " << err << std::endl;
+        return 1;
+    }
+    const int cmp = compareVersionStrings(tag, APP_VERSION);
+    if (cmp <= 0) {
+        std::cout << "You are running the latest version (" APP_VERSION ")." << std::endl;
+        return 0;
+    }
+    std::cout << "A new version is available." << std::endl;
+    std::cout << "  Latest:   " << tag << std::endl;
+    std::cout << "  Current:  " APP_VERSION << std::endl;
+    std::cout << "  Download: https://github.com/zvldz/Win32DiskImager/releases/tag/v"
+              << tag << std::endl;
+    return 0;
+}
+
 int cmdList()
 {
     const DWORD mask = GetLogicalDrives();
@@ -1396,6 +1519,13 @@ bool parseArgs(int argc, char *argv[], CliOptions &opt)
             opt.allocatedOnly = true;
             continue;
         }
+        // Accept --check-updates as a synonym for the bare command, so
+        // both `Win32DiskImager-cli check-updates` and the more familiar
+        // `--check-updates` flag work.
+        if (a == "--check-updates") {
+            opt.command = "check-updates";
+            continue;
+        }
 
         if (!a.empty() && a[0] == '-') {
             std::cerr << "Unknown option: " << a << std::endl;
@@ -1445,6 +1575,9 @@ int main(int argc, char *argv[])
 
     if (opt.command == "list") {
         return cmdList();
+    }
+    if (opt.command == "check-updates") {
+        return cmdCheckUpdates();
     }
 
     if (!isRunningAsAdmin()) {

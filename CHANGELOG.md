@@ -4,6 +4,9 @@
 
 ### Version 2.2.3
 
+#### CLI
+- New `check-updates` command (also accepts `--check-updates`) that hits the GitHub releases API and prints either "You are running the latest version" or the new tag plus a link to the GitHub release page. Doesn't auto-run on any other command — the CLI stays silent on scripted invocations, no network on plain `list` / `write` / `read` / `verify`. Implemented with WinHTTP so the CLI keeps its Qt-free dependency footprint.
+
 ## 2026-05-01
 
 ### Version 2.2.2
