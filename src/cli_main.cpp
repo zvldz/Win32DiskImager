@@ -833,11 +833,19 @@ bool isWritableTarget(UINT driveType, BYTE busType)
     return false;
 }
 
-// Compares two dotted version strings numerically.
-// "2.2.10" > "2.2.9" — text-sort would get this wrong. Returns
-// negative / zero / positive.
+// SemVer-ish comparison. Numeric core first; if cores tie, a version
+// carrying a "-dev" / "-rc1" / ... pre-release suffix ranks LOWER
+// than the bare release, so "2.3.0" beats "2.3.0-dev".
 int compareVersionStrings(const std::string &a, const std::string &b)
 {
+    auto splitCore = [](const std::string &s) -> std::pair<std::string, std::string> {
+        const size_t hy = s.find('-');
+        if (hy == std::string::npos) return {s, std::string()};
+        return {s.substr(0, hy), s.substr(hy + 1)};
+    };
+    const auto a2 = splitCore(a);
+    const auto b2 = splitCore(b);
+
     auto split = [](const std::string &s) {
         std::vector<int> v;
         std::stringstream ss(s);
@@ -845,14 +853,16 @@ int compareVersionStrings(const std::string &a, const std::string &b)
         while (std::getline(ss, tok, '.')) v.push_back(std::atoi(tok.c_str()));
         return v;
     };
-    const auto av = split(a), bv = split(b);
+    const auto av = split(a2.first), bv = split(b2.first);
     const size_t n = std::max(av.size(), bv.size());
     for (size_t i = 0; i < n; ++i) {
         const int x = (i < av.size()) ? av[i] : 0;
         const int y = (i < bv.size()) ? bv[i] : 0;
         if (x != y) return x - y;
     }
-    return 0;
+    if (a2.second.empty() && !b2.second.empty()) return 1;
+    if (!a2.second.empty() && b2.second.empty()) return -1;
+    return a2.second.compare(b2.second);
 }
 
 // Pulls the latest release tag from the GitHub REST API via WinHTTP,

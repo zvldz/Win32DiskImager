@@ -17,12 +17,24 @@
 #define APP_VERSION_MINOR 3
 #define APP_VERSION_PATCH 0
 
+// Set by CI when the build is not from a tag push (workflow_dispatch /
+// dev artifact builds). Adds a "-dev" SemVer pre-release suffix so the
+// running exe reports e.g. "2.3.0-dev" instead of "2.3.0", and the
+// update checker can rank a real published 2.3.0 release ABOVE the
+// current dev build (SemVer rule: pre-release < release).
+#ifdef WDI_DEV_BUILD
+#  define APP_VERSION_SUFFIX "-dev"
+#else
+#  define APP_VERSION_SUFFIX ""
+#endif
+
 #define APP_VERSION_STRINGIFY_(x) #x
 #define APP_VERSION_STRINGIFY(x) APP_VERSION_STRINGIFY_(x)
 
 #define APP_VERSION                                           \
     APP_VERSION_STRINGIFY(APP_VERSION_MAJOR) "."              \
     APP_VERSION_STRINGIFY(APP_VERSION_MINOR) "."              \
-    APP_VERSION_STRINGIFY(APP_VERSION_PATCH)
+    APP_VERSION_STRINGIFY(APP_VERSION_PATCH)                  \
+    APP_VERSION_SUFFIX
 
 #endif

@@ -55,6 +55,23 @@ jobs:
             mingw-w64-x86_64-double-conversion
             mingw-w64-x86_64-md4c
 
+      # Tag pushes ship as proper releases. Anything else (manual
+      # workflow_dispatch, branch pushes if we ever wire those up) gets
+      # a "-dev" SemVer pre-release suffix baked into the binary so the
+      # auto-update checker can rank a real release ABOVE that build.
+      - name: Detect build kind
+        id: build_kind
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "extra_qmake_args=" >> "$GITHUB_OUTPUT"
+            echo "version_suffix=" >> "$GITHUB_OUTPUT"
+          else
+            echo "extra_qmake_args=DEFINES+=WDI_DEV_BUILD" >> "$GITHUB_OUTPUT"
+            echo "version_suffix=-dev" >> "$GITHUB_OUTPUT"
+          fi
+
       # Static Qt in MSYS2 lives under /mingw64/qt6-static/. The GUI build uses
       # compile-gui-static.bat's qmake path via QT_STATIC_BIN; here we invoke
       # qmake directly from that directory so the rest is identical logic.
@@ -63,7 +80,12 @@ jobs:
           set -euo pipefail
           mkdir -p bin/gui-static-build
           cd bin/gui-static-build
-          /mingw64/qt6-static/bin/qmake6 ../../src/DiskImager.pro "DESTDIR=.."
+          EXTRA="${{ steps.build_kind.outputs.extra_qmake_args }}"
+          if [ -n "$EXTRA" ]; then
+            /mingw64/qt6-static/bin/qmake6 ../../src/DiskImager.pro "DESTDIR=.." "$EXTRA"
+          else
+            /mingw64/qt6-static/bin/qmake6 ../../src/DiskImager.pro "DESTDIR=.."
+          fi
           mingw32-make -j2
 
       - name: Build CLI (native, no Qt)
@@ -71,7 +93,12 @@ jobs:
           set -euo pipefail
           mkdir -p bin/cli-build
           cd bin/cli-build
-          /mingw64/qt6-static/bin/qmake6 ../../src/DiskImagerCli.pro "DESTDIR=.."
+          EXTRA="${{ steps.build_kind.outputs.extra_qmake_args }}"
+          if [ -n "$EXTRA" ]; then
+            /mingw64/qt6-static/bin/qmake6 ../../src/DiskImagerCli.pro "DESTDIR=.." "$EXTRA"
+          else
+            /mingw64/qt6-static/bin/qmake6 ../../src/DiskImagerCli.pro "DESTDIR=.."
+          fi
           mingw32-make -j2
 
       - name: Read version from version.h
@@ -82,7 +109,7 @@ jobs:
           MAJOR=$(awk '/^#define APP_VERSION_MAJOR/{print $3; exit}' src/version.h)
           MINOR=$(awk '/^#define APP_VERSION_MINOR/{print $3; exit}' src/version.h)
           PATCH=$(awk '/^#define APP_VERSION_PATCH/{print $3; exit}' src/version.h)
-          V="${MAJOR}.${MINOR}.${PATCH}"
+          V="${MAJOR}.${MINOR}.${PATCH}${{ steps.build_kind.outputs.version_suffix }}"
           echo "version=${V}" >> "$GITHUB_OUTPUT"
           echo "App version: ${V}"
 

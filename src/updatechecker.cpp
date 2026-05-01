@@ -18,15 +18,29 @@ static const char *kReleasesUrl =
 
 int compareVersions(const QString &a, const QString &b)
 {
-    const QStringList ap = a.split('.');
-    const QStringList bp = b.split('.');
+    // Split off SemVer pre-release suffix ("-dev", "-rc1", ...). The
+    // numeric core compares first; if the cores tie, a version with a
+    // suffix ranks LOWER than the bare version (SemVer 9), so a real
+    // 2.3.0 release wins over a 2.3.0-dev build.
+    auto splitCore = [](const QString &s) -> std::pair<QString, QString> {
+        const int hyphen = s.indexOf('-');
+        if (hyphen < 0) return {s, QString()};
+        return {s.left(hyphen), s.mid(hyphen + 1)};
+    };
+    const auto a2 = splitCore(a);
+    const auto b2 = splitCore(b);
+
+    const QStringList ap = a2.first.split('.');
+    const QStringList bp = b2.first.split('.');
     const int n = std::max(ap.size(), bp.size());
     for (int i = 0; i < n; ++i) {
         const int av = (i < ap.size()) ? ap.at(i).toInt() : 0;
         const int bv = (i < bp.size()) ? bp.at(i).toInt() : 0;
         if (av != bv) return av - bv;
     }
-    return 0;
+    if (a2.second.isEmpty() && !b2.second.isEmpty()) return 1;
+    if (!a2.second.isEmpty() && b2.second.isEmpty()) return -1;
+    return a2.second.compare(b2.second);
 }
 
 UpdateChecker::UpdateChecker(QObject *parent) : QObject(parent) {}
