@@ -73,7 +73,7 @@ void UpdateChecker::onReplyFinished()
         tag.remove(0, 1);
     }
 
-    if (compareVersions(tag, QStringLiteral(APP_VERSION)) <= 0) {
+    if (compareVersions(tag, QString::fromLatin1(APP_VERSION)) <= 0) {
         if (m_forced) emit noUpdateAvailable();
         return;
     }

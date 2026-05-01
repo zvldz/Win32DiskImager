@@ -1601,7 +1601,7 @@ void MainWindow::onUpdateAvailable(const QString &tag, const QString &installerU
         const QString text = tr("A new version is available: <b>%1</b><br>"
                                 "Current version: %2<br><br>"
                                 "Download and install now?")
-                                 .arg(tag, QStringLiteral(APP_VERSION));
+                                 .arg(tag, QString::fromLatin1(APP_VERSION));
         QMessageBox box(QMessageBox::Question, tr("Update available"), text,
                         QMessageBox::Yes | QMessageBox::No, this);
         box.setTextFormat(Qt::RichText);
@@ -1617,7 +1617,7 @@ void MainWindow::onUpdateAvailable(const QString &tag, const QString &installerU
     const QString text = tr("A new version is available: <b>%1</b><br>"
                             "Current version: %2<br><br>"
                             "Open the release page on GitHub?")
-                             .arg(tag, QStringLiteral(APP_VERSION));
+                             .arg(tag, QString::fromLatin1(APP_VERSION));
     QMessageBox box(QMessageBox::Information, tr("Update available"), text,
                     QMessageBox::Yes | QMessageBox::No, this);
     box.setTextFormat(Qt::RichText);
@@ -1632,7 +1632,7 @@ void MainWindow::onNoUpdateAvailable()
                             "(<b>%1</b>).<br><br>"
                             "<a href=\"https://github.com/zvldz/Win32DiskImager/releases\">"
                             "View all releases on GitHub</a>")
-                             .arg(QStringLiteral(APP_VERSION));
+                             .arg(QString::fromLatin1(APP_VERSION));
     QMessageBox box(QMessageBox::Information, tr("Up to date"), text,
                     QMessageBox::Ok, this);
     box.setTextFormat(Qt::RichText);
