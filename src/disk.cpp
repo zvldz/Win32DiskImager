@@ -430,11 +430,6 @@ QList<TargetDisk> enumerateTargetDisks()
                                    NULL, OPEN_EXISTING, 0, NULL);
         if (hDisk == INVALID_HANDLE_VALUE) continue;
 
-        // Bus-type filter: USB / SD / MMC always accepted, removable
-        // accepted unless on the SATA bus (catches USB-attached HDDs in
-        // odd reporting modes), fixed SATA / NVMe / RAID system disks
-        // rejected. Probe failures are silent — no dialog on disks the
-        // user can't or shouldn't pick.
         STORAGE_PROPERTY_QUERY q = { StorageDeviceProperty,
                                      PropertyStandardQuery, {0} };
         BYTE buf[1024] = {0};
@@ -448,9 +443,41 @@ QList<TargetDisk> enumerateTargetDisks()
         const auto *desc = reinterpret_cast<const STORAGE_DEVICE_DESCRIPTOR *>(buf);
         const BYTE busType   = static_cast<BYTE>(desc->BusType);
         const bool removable = (desc->RemovableMedia != FALSE);
-        const bool accept =
-            (busType == BusTypeUsb || busType == BusTypeSd || busType == BusTypeMmc)
-            || (removable && busType != BusTypeSata);
+        const QStringList letters = letterMap.value(n);
+
+        // Filter logic:
+        //  * For disks with mounted letters, defer to GetDriveTypeW per
+        //    letter. Some SD card readers (internal laptop slots, some
+        //    USB hubs) report RemovableMedia=FALSE and BusType=Unknown /
+        //    RAID at the bus level, even though Windows correctly
+        //    classifies the inserted card as DRIVE_REMOVABLE at the FS
+        //    layer. The bus-level descriptor lies often enough that the
+        //    FS classification is the more reliable source when we have
+        //    a letter to ask about.
+        //  * For bare disks (no letter — unformatted card, no FS Windows
+        //    recognises) we only have the bus descriptor to go on:
+        //    USB / SD / MMC always accepted, removable accepted unless
+        //    on the SATA bus, system SATA / NVMe rejected.
+        bool accept = false;
+        if (!letters.isEmpty()) {
+            for (const QString &lt : letters) {
+                wchar_t root[] = L"X:\\";
+                root[0] = static_cast<wchar_t>(lt.at(0).toUpper().toLatin1());
+                const UINT dt = GetDriveTypeW(root);
+                if ((dt == DRIVE_REMOVABLE && busType != BusTypeSata)
+                    || (dt == DRIVE_FIXED
+                        && (busType == BusTypeUsb
+                            || busType == BusTypeSd
+                            || busType == BusTypeMmc))) {
+                    accept = true;
+                    break;
+                }
+            }
+        } else {
+            accept =
+                (busType == BusTypeUsb || busType == BusTypeSd || busType == BusTypeMmc)
+                || (removable && busType != BusTypeSata);
+        }
         if (!accept) {
             CloseHandle(hDisk);
             continue;
@@ -476,7 +503,7 @@ QList<TargetDisk> enumerateTargetDisks()
         TargetDisk td;
         td.diskNumber = n;
         td.sizeBytes  = static_cast<quint64>(dg.DiskSize.QuadPart);
-        td.letters    = letterMap.value(n);
+        td.letters    = letters;
         out.append(td);
     }
     return out;

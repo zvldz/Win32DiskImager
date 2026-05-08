@@ -893,12 +893,35 @@ std::string formatDeviceSize(uint64_t bytes)
     return buf;
 }
 
-// Mirrors the filter the GUI applies in enumerateTargetDisks (src/disk.cpp).
-// Only devices that look like removable / USB / SD / MMC targets pass — the
-// system SATA / NVMe disk and internal RAID arrays are rejected so the
-// user can't pick one by mistake.
-bool isWritableDisk(BYTE busType, bool removable)
+// Decides whether a disk is a writable target, mirroring the filter in
+// enumerateTargetDisks (src/disk.cpp).
+//   * If the disk has mounted letters, defer to GetDriveTypeW per letter.
+//     Some SD card readers (internal laptop slots, some USB hubs) report
+//     RemovableMedia=FALSE / BusType=Unknown at the bus level even though
+//     Windows correctly classifies the inserted card as DRIVE_REMOVABLE
+//     at the FS layer — the FS classification is more reliable when we
+//     have a letter to ask about.
+//   * Bare disks (unformatted card, no FS Windows recognises) only have
+//     the bus descriptor: USB / SD / MMC always accepted, removable
+//     accepted unless on the SATA bus, system SATA / NVMe rejected.
+bool isWritableDisk(BYTE busType, bool removable,
+                    const std::vector<wchar_t> &letters)
 {
+    if (!letters.empty()) {
+        for (wchar_t letter : letters) {
+            wchar_t root[] = L"X:\\";
+            root[0] = letter;
+            const UINT dt = GetDriveTypeW(root);
+            if ((dt == DRIVE_REMOVABLE && busType != BusTypeSata)
+                || (dt == DRIVE_FIXED
+                    && (busType == BusTypeUsb
+                        || busType == BusTypeSd
+                        || busType == BusTypeMmc))) {
+                return true;
+            }
+        }
+        return false;
+    }
     if (busType == BusTypeUsb || busType == BusTypeSd || busType == BusTypeMmc) {
         return true;
     }
@@ -1060,7 +1083,10 @@ int cmdList()
         bool removable = false;
         uint64_t sizeBytes = 0;
         if (!queryDiskInfo(n, busType, removable, sizeBytes)) continue;
-        if (!isWritableDisk(busType, removable)) continue;
+        const auto it = letterMap.find(n);
+        const std::vector<wchar_t> letters =
+            (it != letterMap.end()) ? it->second : std::vector<wchar_t>{};
+        if (!isWritableDisk(busType, removable, letters)) continue;
 
         // Canonical numeric form first ("--device 1"), then the bracketed
         // letter list (if any), then capacity. Bare disks come out as
@@ -1072,12 +1098,11 @@ int cmdList()
         if (!sizeStr.empty()) std::cout << ", " << sizeStr;
         std::cout << ")";
 
-        const auto it = letterMap.find(n);
-        if (it != letterMap.end() && !it->second.empty()) {
+        if (!letters.empty()) {
             std::cout << " [";
-            for (size_t k = 0; k < it->second.size(); ++k) {
+            for (size_t k = 0; k < letters.size(); ++k) {
                 if (k) std::cout << ", ";
-                std::cout << static_cast<char>(it->second[k]) << ":";
+                std::cout << static_cast<char>(letters[k]) << ":";
             }
             std::cout << "]";
         } else {
