@@ -4,6 +4,15 @@
 
 ### Version 2.3.0
 
+#### Device enumeration / target selection
+- Both the GUI Device dropdown and the CLI `list` command now enumerate physical disks (`\\.\PhysicalDrive0..31`) directly instead of starting from `GetLogicalDrives()`. This brings *bare* disks into view — a card with no recognised filesystem, or one Windows hasn't assigned a drive letter to, finally shows up and can be written, read or verified. Same writable-target filter as before (USB / SD / MMC / removable; system SATA + NVMe rejected); empty multi-card-reader slots are still suppressed via `IOCTL_STORAGE_CHECK_VERIFY`.
+- New combo / list label format: `Disk N [E:\, F:\] 32GB` (or `Disk N 32GB` for a bare disk). The window grew by 120 px to fit a worst-case multi-letter label without eliding the Image File field next to it. Internally, devices are now identified by physical disk number stored in the combo's `itemData` instead of being parsed back out of the visible label.
+- Lock + dismount now covers **every** mounted volume on the target disk, not just one. Multi-partition cards used to leave sibling partitions live during a raw write — Google Drive / Windows Search / antivirus could still poke at them. The list of locked handles is held collectively and handed across the Write → Verify boundary atomically.
+- `WM_DEVICECHANGE` handling extended with a `RegisterDeviceNotification(GUID_DEVINTERFACE_DISK)` subscription so bare-disk arrival / removal also triggers a refresh — previously only volume-letter events fired the rebuild.
+
+#### CLI `--device`
+- `--device` now accepts both the canonical numeric form (`--device 1`, matches `list` output) and the legacy letter form (`--device E:`, still works for scripting against formatted cards). The numeric form is required for bare disks. `list` output prints `Disk N (PhysicalDriveN, removable, 32 GB) [E:, F:]` (or `[no letter]`) and a usage hint at the bottom.
+
 #### Build / Auto-update
 - CI builds that aren't from a tag push (manual `workflow_dispatch` / dev artifacts) now bake a `-dev` SemVer pre-release suffix into the binary — the running exe reports `2.3.0-dev` instead of `2.3.0`, and the installer asset is named accordingly. The update checker's version comparison was upgraded to SemVer rules: numeric core first, and on a tie a bare version ranks above one carrying a pre-release suffix. Net effect: a dev build correctly identifies a freshly published `2.3.0` release as newer than itself and offers the update, instead of silently treating "same numbers" as "already up to date".
 

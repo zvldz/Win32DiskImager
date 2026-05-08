@@ -17,6 +17,7 @@
 #include <iostream>
 #include <limits>
 #include <malloc.h>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -93,10 +94,14 @@ void printUsage()
 {
     std::cout << "Usage:\n";
     std::cout << "  Win32DiskImager-cli.exe list\n";
-    std::cout << "  Win32DiskImager-cli.exe write  --device E: --image C:\\path\\image.img[.gz|.xz] [--no-verify]\n";
-    std::cout << "  Win32DiskImager-cli.exe read   --device E: --image C:\\path\\backup.img [--bytes N] [--allocated-only]\n";
-    std::cout << "  Win32DiskImager-cli.exe verify --device E: --image C:\\path\\image.img[.gz|.xz]\n";
+    std::cout << "  Win32DiskImager-cli.exe write  --device <N|E:> --image C:\\path\\image.img[.gz|.xz] [--no-verify]\n";
+    std::cout << "  Win32DiskImager-cli.exe read   --device <N|E:> --image C:\\path\\backup.img [--bytes N] [--allocated-only]\n";
+    std::cout << "  Win32DiskImager-cli.exe verify --device <N|E:> --image C:\\path\\image.img[.gz|.xz]\n";
     std::cout << "  Win32DiskImager-cli.exe check-updates\n";
+    std::cout << "\n";
+    std::cout << "--device accepts a physical disk number (canonical, e.g. 1) or a drive\n";
+    std::cout << "letter (e.g. E:). Use `list` to see available disks. The numeric form\n";
+    std::cout << "is required for bare disks with no recognised filesystem / no letter.\n";
     std::cout << "\n";
     std::cout << "write / verify accept plain .img, gzipped .img.gz and xz-compressed .img.xz.\n";
     std::cout << "Format is detected by magic bytes, not file extension.\n";
@@ -123,26 +128,6 @@ std::wstring formatWinError(DWORD code)
 void printWinError(const std::wstring &context, DWORD code)
 {
     std::wcerr << context << L"\nError " << code << L": " << formatWinError(code) << std::endl;
-}
-
-bool parseDriveLetter(const std::string &input, wchar_t &letter)
-{
-    std::string s = input;
-    while (!s.empty() && (s.back() == '\\' || s.back() == '/')) {
-        s.pop_back();
-    }
-    if (s.size() >= 2 && s[1] == ':') {
-        s = s.substr(0, 1);
-    }
-    if (s.size() != 1) {
-        return false;
-    }
-    const char c = static_cast<char>(std::toupper(static_cast<unsigned char>(s[0])));
-    if (c < 'A' || c > 'Z') {
-        return false;
-    }
-    letter = static_cast<wchar_t>(c);
-    return true;
 }
 
 std::wstring toVolumePath(wchar_t driveLetter)
@@ -184,6 +169,72 @@ bool getVolumeDiskNumber(HANDLE hVolume, DWORD &diskNumber)
         return false;
     }
     diskNumber = extents.Extents[0].DiskNumber;
+    return true;
+}
+
+// Resolve --device <input> to a physical disk number. Accepts:
+//   "1", "PhysicalDrive1", "disk1"  → numeric form (canonical, matches `list` output)
+//   "E:", "E"                       → letter form (legacy, mapped via IOCTL_STORAGE_GET_DEVICE_NUMBER)
+// Letter form is convenient when scripting against a freshly-formatted card;
+// numeric form works for bare disks with no recognised filesystem.
+bool parseDevice(const std::string &input, DWORD &diskNumber)
+{
+    std::string s = input;
+    while (!s.empty() && (s.back() == '\\' || s.back() == '/')) {
+        s.pop_back();
+    }
+    if (s.empty()) return false;
+
+    // Letter form: "E:" or "E" — single letter, optional trailing colon.
+    if ((s.size() == 1 || (s.size() == 2 && s[1] == ':'))
+        && std::isalpha(static_cast<unsigned char>(s[0]))) {
+        const wchar_t letter = static_cast<wchar_t>(
+            std::toupper(static_cast<unsigned char>(s[0])));
+        HANDLE h = openVolume(letter, FILE_READ_ATTRIBUTES);
+        if (h == INVALID_HANDLE_VALUE) {
+            std::cerr << "Could not open volume " << s << "." << std::endl;
+            return false;
+        }
+        DWORD num = 0;
+        const bool mapped = getVolumeDiskNumber(h, num);
+        CloseHandle(h);
+        if (!mapped) {
+            std::cerr << "Volume " << s << " does not map to a physical disk."
+                      << std::endl;
+            return false;
+        }
+        diskNumber = num;
+        return true;
+    }
+
+    // Numeric or PhysicalDriveN / diskN form. Strip the optional prefix,
+    // leave only digits, parse as unsigned.
+    auto stripPrefix = [&s](const std::string &prefix) {
+        if (s.size() < prefix.size()) return;
+        std::string head = s.substr(0, prefix.size());
+        std::transform(head.begin(), head.end(), head.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        if (head == prefix) s.erase(0, prefix.size());
+    };
+    stripPrefix("physicaldrive");
+    stripPrefix("disk");
+    if (s.empty()) {
+        std::cerr << "Invalid --device value." << std::endl;
+        return false;
+    }
+    for (char c : s) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
+            std::cerr << "Invalid --device value: expected drive letter or "
+                         "disk number (e.g. E: or 1)." << std::endl;
+            return false;
+        }
+    }
+    try {
+        diskNumber = static_cast<DWORD>(std::stoul(s));
+    } catch (...) {
+        std::cerr << "Invalid --device value." << std::endl;
+        return false;
+    }
     return true;
 }
 
@@ -446,57 +497,78 @@ private:
     std::chrono::steady_clock::time_point m_tick;
 };
 
-// If hVolume is passed in already valid (inherited from a prior cmdWrite
-// that handed off an open+locked+dismounted volume), the open/lock/dismount
-// steps are skipped. Closing the gap between Write and auto-Verify keeps
-// Google Drive / Windows Search / antivirus from latching onto the freshly-
-// written volume the moment a standalone Write would have released it.
-bool prepareDiskHandles(const std::string &device,
+// Releases lock + closes every handle in `volumes` and clears it. Idempotent
+// on an already-empty list.
+void closeAllVolumes(std::vector<HANDLE> &volumes)
+{
+    for (HANDLE h : volumes) {
+        if (h != INVALID_HANDLE_VALUE) {
+            unlockVolume(h);
+            CloseHandle(h);
+        }
+    }
+    volumes.clear();
+}
+
+// Locks + dismounts every mounted volume that lives on `diskNumber`. On
+// success appends each opened handle to `volumes`. On any failure rolls
+// back the locks already taken and returns false. Bare disks (no mounted
+// letter) succeed trivially with `volumes` left empty.
+bool lockAllVolumesOnDisk(DWORD diskNumber, std::vector<HANDLE> &volumes)
+{
+    const DWORD mask = GetLogicalDrives();
+    for (int i = 0; i < 26; ++i) {
+        if ((mask & (1u << i)) == 0) continue;
+        const wchar_t letter = static_cast<wchar_t>(L'A' + i);
+
+        HANDLE hProbe = openVolume(letter, FILE_READ_ATTRIBUTES);
+        if (hProbe == INVALID_HANDLE_VALUE) continue;
+        DWORD num = 0;
+        const bool mapped = getVolumeDiskNumber(hProbe, num);
+        CloseHandle(hProbe);
+        if (!mapped || num != diskNumber) continue;
+
+        HANDLE hVol = openVolume(letter, GENERIC_READ | GENERIC_WRITE);
+        if (hVol == INVALID_HANDLE_VALUE) {
+            printWinError(L"Failed to open volume handle.", GetLastError());
+            closeAllVolumes(volumes);
+            return false;
+        }
+        if (!lockVolumeWithRetry(hVol)) {
+            printWinError(L"Failed to lock volume.", GetLastError());
+            CloseHandle(hVol);
+            closeAllVolumes(volumes);
+            return false;
+        }
+        if (!dismountVolumeWithRetry(hVol)) {
+            printWinError(L"Failed to dismount volume.", GetLastError());
+            unlockVolume(hVol);
+            CloseHandle(hVol);
+            closeAllVolumes(volumes);
+            return false;
+        }
+        volumes.push_back(hVol);
+    }
+    return true;
+}
+
+// If `volumes` is non-empty on input it's treated as inherited from a
+// prior cmdWrite that handed off open+locked+dismounted handles; the
+// open/lock/dismount step is skipped so nothing (Google Drive / Windows
+// Search / antivirus) latches onto the freshly-written volumes in the
+// Write → Verify gap. Otherwise locks every volume on the target disk
+// from scratch (no-op for a bare disk with no mounted letter).
+bool prepareDiskHandles(DWORD diskNumber,
                         DWORD diskAccess,
-                        HANDLE &hVolume,
+                        std::vector<HANDLE> &volumes,
                         HANDLE &hDisk,
-                        DWORD &diskNumber,
                         DiskGeometry &geometry,
                         DWORD diskExtraFlags = 0)
 {
-    const bool inherited = (hVolume != INVALID_HANDLE_VALUE);
     hDisk = INVALID_HANDLE_VALUE;
-
+    const bool inherited = !volumes.empty();
     if (!inherited) {
-        wchar_t driveLetter = 0;
-        if (!parseDriveLetter(device, driveLetter)) {
-            std::cerr << "Invalid device. Use a drive letter such as E: or E." << std::endl;
-            return false;
-        }
-
-        hVolume = openVolume(driveLetter, GENERIC_READ | GENERIC_WRITE);
-        if (hVolume == INVALID_HANDLE_VALUE) {
-            printWinError(L"Failed to open volume handle.", GetLastError());
-            return false;
-        }
-    }
-
-    if (!getVolumeDiskNumber(hVolume, diskNumber)) {
-        printWinError(L"Failed to map volume to physical disk.", GetLastError());
-        if (inherited) unlockVolume(hVolume);
-        CloseHandle(hVolume);
-        hVolume = INVALID_HANDLE_VALUE;
-        return false;
-    }
-
-    if (!inherited) {
-        if (!lockVolumeWithRetry(hVolume)) {
-            printWinError(L"Failed to lock volume.", GetLastError());
-            CloseHandle(hVolume);
-            hVolume = INVALID_HANDLE_VALUE;
-            return false;
-        }
-
-        if (!dismountVolumeWithRetry(hVolume)) {
-            printWinError(L"Failed to dismount volume.", GetLastError());
-            unlockVolume(hVolume);
-            CloseHandle(hVolume);
-            hVolume = INVALID_HANDLE_VALUE;
+        if (!lockAllVolumesOnDisk(diskNumber, volumes)) {
             return false;
         }
     }
@@ -504,9 +576,7 @@ bool prepareDiskHandles(const std::string &device,
     hDisk = openPhysicalDisk(diskNumber, diskAccess, diskExtraFlags);
     if (hDisk == INVALID_HANDLE_VALUE) {
         printWinError(L"Failed to open physical disk.", GetLastError());
-        unlockVolume(hVolume);
-        CloseHandle(hVolume);
-        hVolume = INVALID_HANDLE_VALUE;
+        closeAllVolumes(volumes);
         return false;
     }
 
@@ -514,26 +584,20 @@ bool prepareDiskHandles(const std::string &device,
         printWinError(L"Failed to get disk geometry.", GetLastError());
         CloseHandle(hDisk);
         hDisk = INVALID_HANDLE_VALUE;
-        unlockVolume(hVolume);
-        CloseHandle(hVolume);
-        hVolume = INVALID_HANDLE_VALUE;
+        closeAllVolumes(volumes);
         return false;
     }
 
     return true;
 }
 
-void cleanupDiskHandles(HANDLE &hVolume, HANDLE &hDisk)
+void cleanupDiskHandles(std::vector<HANDLE> &volumes, HANDLE &hDisk)
 {
     if (hDisk != INVALID_HANDLE_VALUE) {
         CloseHandle(hDisk);
         hDisk = INVALID_HANDLE_VALUE;
     }
-    if (hVolume != INVALID_HANDLE_VALUE) {
-        unlockVolume(hVolume);
-        CloseHandle(hVolume);
-        hVolume = INVALID_HANDLE_VALUE;
-    }
+    closeAllVolumes(volumes);
 }
 
 HANDLE openImageFileWrite(const std::string &path, DWORD extraFlags = 0)
@@ -771,13 +835,14 @@ std::unique_ptr<ImageSource> openImageSource(const std::string &path, std::strin
 #define IOCTL_STORAGE_QUERY_PROPERTY CTL_CODE(IOCTL_STORAGE_BASE, 0x0500, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #endif
 
-// Bus type + size for `list`. Returns false if the device doesn't answer
-// either IOCTL — typical for virtual filesystems (Google Drive, OneDrive,
-// Dokany, ...). Caller treats failure as "skip". Size left at 0 on partial
-// failure so the list still renders without a capacity column.
-bool queryDiskInfo(DWORD diskNumber, BYTE &busTypeOut, uint64_t &sizeBytesOut)
+// Bus type + removable flag + capacity for `list`. Returns false if the
+// device doesn't answer the IOCTLs or the slot is empty (multi-card hub
+// case). Caller treats failure as "skip".
+bool queryDiskInfo(DWORD diskNumber, BYTE &busTypeOut,
+                   bool &removableOut, uint64_t &sizeBytesOut)
 {
     busTypeOut = 0;
+    removableOut = false;
     sizeBytesOut = 0;
     HANDLE h = openPhysicalDisk(diskNumber, 0);  // 0 access — query-only
     if (h == INVALID_HANDLE_VALUE) return false;
@@ -792,6 +857,16 @@ bool queryDiskInfo(DWORD diskNumber, BYTE &busTypeOut, uint64_t &sizeBytesOut)
     }
     auto *desc = reinterpret_cast<STORAGE_DEVICE_DESCRIPTOR *>(buf);
     busTypeOut = static_cast<BYTE>(desc->BusType);
+    removableOut = (desc->RemovableMedia != FALSE);
+
+    // Hub-slot media check: a multi-card reader exposes one PhysicalDrive
+    // per slot regardless of insertion. Without this filter empty slots
+    // would litter the listing.
+    if (!DeviceIoControl(h, IOCTL_STORAGE_CHECK_VERIFY,
+                         nullptr, 0, nullptr, 0, &got, nullptr)) {
+        CloseHandle(h);
+        return false;
+    }
 
     DISK_GEOMETRY_EX dg = {};
     if (DeviceIoControl(h, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
@@ -818,19 +893,16 @@ std::string formatDeviceSize(uint64_t bytes)
     return buf;
 }
 
-// Mirrors the filter the GUI applies in checkDriveType (src/disk.cpp). Only
-// devices that look like removable / USB / SD / MMC targets are listed —
-// system SSDs and virtual filesystems are skipped so the user can't pick
-// one by mistake.
-bool isWritableTarget(UINT driveType, BYTE busType)
+// Mirrors the filter the GUI applies in enumerateTargetDisks (src/disk.cpp).
+// Only devices that look like removable / USB / SD / MMC targets pass — the
+// system SATA / NVMe disk and internal RAID arrays are rejected so the
+// user can't pick one by mistake.
+bool isWritableDisk(BYTE busType, bool removable)
 {
-    if (driveType == DRIVE_REMOVABLE) return busType != BusTypeSata;
-    if (driveType == DRIVE_FIXED) {
-        return busType == BusTypeUsb
-            || busType == BusTypeSd
-            || busType == BusTypeMmc;
+    if (busType == BusTypeUsb || busType == BusTypeSd || busType == BusTypeMmc) {
+        return true;
     }
-    return false;
+    return removable && busType != BusTypeSata;
 }
 
 // SemVer-ish comparison. Numeric core first; if cores tie, a version
@@ -964,63 +1036,74 @@ int cmdCheckUpdates()
 
 int cmdList()
 {
-    const DWORD mask = GetLogicalDrives();
-    if (mask == 0) {
-        printWinError(L"GetLogicalDrives failed.", GetLastError());
-        return 1;
+    // Build map: physical disk number → mounted drive letters. Letters that
+    // don't map to a physical disk (network shares, subst, virtual FSes) are
+    // silently skipped — same probe-style behavior as the GUI enumerator.
+    std::map<DWORD, std::vector<wchar_t>> letterMap;
+    const DWORD lmask = GetLogicalDrives();
+    for (int i = 0; i < 26; ++i) {
+        if ((lmask & (1u << i)) == 0) continue;
+        const wchar_t letter = static_cast<wchar_t>(L'A' + i);
+        HANDLE h = openVolume(letter, FILE_READ_ATTRIBUTES);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        DWORD num = 0;
+        if (getVolumeDiskNumber(h, num)) {
+            letterMap[num].push_back(letter);
+        }
+        CloseHandle(h);
     }
 
-    std::cout << "Available drives:" << std::endl;
+    std::cout << "Available targets:" << std::endl;
     int shown = 0;
-    for (int i = 0; i < 26; ++i) {
-        if ((mask & (1u << i)) == 0) {
-            continue;
-        }
-        const wchar_t letter = static_cast<wchar_t>(L'A' + i);
-        wchar_t root[] = L"A:\\";
-        root[0] = letter;
-
-        const UINT type = GetDriveTypeW(root);
-        if (type != DRIVE_REMOVABLE && type != DRIVE_FIXED) {
-            continue;
-        }
-
-        HANDLE hVolume = openVolume(letter, FILE_READ_ATTRIBUTES);
-        if (hVolume == INVALID_HANDLE_VALUE) {
-            continue;  // probe-style: silent skip (matches GUI behavior)
-        }
-        DWORD diskNumber = 0;
-        const bool mapped = getVolumeDiskNumber(hVolume, diskNumber);
-        CloseHandle(hVolume);
-        if (!mapped) continue;
-
+    for (DWORD n = 0; n < 32; ++n) {
         BYTE busType = 0;
+        bool removable = false;
         uint64_t sizeBytes = 0;
-        if (!queryDiskInfo(diskNumber, busType, sizeBytes)) continue;
-        if (!isWritableTarget(type, busType)) continue;
+        if (!queryDiskInfo(n, busType, removable, sizeBytes)) continue;
+        if (!isWritableDisk(busType, removable)) continue;
 
-        const char *typeStr = (type == DRIVE_REMOVABLE) ? "removable" : "fixed";
-        std::cout << "  " << static_cast<char>(letter) << ": ("
-                  << typeStr << ", PhysicalDrive" << diskNumber;
+        // Canonical numeric form first ("--device 1"), then the bracketed
+        // letter list (if any), then capacity. Bare disks come out as
+        // "Disk 1 (PhysicalDrive1, removable, 32 GB) [no letter]".
+        std::cout << "  Disk " << n
+                  << " (PhysicalDrive" << n
+                  << ", " << (removable ? "removable" : "fixed");
         const std::string sizeStr = formatDeviceSize(sizeBytes);
         if (!sizeStr.empty()) std::cout << ", " << sizeStr;
-        std::cout << ")" << std::endl;
+        std::cout << ")";
+
+        const auto it = letterMap.find(n);
+        if (it != letterMap.end() && !it->second.empty()) {
+            std::cout << " [";
+            for (size_t k = 0; k < it->second.size(); ++k) {
+                if (k) std::cout << ", ";
+                std::cout << static_cast<char>(it->second[k]) << ":";
+            }
+            std::cout << "]";
+        } else {
+            std::cout << " [no letter]";
+        }
+        std::cout << std::endl;
         ++shown;
     }
     if (shown == 0) {
         std::cout << "  (no removable / USB / SD / MMC targets found)" << std::endl;
+    } else {
+        std::cout << std::endl;
+        std::cout << "Pass `--device N` (canonical) or `--device E:` (letter form)."
+                  << std::endl;
     }
     return 0;
 }
 
-// If keepVolumeOut is non-null and the write succeeds, ownership of the
-// still-locked, still-dismounted volume handle is handed to the caller so
-// an auto-verify pass can reuse it without ever releasing the lock.
+// If keepVolumesOut is non-null and the write succeeds, ownership of the
+// still-locked, still-dismounted volume handles is handed to the caller so
+// an auto-verify pass can reuse them without ever releasing the locks.
 int cmdWrite(const std::string &imagePath, const std::string &device,
-             HANDLE *keepVolumeOut = nullptr)
+             std::vector<HANDLE> *keepVolumesOut = nullptr)
 {
     KeepAwake keepAwake;  // suppress idle sleep for the whole operation
-    if (keepVolumeOut) *keepVolumeOut = INVALID_HANDLE_VALUE;
+    if (keepVolumesOut) keepVolumesOut->clear();
     std::string srcErr;
     std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
     if (!src) {
@@ -1028,13 +1111,15 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
         return 1;
     }
 
-    HANDLE hVolume = INVALID_HANDLE_VALUE;
-    HANDLE hDisk = INVALID_HANDLE_VALUE;
     DWORD diskNumber = 0;
+    if (!parseDevice(device, diskNumber)) return 1;
+
+    std::vector<HANDLE> volumes;
+    HANDLE hDisk = INVALID_HANDLE_VALUE;
     DiskGeometry geometry;
     // Direct I/O on the destination: honest MB/s, and "Write successful"
     // means data is on the device (no ghost flush after the CLI exits).
-    if (!prepareDiskHandles(device, GENERIC_WRITE, hVolume, hDisk, diskNumber, geometry,
+    if (!prepareDiskHandles(diskNumber, GENERIC_WRITE, volumes, hDisk, geometry,
                             FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH)) {
         return 1;
     }
@@ -1043,7 +1128,7 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
     LARGE_INTEGER pos = {};
     if (!SetFilePointerEx(hDisk, pos, nullptr, FILE_BEGIN)) {
         printWinError(L"Failed to seek physical disk.", GetLastError());
-        cleanupDiskHandles(hVolume, hDisk);
+        cleanupDiskHandles(volumes, hDisk);
         return 1;
     }
 
@@ -1055,7 +1140,7 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
             std::cerr << "Image is larger than target disk." << std::endl;
             std::cerr << "Image bytes (padded): " << paddedImageBytes
                       << ", disk bytes: " << geometry.totalBytes << std::endl;
-            cleanupDiskHandles(hVolume, hDisk);
+            cleanupDiskHandles(volumes, hDisk);
             return 1;
         }
     }
@@ -1150,28 +1235,31 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
     decoderThread.join();
 
     FlushFileBuffers(hDisk);
-    if (rc == 0 && keepVolumeOut) {
-        // Hand the still-locked volume to the chained verify so nothing
+    if (rc == 0 && keepVolumesOut) {
+        // Hand the still-locked volumes to the chained verify so nothing
         // (Google Drive / indexer / antivirus) grabs the freshly-written
-        // volume in the Write → Verify gap.
+        // volumes in the Write → Verify gap.
         if (hDisk != INVALID_HANDLE_VALUE) CloseHandle(hDisk);
-        *keepVolumeOut = hVolume;
+        *keepVolumesOut = std::move(volumes);
     } else {
         // Standalone Write success — eject so the user can pull the
-        // card immediately. Eject must run while the volume is still
-        // locked + dismounted, before cleanupDiskHandles releases it.
-        if (rc == 0 && hVolume != INVALID_HANDLE_VALUE) {
-            DWORD junk = 0;
-            DeviceIoControl(hVolume, IOCTL_STORAGE_EJECT_MEDIA,
-                            NULL, 0, NULL, 0, &junk, NULL);
+        // card immediately. Eject must run while volumes are still
+        // locked + dismounted, before cleanupDiskHandles releases them.
+        // Bare disks (volumes empty) skip eject naturally.
+        if (rc == 0) {
+            for (HANDLE h : volumes) {
+                DWORD junk = 0;
+                DeviceIoControl(h, IOCTL_STORAGE_EJECT_MEDIA,
+                                NULL, 0, NULL, 0, &junk, NULL);
+            }
         }
-        cleanupDiskHandles(hVolume, hDisk);
+        cleanupDiskHandles(volumes, hDisk);
     }
     if (rc == 0) {
         progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
         std::cout << "Write successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
         // Eject already issued above when this is a standalone write.
-        if (!keepVolumeOut) {
+        if (!keepVolumesOut) {
             std::cout << "Card can be safely removed." << std::endl;
         }
     }
@@ -1189,11 +1277,16 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
         return 1;
     }
 
-    HANDLE hVolume = INVALID_HANDLE_VALUE;
-    HANDLE hDisk = INVALID_HANDLE_VALUE;
     DWORD diskNumber = 0;
+    if (!parseDevice(device, diskNumber)) {
+        CloseHandle(hImage);
+        return 1;
+    }
+
+    std::vector<HANDLE> volumes;
+    HANDLE hDisk = INVALID_HANDLE_VALUE;
     DiskGeometry geometry;
-    if (!prepareDiskHandles(device, GENERIC_READ, hVolume, hDisk, diskNumber, geometry)) {
+    if (!prepareDiskHandles(diskNumber, GENERIC_READ, volumes, hDisk, geometry)) {
         CloseHandle(hImage);
         return 1;
     }
@@ -1211,7 +1304,7 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
                       << "; falling back to full disk read." << std::endl;
         } else {
             printWinError(L"Failed to compute allocated partition range from MBR.", GetLastError());
-            cleanupDiskHandles(hVolume, hDisk);
+            cleanupDiskHandles(volumes, hDisk);
             CloseHandle(hImage);
             return 1;
         }
@@ -1221,7 +1314,7 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     }
     if (bytesToRead > geometry.totalBytes) {
         std::cerr << "Requested bytes exceed disk size." << std::endl;
-        cleanupDiskHandles(hVolume, hDisk);
+        cleanupDiskHandles(volumes, hDisk);
         CloseHandle(hImage);
         return 1;
     }
@@ -1230,7 +1323,7 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     LARGE_INTEGER pos = {};
     if (!SetFilePointerEx(hDisk, pos, nullptr, FILE_BEGIN)) {
         printWinError(L"Failed to seek physical disk.", GetLastError());
-        cleanupDiskHandles(hVolume, hDisk);
+        cleanupDiskHandles(volumes, hDisk);
         CloseHandle(hImage);
         return 1;
     }
@@ -1243,7 +1336,7 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     char *buffer = static_cast<char *>(_aligned_malloc(chunk, (size_t)geometry.bytesPerSector));
     if (!buffer) {
         std::cerr << "Out of memory allocating I/O buffer." << std::endl;
-        cleanupDiskHandles(hVolume, hDisk);
+        cleanupDiskHandles(volumes, hDisk);
         CloseHandle(hImage);
         return 1;
     }
@@ -1273,7 +1366,7 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
 
     _aligned_free(buffer);
     FlushFileBuffers(hImage);
-    cleanupDiskHandles(hVolume, hDisk);
+    cleanupDiskHandles(volumes, hDisk);
     CloseHandle(hImage);
     if (rc == 0) {
         progress.done(processed);
@@ -1282,40 +1375,47 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     return rc;
 }
 
-// If inheritVolume is passed in valid, it's the locked + dismounted handle
-// an auto-verify after Write handed over; prepareDiskHandles reuses it
-// instead of re-opening + re-locking.
+// If `inheritedVolumes` is non-null and non-empty, those are locked +
+// dismounted volume handles handed over from a prior cmdWrite — the
+// open/lock/dismount step is skipped so nothing latches onto the
+// freshly-written volumes in the Write → Verify gap.
 int cmdVerify(const std::string &imagePath, const std::string &device,
-              HANDLE inheritVolume = INVALID_HANDLE_VALUE)
+              std::vector<HANDLE> *inheritedVolumes = nullptr)
 {
     KeepAwake keepAwake;  // suppress idle sleep for the whole operation
     std::string srcErr;
     std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
     if (!src) {
-        if (inheritVolume != INVALID_HANDLE_VALUE) {
-            unlockVolume(inheritVolume);
-            CloseHandle(inheritVolume);
-        }
+        if (inheritedVolumes) closeAllVolumes(*inheritedVolumes);
         std::cerr << "Failed to open image: " << srcErr << std::endl;
         return 1;
     }
 
-    HANDLE hVolume = inheritVolume;
-    HANDLE hDisk = INVALID_HANDLE_VALUE;
     DWORD diskNumber = 0;
+    if (!parseDevice(device, diskNumber)) {
+        if (inheritedVolumes) closeAllVolumes(*inheritedVolumes);
+        return 1;
+    }
+
+    std::vector<HANDLE> volumes;
+    if (inheritedVolumes) volumes = std::move(*inheritedVolumes);
+    const bool chainedFromWrite = !volumes.empty()
+                                  || (inheritedVolumes != nullptr);
+    HANDLE hDisk = INVALID_HANDLE_VALUE;
     DiskGeometry geometry;
     // NO_BUFFERING on the read handle — symmetric with the write side and
     // keeps any stale block-cache page from masking the real device data.
-    if (!prepareDiskHandles(device, GENERIC_READ, hVolume, hDisk, diskNumber, geometry,
+    if (!prepareDiskHandles(diskNumber, GENERIC_READ, volumes, hDisk, geometry,
                             FILE_FLAG_NO_BUFFERING)) {
         return 1;
     }
     // When chained from a successful Write, give the SD controller a moment
     // to flush its cache / FTL state before we start reading. Mitigates the
     // "fail just before 100%" pattern where Verify catches the controller
-    // mid-flush near the end of the image.
-    if (inheritVolume != INVALID_HANDLE_VALUE && hVolume != INVALID_HANDLE_VALUE) {
-        FlushFileBuffers(hVolume);
+    // mid-flush near the end of the image. For a bare disk volumes is empty
+    // and the FlushFileBuffers loop is a no-op, but the Sleep still helps.
+    if (chainedFromWrite) {
+        for (HANDLE h : volumes) FlushFileBuffers(h);
         Sleep(1500);
     }
 
@@ -1325,7 +1425,7 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
             ((imageBytes + geometry.bytesPerSector - 1) / geometry.bytesPerSector) * geometry.bytesPerSector;
         if (padded > geometry.totalBytes) {
             std::cerr << "Image is larger than target disk." << std::endl;
-            cleanupDiskHandles(hVolume, hDisk);
+            cleanupDiskHandles(volumes, hDisk);
             return 1;
         }
     }
@@ -1333,7 +1433,7 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
     LARGE_INTEGER pos = {};
     if (!SetFilePointerEx(hDisk, pos, nullptr, FILE_BEGIN)) {
         printWinError(L"Failed to seek physical disk.", GetLastError());
-        cleanupDiskHandles(hVolume, hDisk);
+        cleanupDiskHandles(volumes, hDisk);
         return 1;
     }
 
@@ -1460,14 +1560,16 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
 
     // Eject only when this Verify was chained from a Write (auto-verify
     // path). Standalone user-initiated Verify must NOT eject — the user
-    // may want to do something else with the card afterwards.
-    const bool chainedFromWrite = (inheritVolume != INVALID_HANDLE_VALUE);
-    if (rc == 0 && chainedFromWrite && hVolume != INVALID_HANDLE_VALUE) {
-        DWORD junk = 0;
-        DeviceIoControl(hVolume, IOCTL_STORAGE_EJECT_MEDIA,
-                        NULL, 0, NULL, 0, &junk, NULL);
+    // may want to do something else with the card afterwards. Bare disks
+    // (volumes empty) skip eject naturally.
+    if (rc == 0 && chainedFromWrite) {
+        for (HANDLE h : volumes) {
+            DWORD junk = 0;
+            DeviceIoControl(h, IOCTL_STORAGE_EJECT_MEDIA,
+                            NULL, 0, NULL, 0, &junk, NULL);
+        }
     }
-    cleanupDiskHandles(hVolume, hDisk);
+    cleanupDiskHandles(volumes, hDisk);
     if (rc == 0) {
         progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
         std::cout << "Verify successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
@@ -1604,15 +1706,15 @@ int main(int argc, char *argv[])
 
     if (opt.command == "write") {
         const auto totalStart = std::chrono::steady_clock::now();
-        HANDLE keepVolume = INVALID_HANDLE_VALUE;
+        std::vector<HANDLE> keepVolumes;
         // When auto-verify is scheduled, ask cmdWrite to hand the locked
-        // volume straight to cmdVerify — no third party gets a foothold
+        // volumes straight to cmdVerify — no third party gets a foothold
         // in the gap.
         const int wrc = cmdWrite(opt.image, opt.device,
-                                 opt.noVerify ? nullptr : &keepVolume);
+                                 opt.noVerify ? nullptr : &keepVolumes);
         if (wrc != 0 || opt.noVerify) return wrc;
         std::cout << std::endl;  // blank line between Write and auto-Verify
-        const int vrc = cmdVerify(opt.image, opt.device, keepVolume);
+        const int vrc = cmdVerify(opt.image, opt.device, &keepVolumes);
         if (vrc == 0) {
             const double total = std::chrono::duration_cast<std::chrono::duration<double>>(
                 std::chrono::steady_clock::now() - totalStart).count();

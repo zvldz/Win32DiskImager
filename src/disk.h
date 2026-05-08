@@ -70,9 +70,25 @@ bool writeSectorDataToHandle(HANDLE handle, char *data, unsigned long long start
 unsigned long long getNumberOfSectors(HANDLE handle, unsigned long long *sectorsize);
 unsigned long long getFileSizeInSectors(HANDLE handle, unsigned long long sectorsize);
 bool spaceAvailable(char *location, unsigned long long spaceneeded);
-// If sizeBytes is non-null and the probe succeeds, it receives the total
-// device capacity in bytes (taken from IOCTL_DISK_GET_DRIVE_GEOMETRY_EX on
-// the volume handle). Callers that don't want the size can pass nullptr.
-bool checkDriveType(char *name, ULONG *pid, unsigned long long *sizeBytes = nullptr);
+
+// Snapshot of one writable physical disk: \\.\PhysicalDriveN identity,
+// total capacity, and the list of mounted drive letters (empty for a
+// bare disk that Windows did not assign a letter — unformatted card,
+// foreign partition layout, manually unmounted volume).
+struct TargetDisk
+{
+    DWORD       diskNumber  = 0;
+    quint64     sizeBytes   = 0;
+    QStringList letters;        // entries like "E:", possibly empty
+};
+
+// Enumerates \\.\PhysicalDrive0..31, filters to writable removable / USB /
+// SD / MMC targets (system SATA / NVMe disks rejected), and maps each disk
+// to its mounted drive letters via IOCTL_STORAGE_GET_DEVICE_NUMBER. Empty
+// multi-card-reader slots are skipped (IOCTL_STORAGE_CHECK_VERIFY). Probe
+// failures on individual devices are silent — virtual / driver-based
+// filesystems (Google Drive / OneDrive / Dokany / subst) get skipped
+// without nag dialogs.
+QList<TargetDisk> enumerateTargetDisks();
 
 #endif // DISK_H

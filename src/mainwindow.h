@@ -26,10 +26,12 @@
 
 #include <QtWidgets>
 #include <QClipboard>
+#include <QList>
 #include <windows.h>
 #include <memory>
 #include "ui_mainwindow.h"
 #include "elapsedtimer.h"
+#include "disk.h"   // TargetDisk struct
 
 class MainWindow : public QMainWindow, public Ui::MainWindow
 {
@@ -82,8 +84,18 @@ private:
         void getLogicalDrives();
         void setReadWriteButtonState();
         void downloadAndRunInstaller(const QString &url, const QString &version);
-        // Closes any open hVolume / hFile / hRawDisk (with lock release on
-        // hVolume) and resets the UI back to idle. Replaces the long
+        // Opens, locks and dismounts every mounted volume that lives on the
+        // selected physical disk. Required before any raw-write path —
+        // otherwise the FS still owns the partitions and writes silently
+        // race with cached / pending I/O. Returns false on partial failure
+        // and rolls back any locks already taken; on success populates
+        // m_volumes (empty list for a bare disk with no mounted letter).
+        bool lockAllVolumesOnDisk(const TargetDisk &td);
+        // Releases lock + closes every handle in m_volumes and clears it.
+        // Idempotent — safe to call on an already-empty list.
+        void unlockAndCloseAllVolumes();
+        // Closes any open volume / hFile / hRawDisk (with lock release on
+        // each volume) and resets the UI back to idle. Replaces the long
         // identical cleanup blocks that used to be duplicated in every
         // early-return path of Write / Read / Verify.
         void cleanupHandlesAndUI();
@@ -96,7 +108,16 @@ private:
 
         static const int MAX_RECENT_IMAGE_FILES = 20;
 
-        HANDLE hVolume;
+        // All mounted volume handles for the selected target disk, each
+        // already locked + dismounted. Empty for a bare disk (no letter,
+        // no recognised FS), which then needs no per-volume housekeeping —
+        // we go straight to hRawDisk.
+        QList<HANDLE> m_volumes;
+        // Snapshot of writable disks shown in the cboxDevice combo, indexed
+        // by combo row. Source of truth for the diskNumber + letters of
+        // whichever entry the user picked — replaces the old letter-parsing
+        // out of the combo's display text.
+        QList<TargetDisk> m_targetDisks;
         HANDLE hFile;
         HANDLE hRawDisk;
         static const unsigned short ONE_SEC_IN_MS = 1000;
@@ -110,10 +131,12 @@ private:
         // into an auto-verify. Verify's completion dialog uses it to report
         // Write + Verify + Total time instead of just Verify's own elapsed.
         qint64 m_writeElapsedMs = 0;
-        // When true, Write has just handed off a still-locked, still-mounted-
-        // out hVolume to the auto-verify pass. Verify reuses it instead of
-        // re-opening, so nothing (Google Drive / indexer / antivirus) gets a
-        // window to latch onto the freshly-written volume.
+        // When true, Write has just handed off the still-locked, still-
+        // dismounted m_volumes list to the auto-verify pass. Verify reuses
+        // them instead of re-opening, so nothing (Google Drive / indexer /
+        // antivirus) gets a window to latch onto the freshly-written
+        // volumes between the two passes. Meaningless for bare disks
+        // (m_volumes empty either way).
         bool m_verifyInheritsLock = false;
         // Set up in the constructor; lives for the whole window lifetime
         // and emits update{Available,NotAvailable,Failed}.

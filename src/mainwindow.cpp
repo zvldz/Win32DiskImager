@@ -63,6 +63,15 @@
 // Values 0xF000..0xFFFF are reserved by the system for standard
 // SC_* commands; we stay well below that range.
 static const unsigned int kCheckUpdatesSysCommandId = 0x0100;
+
+// Well-known GUID for disk-class device interface notifications, mirrors
+// GUID_DEVINTERFACE_DISK from ntddstor.h. Inlined to avoid the
+// initguid.h include-order dance — that header has to come before the
+// first use of any DEFINE_GUID macro and breaks if pulled in elsewhere.
+static const GUID kGuidDevInterfaceDisk =
+    { 0x53F56307L, 0xB6BF, 0x11D0,
+      { 0x94, 0xF2, 0x00, 0xA0, 0xC9, 0x1E, 0xFB, 0x8B } };
+
 #include "elapsedtimer.h"
 
 #include <thread>
@@ -83,6 +92,25 @@ static QString formatDeviceSize(unsigned long long bytes)
     if (b >= GB) return QString::number(b / GB, 'f', 0) + "GB";
     if (b >= MB) return QString::number(b / MB, 'f', 0) + "MB";
     return QString::number(b / KB, 'f', 0) + "KB";
+}
+
+// Combo-box label for one writable disk: always leads with the physical
+// disk number ("Disk N"), then mounted letters in brackets if any, then
+// capacity. Bare disks (unformatted card, no FS Windows recognises) come
+// out as "Disk N 32GB" with no letter chunk.
+static QString buildDeviceLabel(const TargetDisk &td)
+{
+    QString label = QStringLiteral("Disk %1").arg(td.diskNumber);
+    if (!td.letters.isEmpty()) {
+        QStringList pretty;
+        for (const QString &lt : td.letters) {
+            pretty.append(lt + "\\");   // "E:" → "E:\\"
+        }
+        label += QStringLiteral(" [%1]").arg(pretty.join(", "));
+    }
+    const QString sz = formatDeviceSize(td.sizeBytes);
+    if (!sz.isEmpty()) label += QLatin1Char(' ') + sz;
+    return label;
 }
 
 // Centered-button, rich-text completion dialog. Used by all four success
@@ -181,13 +209,11 @@ MainWindow* MainWindow::instance = NULL;
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
     setupUi(this);
-    // Reserve 8 chars of combo width *before* pinning the window
-    // size. The full "[X:\] XXGB" label is elided in the combo but
-    // still renders complete in the dropdown. Without this reservation
-    // the fixed-size window was frozen around an empty combo, so
-    // inserting a card at runtime (DBT_DEVICEARRIVAL) couldn't widen
-    // the combo at all.
-    cboxDevice->setMinimumContentsLength(8);
+    // Reserve enough combo width for the worst-case label
+    // ("Disk 9 [E:\, F:\] 256GB" ≈ 22 chars) *before* pinning the window
+    // size. Inserting a card at runtime (DBT_DEVICEARRIVAL) can't widen
+    // a fixed-size window, so the room has to be there from the start.
+    cboxDevice->setMinimumContentsLength(22);
     cboxDevice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     setFixedSize(size());
     if (QLineEdit *fileEdit = leFile->lineEdit()) {
@@ -213,7 +239,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     progressbar->reset();
     clipboard = QApplication::clipboard();
     statusbar->showMessage(tr("Waiting for a task."));
-    hVolume = INVALID_HANDLE_VALUE;
     hFile = INVALID_HANDLE_VALUE;
     hRawDisk = INVALID_HANDLE_VALUE;
     if (QCoreApplication::arguments().count() > 1)
@@ -239,6 +264,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         AppendMenuW(sysMenu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(sysMenu, MF_STRING, kCheckUpdatesSysCommandId,
                     L"Check for Updates...");
+    }
+
+    // Subscribe to disk-class device-interface notifications so we get
+    // WM_DEVICECHANGE for *bare* physical disks (no FS Windows recognises,
+    // so no DBT_DEVTYP_VOLUME event fires). Volume notifications come for
+    // free without registration; this just adds the bare-disk channel.
+    {
+        DEV_BROADCAST_DEVICEINTERFACE_W filter = {};
+        filter.dbcc_size = sizeof(filter);
+        filter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+        filter.dbcc_classguid = kGuidDevInterfaceDisk;
+        RegisterDeviceNotificationW(reinterpret_cast<HWND>(winId()),
+                                    &filter,
+                                    DEVICE_NOTIFY_WINDOW_HANDLE);
     }
 
     // Auto-check at most once a week. Stays silent on no-update / failure.
@@ -292,11 +331,7 @@ MainWindow::~MainWindow()
         CloseHandle(hFile);
         hFile = INVALID_HANDLE_VALUE;
     }
-    if (hVolume != INVALID_HANDLE_VALUE)
-    {
-        CloseHandle(hVolume);
-        hVolume = INVALID_HANDLE_VALUE;
-    }
+    unlockAndCloseAllVolumes();
     if (sectorData != NULL)
     {
         _aligned_free(sectorData);
@@ -463,14 +498,49 @@ void MainWindow::cleanupHandlesAndUI()
         CloseHandle(hFile);
         hFile = INVALID_HANDLE_VALUE;
     }
-    if (hVolume != INVALID_HANDLE_VALUE) {
-        removeLockOnVolume(hVolume);
-        CloseHandle(hVolume);
-        hVolume = INVALID_HANDLE_VALUE;
-    }
+    unlockAndCloseAllVolumes();
     status = STATUS_IDLE;
     bCancel->setEnabled(false);
     setReadWriteButtonState();
+}
+
+bool MainWindow::lockAllVolumesOnDisk(const TargetDisk &td)
+{
+    // Bare disk (no recognised FS, no assigned letter): nothing for the
+    // FS to own, raw access is unconflicted, m_volumes stays empty.
+    for (const QString &lt : td.letters) {
+        if (lt.isEmpty()) continue;
+        const int volumeIdx = lt.at(0).toUpper().toLatin1() - 'A';
+        HANDLE h = getHandleOnVolume(volumeIdx, GENERIC_READ | GENERIC_WRITE);
+        if (h == INVALID_HANDLE_VALUE) {
+            unlockAndCloseAllVolumes();
+            return false;
+        }
+        if (!getLockOnVolume(h)) {
+            CloseHandle(h);
+            unlockAndCloseAllVolumes();
+            return false;
+        }
+        if (!unmountVolume(h)) {
+            removeLockOnVolume(h);
+            CloseHandle(h);
+            unlockAndCloseAllVolumes();
+            return false;
+        }
+        m_volumes.append(h);
+    }
+    return true;
+}
+
+void MainWindow::unlockAndCloseAllVolumes()
+{
+    for (HANDLE h : m_volumes) {
+        if (h != INVALID_HANDLE_VALUE) {
+            removeLockOnVolume(h);
+            CloseHandle(h);
+        }
+    }
+    m_volumes.clear();
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -652,21 +722,32 @@ void MainWindow::on_bWrite_clicked()
         if (fileinfo.exists() && fileinfo.isFile() &&
                 fileinfo.isReadable() && (fileinfo.size() > 0) )
         {
-            if (leFile->currentText().at(0) == cboxDevice->currentText().at(1))
-            {
-                QMessageBox::critical(this, tr("Write Error"), tr("Image file cannot be located on the target device."));
-                return;
+            const int row = cboxDevice->currentIndex();
+            if (row < 0 || row >= m_targetDisks.size()) return;
+            const TargetDisk td = m_targetDisks[row];
+
+            // Image-on-target guard: only meaningful when the target disk
+            // has mounted letters. Compare image's drive letter against
+            // every letter on the disk (multi-partition cards too).
+            const QChar imgLetter = leFile->currentText().at(0).toUpper();
+            for (const QString &lt : td.letters) {
+                if (!lt.isEmpty() && lt.at(0).toUpper() == imgLetter) {
+                    QMessageBox::critical(this, tr("Write Error"),
+                        tr("Image file cannot be located on the target device."));
+                    return;
+                }
             }
 
-            // build the drive letter as a const char *
-            //   (without the surrounding brackets)
-            QString qs = cboxDevice->currentText();
-            qs.replace(QRegularExpression("[\\[\\]]"), "");
-            QByteArray qba = qs.toLocal8Bit();
-            const char *ltr = qba.data();
+            // Volume label of the first mounted letter (if any) for the
+            // confirmation dialog. Empty string for bare disks.
+            QString volumeName;
+            if (!td.letters.isEmpty()) {
+                const QByteArray rootBa = (td.letters.first() + "\\").toLocal8Bit();
+                volumeName = getDriveLabel(rootBa.constData());
+            }
             if (QMessageBox::warning(this, tr("Confirm overwrite"), tr("Writing to a physical device can corrupt the device.\n"
                                                                        "(Target Device: %1 \"%2\")\n"
-                                                                       "Are you sure you want to continue?").arg(cboxDevice->currentText()).arg(getDriveLabel(ltr)),
+                                                                       "Are you sure you want to continue?").arg(cboxDevice->currentText()).arg(volumeName),
                                      QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::No)
             {
                 return;
@@ -678,21 +759,10 @@ void MainWindow::on_bWrite_clicked()
             bVerify->setEnabled(false);
             double mbpersec;
             unsigned long long i, lasti, availablesectors, numsectors;
-            int volumeID = cboxDevice->currentText().at(1).toLatin1() - 'A';
-            // int deviceID = cboxDevice->itemData(cboxDevice->currentIndex()).toInt();
-            hVolume = getHandleOnVolume(volumeID, GENERIC_READ | GENERIC_WRITE);
-            if (hVolume == INVALID_HANDLE_VALUE)
-            {
-                cleanupHandlesAndUI();
-                return;
-            }
-            DWORD deviceID = getDeviceID(hVolume);
-            if (!getLockOnVolume(hVolume))
-            {
-                cleanupHandlesAndUI();
-                return;
-            }
-            if (!unmountVolume(hVolume))
+            const DWORD deviceID = td.diskNumber;
+            // Lock + dismount every volume on the target disk before raw
+            // access. For a bare disk this is a no-op.
+            if (!lockAllVolumesOnDisk(td))
             {
                 cleanupHandlesAndUI();
                 return;
@@ -906,16 +976,15 @@ void MainWindow::on_bWrite_clicked()
                 m_verifyInheritsLock = true;
             } else {
                 // Standalone Write success — eject so the user can pull the
-                // card immediately. Eject must run while the volume is still
-                // locked + dismounted, before removeLockOnVolume.
+                // card immediately. Eject must run while volumes are still
+                // locked + dismounted, before unlockAndCloseAllVolumes.
+                // Bare disks (m_volumes empty) skip eject naturally.
                 if (status != STATUS_CANCELED) {
-                    ejectVolume(hVolume);
+                    for (HANDLE h : m_volumes) ejectVolume(h);
                 }
-                removeLockOnVolume(hVolume);
                 CloseHandle(hRawDisk);
-                CloseHandle(hVolume);
                 hRawDisk = INVALID_HANDLE_VALUE;
-                hVolume = INVALID_HANDLE_VALUE;
+                unlockAndCloseAllVolumes();
             }
             if (status == STATUS_CANCELED){
                 passfail = false;
@@ -981,11 +1050,19 @@ void MainWindow::on_bRead_clicked()
         if (fileinfo.path()=="."){
             myFile=(myHomeDir + "/" + leFile->currentText());
         }
-        // check whether source and target device is the same...
-        if (myFile.at(0) == cboxDevice->currentText().at(1))
-        {
-            QMessageBox::critical(this, tr("Write Error"), tr("Image file cannot be located on the target device."));
-            return;
+        const int row = cboxDevice->currentIndex();
+        if (row < 0 || row >= m_targetDisks.size()) return;
+        const TargetDisk td = m_targetDisks[row];
+
+        // check whether source and target device is the same — only
+        // meaningful when the target disk has mounted letters.
+        const QChar imgLetter = myFile.at(0).toUpper();
+        for (const QString &lt : td.letters) {
+            if (!lt.isEmpty() && lt.at(0).toUpper() == imgLetter) {
+                QMessageBox::critical(this, tr("Write Error"),
+                    tr("Image file cannot be located on the target device."));
+                return;
+            }
         }
         // confirm overwrite if the dest. file already exists
         if (fileinfo.exists())
@@ -1003,20 +1080,10 @@ void MainWindow::on_bRead_clicked()
         status = STATUS_READING;
         double mbpersec;
         unsigned long long i, lasti, numsectors, filesize, spaceneeded = 0ull;
-        int volumeID = cboxDevice->currentText().at(1).toLatin1() - 'A';
-        hVolume = getHandleOnVolume(volumeID, GENERIC_READ | GENERIC_WRITE);
-        if (hVolume == INVALID_HANDLE_VALUE)
-        {
-            cleanupHandlesAndUI();
-            return;
-        }
-        DWORD deviceID = getDeviceID(hVolume);
-        if (!getLockOnVolume(hVolume))
-        {
-            cleanupHandlesAndUI();
-            return;
-        }
-        if (!unmountVolume(hVolume))
+        const DWORD deviceID = td.diskNumber;
+        // Lock + dismount every volume on the target disk. For a bare
+        // disk (no letters) this is a no-op and we go straight to raw I/O.
+        if (!lockAllVolumesOnDisk(td))
         {
             cleanupHandlesAndUI();
             return;
@@ -1176,10 +1243,17 @@ void MainWindow::on_bVerify_clicked()
         if (fileinfo.exists() && fileinfo.isFile() &&
                 fileinfo.isReadable() && (fileinfo.size() > 0) )
         {
-            if (leFile->currentText().at(0) == cboxDevice->currentText().at(1))
-            {
-                QMessageBox::critical(this, tr("Verify Error"), tr("Image file cannot be located on the target device."));
-                return;
+            const int row = cboxDevice->currentIndex();
+            if (row < 0 || row >= m_targetDisks.size()) return;
+            const TargetDisk td = m_targetDisks[row];
+
+            const QChar imgLetter = leFile->currentText().at(0).toUpper();
+            for (const QString &lt : td.letters) {
+                if (!lt.isEmpty() && lt.at(0).toUpper() == imgLetter) {
+                    QMessageBox::critical(this, tr("Verify Error"),
+                        tr("Image file cannot be located on the target device."));
+                    return;
+                }
             }
             status = STATUS_VERIFYING;
             bCancel->setEnabled(true);
@@ -1188,30 +1262,18 @@ void MainWindow::on_bVerify_clicked()
             bVerify->setEnabled(false);
             double mbpersec;
             unsigned long long i, lasti, availablesectors, numsectors, result;
-            int volumeID = cboxDevice->currentText().at(1).toLatin1() - 'A';
-            DWORD deviceID;
-            // If chained from auto-verify after Write, hVolume is already
-            // open, locked and dismounted. Reusing it keeps third-party
-            // watchers (Google Drive / indexer / antivirus) off the volume
-            // through the Write → Verify boundary.
-            if (m_verifyInheritsLock && hVolume != INVALID_HANDLE_VALUE) {
+            const DWORD deviceID = td.diskNumber;
+            // If chained from auto-verify after Write, m_volumes is already
+            // populated with locked + dismounted handles. Reusing them
+            // keeps third-party watchers (Google Drive / indexer / antivirus)
+            // off the volumes through the Write → Verify boundary. For a
+            // bare disk m_volumes is empty either way and the lock step
+            // is a no-op.
+            if (m_verifyInheritsLock && !m_volumes.isEmpty()) {
                 m_verifyInheritsLock = false;
-                deviceID = getDeviceID(hVolume);
             } else {
-                hVolume = getHandleOnVolume(volumeID, GENERIC_READ | GENERIC_WRITE);
-                if (hVolume == INVALID_HANDLE_VALUE)
-                {
-                    cleanupHandlesAndUI();
-                    return;
-                }
-                deviceID = getDeviceID(hVolume);
-                if (!getLockOnVolume(hVolume))
-                {
-                    cleanupHandlesAndUI();
-                    return;
-                }
-                if (!unmountVolume(hVolume))
-                {
+                m_verifyInheritsLock = false;
+                if (!lockAllVolumesOnDisk(td)) {
                     cleanupHandlesAndUI();
                     return;
                 }
@@ -1239,7 +1301,7 @@ void MainWindow::on_bVerify_clicked()
             // the end of the image have a higher chance of catching the
             // controller mid-flush — the classic "fail just before 100%".
             if (m_writeElapsedMs > 0) {
-                FlushFileBuffers(hVolume);
+                for (HANDLE h : m_volumes) FlushFileBuffers(h);
                 Sleep(1500);
             }
             availablesectors = getNumberOfSectors(hRawDisk, &sectorsize);
@@ -1444,13 +1506,11 @@ void MainWindow::on_bVerify_clicked()
             // user-initiated Verify must NOT eject; the user may want to
             // do something else with the card afterwards.
             if (status != STATUS_CANCELED && m_writeElapsedMs > 0) {
-                ejectVolume(hVolume);
+                for (HANDLE h : m_volumes) ejectVolume(h);
             }
-            removeLockOnVolume(hVolume);
             CloseHandle(hRawDisk);
-            CloseHandle(hVolume);
             hRawDisk = INVALID_HANDLE_VALUE;
-            hVolume = INVALID_HANDLE_VALUE;
+            unlockAndCloseAllVolumes();
             if (status == STATUS_CANCELED){
                 passfail = false;
             }
@@ -1524,57 +1584,34 @@ void MainWindow::on_bVerify_clicked()
     elapsed_timer->stop();
 }
 
-// getLogicalDrives sets cBoxDevice with any logical drives found, as long
-// as they indicate that they're either removable, or fixed and on USB bus
+// Rebuild cboxDevice from enumerateTargetDisks(). Source of truth is the
+// physical-disk enumerator, not the per-letter probe — that way bare disks
+// (unformatted card, no letter assigned) appear too. Selection is preserved
+// across rebuilds by matching diskNumber from the previously selected row.
 void MainWindow::getLogicalDrives()
 {
-    // GetLogicalDrives returns 0 on failure, or a bitmask representing
-    // the drives available on the system (bit 0 = A:, bit 1 = B:, etc)
-    unsigned long driveMask = GetLogicalDrives();
-    int i = 0;
-    ULONG pID;
-    unsigned long long sizeBytes;
+    // Remember which disk the user had selected so a refresh from
+    // WM_DEVICECHANGE doesn't silently snap to "Disk 0".
+    DWORD prevDisk = (DWORD)-1;
+    if (cboxDevice->currentIndex() >= 0
+        && cboxDevice->currentIndex() < m_targetDisks.size()) {
+        prevDisk = m_targetDisks[cboxDevice->currentIndex()].diskNumber;
+    }
 
     cboxDevice->clear();
+    m_targetDisks = enumerateTargetDisks();
 
-    while (driveMask != 0)
-    {
-        if (driveMask & 1)
-        {
-            // the "A" in drivename will get incremented by the # of bits
-            // we've shifted
-            char drivename[] = "\\\\.\\A:\\";
-            drivename[4] += i;
-            if (checkDriveType(drivename, &pID, &sizeBytes))
-            {
-                QString label = QString("[%1:\\]").arg(drivename[4]);
-                const QString sz = formatDeviceSize(sizeBytes);
-                if (!sz.isEmpty()) label += QStringLiteral(" ") + sz;
-                cboxDevice->addItem(label, (qulonglong)pID);
-            }
-        }
-        driveMask >>= 1;
+    int restoreIndex = -1;
+    for (int i = 0; i < m_targetDisks.size(); ++i) {
+        const TargetDisk &td = m_targetDisks[i];
+        cboxDevice->addItem(buildDeviceLabel(td), (qulonglong)td.diskNumber);
+        if (td.diskNumber == prevDisk) restoreIndex = i;
+    }
+    if (restoreIndex >= 0) {
+        cboxDevice->setCurrentIndex(restoreIndex);
+    } else if (!m_targetDisks.isEmpty()) {
         cboxDevice->setCurrentIndex(0);
-        ++i;
     }
-}
-
-// support routine for winEvent - returns the drive letter for a given mask
-//   taken from http://support.microsoft.com/kb/163503
-char FirstDriveFromMask (ULONG unitmask)
-{
-    char i;
-
-    for (i = 0; i < 26; ++i)
-    {
-        if (unitmask & 0x1)
-        {
-            break;
-        }
-        unitmask = unitmask >> 1;
-    }
-
-    return (i + 'A');
 }
 
 void MainWindow::onUpdateAvailable(const QString &tag, const QString &installerUrl)
@@ -1722,62 +1759,30 @@ bool MainWindow::nativeEvent(const QByteArray &type, void *vMsg, long *result)
         if (result) *result = 0;
         return true;
     }
-    if(msg->message == WM_DEVICECHANGE)
+    if (msg->message == WM_DEVICECHANGE)
     {
-        PDEV_BROADCAST_HDR lpdb = (PDEV_BROADCAST_HDR)msg->lParam;
-        switch(msg->wParam)
+        // Two channels: DBT_DEVTYP_VOLUME (letter-mounted volumes,
+        // delivered automatically) and DBT_DEVTYP_DEVICEINTERFACE
+        // (registered for GUID_DEVINTERFACE_DISK in the constructor — fires
+        // for bare disks with no recognised FS). Both map to the same
+        // intent: full rebuild from enumerateTargetDisks(), keeping the
+        // user's selection by diskNumber. Volume-type events on network
+        // shares are ignored — only physical-disk topology changes matter.
+        if (msg->wParam == DBT_DEVICEARRIVAL
+            || msg->wParam == DBT_DEVICEREMOVECOMPLETE)
         {
-        case DBT_DEVICEARRIVAL:
-            if (lpdb -> dbch_devicetype == DBT_DEVTYP_VOLUME)
-            {
-                PDEV_BROADCAST_VOLUME lpdbv = (PDEV_BROADCAST_VOLUME)lpdb;
-                if ((lpdbv->dbcv_flags & DBTF_NET) == 0)
-                {
-                    char ALET = FirstDriveFromMask(lpdbv->dbcv_unitmask);
-                    // add device to combo box (after sanity check that
-                    // it's not already there, which it shouldn't be)
-                    QString qsPrefix = QString("[%1:\\]").arg(ALET);
-                    if (cboxDevice->findText(qsPrefix, Qt::MatchStartsWith) == -1)
-                    {
-                        ULONG pID;
-                        unsigned long long sizeBytes;
-                        char longname[] = "\\\\.\\A:\\";
-                        longname[4] = ALET;
-                        // checkDriveType gets the physicalID
-                        if (checkDriveType(longname, &pID, &sizeBytes))
-                        {
-                            QString label = qsPrefix;
-                            const QString sz = formatDeviceSize(sizeBytes);
-                            if (!sz.isEmpty()) label += QStringLiteral(" ") + sz;
-                            cboxDevice->addItem(label, (qulonglong)pID);
-                            setReadWriteButtonState();
-                        }
-                    }
-                }
+            PDEV_BROADCAST_HDR lpdb = (PDEV_BROADCAST_HDR)msg->lParam;
+            const bool networkVolume =
+                lpdb && lpdb->dbch_devicetype == DBT_DEVTYP_VOLUME
+                && (((PDEV_BROADCAST_VOLUME)lpdb)->dbcv_flags & DBTF_NET);
+            if (!networkVolume) {
+                getLogicalDrives();
+                setReadWriteButtonState();
             }
-            break;
-        case DBT_DEVICEREMOVECOMPLETE:
-            if (lpdb -> dbch_devicetype == DBT_DEVTYP_VOLUME)
-            {
-                PDEV_BROADCAST_VOLUME lpdbv = (PDEV_BROADCAST_VOLUME)lpdb;
-                if ((lpdbv->dbcv_flags & DBTF_NET) == 0)
-                {
-                    char ALET = FirstDriveFromMask(lpdbv->dbcv_unitmask);
-                    //  find the device that was removed in the combo box,
-                    //  and remove it from there....
-                    //  "removeItem" ignores the request if the index is
-                    //  out of range, and findText returns -1 if the item isn't found.
-                    // Items now carry a size suffix ('[E:\\] 32 GB'), so
-                    // match only the '[X:\\]' prefix.
-                    cboxDevice->removeItem(cboxDevice->findText(QString("[%1:\\]").arg(ALET), Qt::MatchStartsWith));
-                    setReadWriteButtonState();
-                }
-            }
-            break;
-        } // skip the rest
-    } // end of if msg->message
-    *result = 0; //get rid of obnoxious compiler warning
-    return false; // let qt handle the rest
+        }
+    }
+    *result = 0;
+    return false;
 }
 
 void MainWindow::updateHashControls()

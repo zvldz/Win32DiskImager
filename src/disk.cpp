@@ -22,6 +22,7 @@
 #endif
 
 #include <QtWidgets>
+#include <QMap>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -386,181 +387,97 @@ QString getDriveLabel(const char *drv)
     return(retVal);
 }
 
-// Probe used during drive enumeration. Failures are expected and normal for
-// virtual/user-mode filesystems (Google Drive, OneDrive, Dokany, VeraCrypt,
-// Subst, RamDisk, ...) that do not fully implement storage IOCTLs. Return
-// FALSE silently so the caller can skip the device — never show a dialog
-// from here, or the user gets a nag popup for every such drive at startup.
-BOOL GetDisksProperty(HANDLE hDevice, PSTORAGE_DEVICE_DESCRIPTOR pDevDesc,
-                      DEVICE_NUMBER *devInfo)
+// Build the disk-number → mounted-letter map for enumerateTargetDisks().
+// Walks GetLogicalDrives() and asks each \\.\X: for IOCTL_STORAGE_GET_DEVICE_NUMBER.
+// Letters that don't map to a physical disk (network shares, subst drives,
+// virtual filesystems like Google Drive / OneDrive) are silently skipped.
+static QMap<DWORD, QStringList> buildDiskLetterMap()
 {
-    STORAGE_PROPERTY_QUERY Query;
-    DWORD dwOutBytes;
-
-    Query.PropertyId = StorageDeviceProperty;
-    Query.QueryType = PropertyStandardQuery;
-
-    if (!::DeviceIoControl(hDevice, IOCTL_STORAGE_QUERY_PROPERTY,
-            &Query, sizeof(STORAGE_PROPERTY_QUERY), pDevDesc,
-            pDevDesc->Size, &dwOutBytes, (LPOVERLAPPED)NULL))
-    {
-        return FALSE;
+    QMap<DWORD, QStringList> map;
+    const DWORD mask = GetLogicalDrives();
+    for (int i = 0; i < 26; ++i) {
+        if ((mask & (1u << i)) == 0) continue;
+        wchar_t volPath[] = L"\\\\.\\A:";
+        volPath[4] = static_cast<wchar_t>(L'A' + i);
+        HANDLE hVol = CreateFileW(volPath, FILE_READ_ATTRIBUTES,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                  NULL, OPEN_EXISTING, 0, NULL);
+        if (hVol == INVALID_HANDLE_VALUE) continue;
+        STORAGE_DEVICE_NUMBER sdn = {};
+        DWORD got = 0;
+        if (DeviceIoControl(hVol, IOCTL_STORAGE_GET_DEVICE_NUMBER,
+                            NULL, 0, &sdn, sizeof(sdn), &got, NULL)
+            && sdn.DeviceType == FILE_DEVICE_DISK)
+        {
+            map[sdn.DeviceNumber].append(
+                QString(QChar(QLatin1Char('A' + i))) + ":");
+        }
+        CloseHandle(hVol);
     }
-
-    if (!::DeviceIoControl(hDevice, IOCTL_STORAGE_GET_DEVICE_NUMBER,
-            NULL, 0, devInfo, sizeof(DEVICE_NUMBER), &dwOutBytes,
-            (LPOVERLAPPED)NULL))
-    {
-        return FALSE;
-    }
-
-    return TRUE;
+    return map;
 }
 
-// some routines fail if there's no trailing slash in a name,
-// 		others fail if there is.  So this routine takes a name (trailing
-// 		slash or no), and creates 2 versions - one with the slash, and one w/o
-//
-// 		CALLER MUST FREE THE 2 RETURNED STRINGS
-bool slashify(char *str, char **slash, char **noSlash)
+QList<TargetDisk> enumerateTargetDisks()
 {
-    bool retVal = false;
-    int strLen = strlen(str);
-    if ( strLen > 0 )
-    {
-        if ( *(str + strLen - 1) == '\\' )
-        {
-            // trailing slash exists
-            if (( (*slash = (char *)calloc( (strLen + 1), sizeof(char))) != NULL) &&
-                    ( (*noSlash = (char *)calloc(strLen, sizeof(char))) != NULL))
-            {
-                memcpy(*slash, str, strLen + 1); // include NUL terminator
-                memcpy(*noSlash, *slash, strLen - 1);
-                (*noSlash)[strLen - 1] = '\0';
-                retVal = true;
-            }
+    QList<TargetDisk> out;
+    const QMap<DWORD, QStringList> letterMap = buildDiskLetterMap();
+
+    for (DWORD n = 0; n < 32; ++n) {
+        const QString path = QStringLiteral("\\\\.\\PhysicalDrive%1").arg(n);
+        HANDLE hDisk = CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()),
+                                   0,
+                                   FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                   NULL, OPEN_EXISTING, 0, NULL);
+        if (hDisk == INVALID_HANDLE_VALUE) continue;
+
+        // Bus-type filter: USB / SD / MMC always accepted, removable
+        // accepted unless on the SATA bus (catches USB-attached HDDs in
+        // odd reporting modes), fixed SATA / NVMe / RAID system disks
+        // rejected. Probe failures are silent — no dialog on disks the
+        // user can't or shouldn't pick.
+        STORAGE_PROPERTY_QUERY q = { StorageDeviceProperty,
+                                     PropertyStandardQuery, {0} };
+        BYTE buf[1024] = {0};
+        DWORD got = 0;
+        if (!DeviceIoControl(hDisk, IOCTL_STORAGE_QUERY_PROPERTY,
+                             &q, sizeof(q), buf, sizeof(buf), &got, NULL)
+            || got < sizeof(STORAGE_DEVICE_DESCRIPTOR)) {
+            CloseHandle(hDisk);
+            continue;
         }
-        else
-        {
-            // no trailing slash exists
-            if ( ((*slash = (char *)calloc( (strLen + 2), sizeof(char))) != NULL) &&
-                 ((*noSlash = (char *)calloc( (strLen + 1), sizeof(char))) != NULL) )
-            {
-                memcpy(*noSlash, str, strLen + 1); // include NUL terminator
-                snprintf(*slash, strLen + 2, "%s\\", *noSlash);
-                retVal = true;
-            }
+        const auto *desc = reinterpret_cast<const STORAGE_DEVICE_DESCRIPTOR *>(buf);
+        const BYTE busType   = static_cast<BYTE>(desc->BusType);
+        const bool removable = (desc->RemovableMedia != FALSE);
+        const bool accept =
+            (busType == BusTypeUsb || busType == BusTypeSd || busType == BusTypeMmc)
+            || (removable && busType != BusTypeSata);
+        if (!accept) {
+            CloseHandle(hDisk);
+            continue;
         }
+
+        // Hub-slot media check: a multi-card reader exposes one PhysicalDrive
+        // per slot regardless of insertion. Without this filter empty slots
+        // would litter the dropdown.
+        if (!DeviceIoControl(hDisk, IOCTL_STORAGE_CHECK_VERIFY,
+                             NULL, 0, NULL, 0, &got, NULL)) {
+            CloseHandle(hDisk);
+            continue;
+        }
+
+        DISK_GEOMETRY_EX dg = {};
+        if (!DeviceIoControl(hDisk, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
+                             NULL, 0, &dg, sizeof(dg), &got, NULL)) {
+            CloseHandle(hDisk);
+            continue;
+        }
+        CloseHandle(hDisk);
+
+        TargetDisk td;
+        td.diskNumber = n;
+        td.sizeBytes  = static_cast<quint64>(dg.DiskSize.QuadPart);
+        td.letters    = letterMap.value(n);
+        out.append(td);
     }
-    return(retVal);
-}
-
-bool GetMediaType(HANDLE hDevice)
-{
-    DISK_GEOMETRY diskGeo;
-    DWORD cbBytesReturned;
-    if (DeviceIoControl(hDevice, IOCTL_DISK_GET_DRIVE_GEOMETRY,NULL, 0, &diskGeo, sizeof(diskGeo), &cbBytesReturned, NULL))
-    {
-        if ((diskGeo.MediaType == FixedMedia) || (diskGeo.MediaType == RemovableMedia))
-        {
-            return true; // Not a floppy
-        }
-    }
-    return false;
-}
-
-// Drive-enumeration probe: used from getLogicalDrives() and WM_DEVICECHANGE
-// to decide whether a volume should appear in the target combo-box. Must
-// stay silent on failure — any error dialog here fires once per non-target
-// drive at startup (Google Drive, OneDrive, Dokany volumes, etc.).
-bool checkDriveType(char *name, ULONG *pid, unsigned long long *sizeBytes)
-{
-    if (sizeBytes) *sizeBytes = 0;
-    HANDLE hDevice;
-    PSTORAGE_DEVICE_DESCRIPTOR pDevDesc;
-    DEVICE_NUMBER deviceInfo;
-    bool retVal = false;
-    char *nameWithSlash;
-    char *nameNoSlash;
-    int driveType;
-    DWORD cbBytesReturned;
-
-    // some calls require no tailing slash, some require a trailing slash...
-    if ( !(slashify(name, &nameWithSlash, &nameNoSlash)) )
-    {
-        return(retVal);
-    }
-
-    driveType = GetDriveType(nameWithSlash);
-    switch( driveType )
-    {
-    case DRIVE_REMOVABLE: // The media can be removed from the drive.
-    case DRIVE_FIXED:     // The media cannot be removed from the drive. Some USB drives report as this.
-        hDevice = CreateFile(nameNoSlash, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-        if (hDevice == INVALID_HANDLE_VALUE)
-        {
-            // Probe: driver-based devices (Google Drive / OneDrive / Dokany,
-            // Subst, RamDisk, ...) legitimately refuse this open with
-            // ACCESS_DENIED (5) or similar. Skip silently — dialogs belong
-            // in code paths that react to an explicit user action.
-        }
-        else
-        {
-            int arrSz = sizeof(STORAGE_DEVICE_DESCRIPTOR) + 512 - 1;
-            pDevDesc = (PSTORAGE_DEVICE_DESCRIPTOR)new BYTE[arrSz];
-            pDevDesc->Size = arrSz;
-
-            // get the device number if the drive is
-            // removable or (fixed AND on the usb bus, SD, or MMC (undefined in XP/mingw))
-            if(GetMediaType(hDevice) && GetDisksProperty(hDevice, pDevDesc, &deviceInfo) &&
-                    ( ((driveType == DRIVE_REMOVABLE) && (pDevDesc->BusType != BusTypeSata))
-                      || ( (driveType == DRIVE_FIXED) && ((pDevDesc->BusType == BusTypeUsb)
-                      || (pDevDesc->BusType == BusTypeSd ) || (pDevDesc->BusType == BusTypeMmc )) ) ) )
-            {
-                // ensure that the drive is actually accessible
-                // multi-card hubs were reporting "removable" even when empty
-                if(DeviceIoControl(hDevice, IOCTL_STORAGE_CHECK_VERIFY2, NULL, 0, NULL, 0, &cbBytesReturned, (LPOVERLAPPED) NULL))
-                {
-                    *pid = deviceInfo.DeviceNumber;
-                    retVal = true;
-                }
-                else
-                // IOCTL_STORAGE_CHECK_VERIFY2 fails on some devices under XP/Vista, try the other (slower) method, just in case.
-                {
-                    CloseHandle(hDevice);
-                    hDevice = CreateFile(nameNoSlash, FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-                    if(DeviceIoControl(hDevice, IOCTL_STORAGE_CHECK_VERIFY, NULL, 0, NULL, 0, &cbBytesReturned, (LPOVERLAPPED) NULL))
-                    {
-                        *pid = deviceInfo.DeviceNumber;
-                        retVal = true;
-                    }
-                }
-                if (retVal && sizeBytes) {
-                    // IOCTL_DISK_GET_LENGTH_INFO silently fails on some
-                    // drivers through a handle opened with FILE_READ_ATTRIBUTES
-                    // only. GEOMETRY_EX works with zero access and matches
-                    // what the CLI uses in queryDiskInfo().
-                    DISK_GEOMETRY_EX dg = {};
-                    if (DeviceIoControl(hDevice, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
-                                        NULL, 0, &dg, sizeof(dg),
-                                        &cbBytesReturned, NULL)) {
-                        *sizeBytes = (unsigned long long)dg.DiskSize.QuadPart;
-                    }
-                }
-            }
-
-            delete[] pDevDesc;
-            CloseHandle(hDevice);
-        }
-
-        break;
-    default:
-        retVal = false;
-    }
-
-    // free the strings allocated by slashify
-    free(nameWithSlash);
-    free(nameNoSlash);
-
-    return(retVal);
+    return out;
 }
