@@ -484,9 +484,14 @@ QList<TargetDisk> enumerateTargetDisks()
         }
 
         // Hub-slot media check: a multi-card reader exposes one PhysicalDrive
-        // per slot regardless of insertion. Without this filter empty slots
-        // would litter the dropdown.
-        if (!DeviceIoControl(hDisk, IOCTL_STORAGE_CHECK_VERIFY,
+        // per slot regardless of insertion. CHECK_VERIFY2 is the
+        // FILE_ANY_ACCESS variant — the strict CHECK_VERIFY requires
+        // FILE_READ_ACCESS on the handle, which our 0-access probe handle
+        // does not have, so it would fail on every disk with ERROR_ACCESS_DENIED.
+#ifndef IOCTL_STORAGE_CHECK_VERIFY2
+#define IOCTL_STORAGE_CHECK_VERIFY2 CTL_CODE(IOCTL_STORAGE_BASE, 0x0200, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#endif
+        if (!DeviceIoControl(hDisk, IOCTL_STORAGE_CHECK_VERIFY2,
                              NULL, 0, NULL, 0, &got, NULL)) {
             CloseHandle(hDisk);
             continue;

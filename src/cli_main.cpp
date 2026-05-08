@@ -830,9 +830,13 @@ std::unique_ptr<ImageSource> openImageSource(const std::string &path, std::strin
     return ok ? std::move(s) : nullptr;
 }
 
-// Some old SDKs / MinGW headers ship without IOCTL_STORAGE_QUERY_PROPERTY.
+// Some old SDKs / MinGW headers ship without IOCTL_STORAGE_QUERY_PROPERTY
+// or IOCTL_STORAGE_CHECK_VERIFY2 — define them here when missing.
 #ifndef IOCTL_STORAGE_QUERY_PROPERTY
 #define IOCTL_STORAGE_QUERY_PROPERTY CTL_CODE(IOCTL_STORAGE_BASE, 0x0500, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#endif
+#ifndef IOCTL_STORAGE_CHECK_VERIFY2
+#define IOCTL_STORAGE_CHECK_VERIFY2 CTL_CODE(IOCTL_STORAGE_BASE, 0x0200, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #endif
 
 // Bus type + removable flag + capacity for `list`. Returns false if the
@@ -860,9 +864,11 @@ bool queryDiskInfo(DWORD diskNumber, BYTE &busTypeOut,
     removableOut = (desc->RemovableMedia != FALSE);
 
     // Hub-slot media check: a multi-card reader exposes one PhysicalDrive
-    // per slot regardless of insertion. Without this filter empty slots
-    // would litter the listing.
-    if (!DeviceIoControl(h, IOCTL_STORAGE_CHECK_VERIFY,
+    // per slot regardless of insertion. CHECK_VERIFY2 is the
+    // FILE_ANY_ACCESS variant — the strict CHECK_VERIFY requires
+    // FILE_READ_ACCESS on the handle, which our 0-access probe handle does
+    // not have, so it would fail on every disk with ERROR_ACCESS_DENIED.
+    if (!DeviceIoControl(h, IOCTL_STORAGE_CHECK_VERIFY2,
                          nullptr, 0, nullptr, 0, &got, nullptr)) {
         CloseHandle(h);
         return false;
