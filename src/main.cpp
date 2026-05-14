@@ -38,8 +38,14 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     app.setApplicationDisplayName(APP_VERSION);
 
+    // Translation lookup: WDI_LANG env var wins (handy for testing a
+    // non-system locale or forcing English on a localised Windows),
+    // otherwise fall back to the OS locale.
+    QString lang = qEnvironmentVariable("WDI_LANG");
+    if (lang.isEmpty())
+        lang = QLocale::system().name();
     QTranslator translator;
-    if (translator.load("translations/diskimager_" + QLocale::system().name()))
+    if (translator.load("translations/diskimager_" + lang))
         app.installTranslator(&translator);
 
     MainWindow* mainwindow = MainWindow::getInstance();
