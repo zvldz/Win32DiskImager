@@ -553,7 +553,6 @@ Błąd %1: %2</translation>
 Error %1: %2</source>
         <translation>Wystąpił błąd podczas próby uzyskania informacji o woluminie.
 Błąd %1: %2</translation>
-Błąd %1: %2</translation>
     </message>
     <message>
         <location filename="../disk.cpp" line="99"/>
@@ -623,7 +622,6 @@ Error %1: %2</source>
         <translatorcomment>o co kaman? Do obsługiwanego miejsca? Albo do kontroli? Miejmy nadzieję ze to nie wyskoczy podczas użytkowania :)</translatorcomment>
         <translation>Wystąpił błąd podczas próby odczytu danych z uchwytu.
 Błąd %1: %2</translation>
-Błądr %1: %2</translation>
     </message>
     <message>
         <location filename="../disk.cpp" line="254"/>
@@ -637,7 +635,6 @@ Błądr %1: %2</translation>
 Error %1: %2</source>
         <translatorcomment>o co kaman? Do obsługiwanego miejsca? Albo do kontroli? Miejmy nadzieję ze to nie wyskoczy podczas użytkowania :)</translatorcomment>
         <translation>Wystąpił błąd podczas próby zapisu danych do uchwytu.
-Błąd %1: %2</translation>
 Błąd %1: %2</translation>
     </message>
     <message>
