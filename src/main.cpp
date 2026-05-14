@@ -22,6 +22,10 @@
 #endif
 
 #include <QApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
 #include <cstdlib>
 #include <windows.h>
 #include <winioctl.h>
@@ -45,13 +49,33 @@ int main(int argc, char *argv[])
     // — relative paths would resolve against the launcher's cwd, which
     // for console launches like `C:\Users\foo> "C:\Program Files\...\Win32DiskImager.exe"`
     // is not the install directory and the .qm files would never be found.
-    QString lang = qEnvironmentVariable("WDI_LANG");
-    if (lang.isEmpty())
-        lang = QLocale::system().name();
+    const QString envLang     = qEnvironmentVariable("WDI_LANG");
+    const QString systemLang  = QLocale::system().name();
+    const QString lang        = envLang.isEmpty() ? systemLang : envLang;
+    const QString trDir       = QCoreApplication::applicationDirPath() + "/translations";
     QTranslator translator;
-    if (translator.load("diskimager_" + lang,
-                        QCoreApplication::applicationDirPath() + "/translations"))
+    const bool loaded = translator.load("diskimager_" + lang, trDir);
+    if (loaded)
         app.installTranslator(&translator);
+
+    // TEMP DEBUG — writes wdi_lang.log next to the exe so we can see why
+    // a WDI_LANG override or the system-locale fallback isn't picking up
+    // the expected .qm. Remove once translation loading is confirmed.
+    {
+        QFile log(QCoreApplication::applicationDirPath() + "/wdi_lang.log");
+        if (log.open(QIODevice::Append | QIODevice::Text)) {
+            QTextStream s(&log);
+            s << "--- " << QDateTime::currentDateTime().toString(Qt::ISODate) << " ---\n"
+              << "WDI_LANG env  = [" << envLang << "]\n"
+              << "system locale = [" << systemLang << "]\n"
+              << "chosen lang   = [" << lang << "]\n"
+              << "translations dir = [" << trDir << "]\n"
+              << "QFile::exists(dir) = " << (QDir(trDir).exists() ? "yes" : "no") << "\n"
+              << "QFile::exists(diskimager_" << lang << ".qm) = "
+              << (QFile::exists(trDir + "/diskimager_" + lang + ".qm") ? "yes" : "no") << "\n"
+              << "translator.load returned " << (loaded ? "true" : "false") << "\n\n";
+        }
+    }
 
     MainWindow* mainwindow = MainWindow::getInstance();
     mainwindow->show();
