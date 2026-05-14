@@ -209,11 +209,12 @@ MainWindow* MainWindow::instance = NULL;
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
     setupUi(this);
-    // Reserve enough combo width for the worst-case label
-    // ("Disk 9 [E:\, F:\] 256GB" ≈ 22 chars) *before* pinning the window
-    // size. Inserting a card at runtime (DBT_DEVICEARRIVAL) can't widen
-    // a fixed-size window, so the room has to be there from the start.
-    cboxDevice->setMinimumContentsLength(22);
+    // Reserve combo width for the typical label ("Disk 2 [E:\] 256GB" ≈
+    // 14 chars) *before* pinning the window size. Multi-partition cards
+    // ("Disk N [E:\, F:\] ...") are rare on the SD / USB target media
+    // and will elide in the combo while still rendering complete in the
+    // dropdown — fixed-size window can't widen at runtime.
+    cboxDevice->setMinimumContentsLength(14);
     cboxDevice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     setFixedSize(size());
     if (QLineEdit *fileEdit = leFile->lineEdit()) {
