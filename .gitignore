@@ -12,6 +12,11 @@ bin/
 Output/
 artifacts/
 
+# Ad-hoc local utilities (one-shot translator scripts, disk-probe debug
+# binaries, etc). Add with `git add -f tools/<file>` if a particular tool
+# is worth tracking long-term.
+tools/
+
 # Editor/IDE and agent metadata.
 .claude/
 .vscode/
