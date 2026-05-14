@@ -92,7 +92,8 @@ LANGUAGES  = es\
              zh_TW\
              ta_IN\
              ko\
-             ja
+             ja\
+             uk
 
 defineReplace(prependAll) {
  for(a,$$1):result += $$2$${a}$$3

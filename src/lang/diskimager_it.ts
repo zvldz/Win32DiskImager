@@ -398,12 +398,12 @@ Sei sicuro di voler annullare la verifica?</translation>
     <message>
         <location filename="../mainwindow.cpp" line="1132"/>
         <source>GPT-partitioned disk detected. &apos;Read Only Allocated Partitions&apos; currently parses MBR tables only — falling back to a full disk read.</source>
-        <translation>Rilevato disco con partizioni GPT. 'Read Only Allocated Partitions' attualmente analizza solo tabelle MBR — si torna a una lettura completa del disco.</translation>
+        <translation>Rilevato disco con partizioni GPT. &apos;Read Only Allocated Partitions&apos; attualmente analizza solo tabelle MBR — si torna a una lettura completa del disco.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1135"/>
         <source>No valid MBR signature on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>Nessuna firma MBR valida su questo dispositivo. 'Read Only Allocated Partitions' torna a una lettura completa del disco.</translation>
+        <translation>Nessuna firma MBR valida su questo dispositivo. &apos;Read Only Allocated Partitions&apos; torna a una lettura completa del disco.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1179"/>
@@ -439,7 +439,7 @@ Sei sicuro di voler annullare la verifica?</translation>
     <message>
         <location filename="../mainwindow.cpp" line="1548"/>
         <source>Write &amp;amp; Verify Successful.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Write:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verify:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Total:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;Card can be safely removed.&lt;/i&gt;</source>
-        <translation>Scrittura e verifica completate.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing="0" cellpadding="6"&gt;&lt;tr&gt;&lt;td bgcolor="%ZEBRA%"&gt;&lt;b&gt;Scrittura:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor="%ZEBRA%"&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verifica:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor="%ZEBRA%"&gt;&lt;b&gt;Totale:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor="%ZEBRA%"&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;La scheda può essere rimossa in sicurezza.&lt;/i&gt;</translation>
+        <translation>Scrittura e verifica completate.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Scrittura:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verifica:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Totale:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;La scheda può essere rimossa in sicurezza.&lt;/i&gt;</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1628"/>
@@ -460,7 +460,7 @@ Sei sicuro di voler annullare la verifica?</translation>
     <message>
         <location filename="../mainwindow.cpp" line="1656"/>
         <source>You are running the latest version (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;View all releases on GitHub&lt;/a&gt;</source>
-        <translation>Stai usando la versione più recente (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href="https://github.com/zvldz/Win32DiskImager/releases"&gt;Vedi tutte le release su GitHub&lt;/a&gt;</translation>
+        <translation>Stai usando la versione più recente (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;Vedi tutte le release su GitHub&lt;/a&gt;</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1661"/>
@@ -493,12 +493,12 @@ Sei sicuro di voler annullare la verifica?</translation>
     <message>
         <location filename="../mainwindow.cpp" line="1688"/>
         <source>Downloading installer...</source>
-        <translation>Download dell'installer in corso…</translation>
+        <translation>Download dell&apos;installer in corso…</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1728"/>
         <source>Could not download the installer.</source>
-        <translation>Impossibile scaricare l'installer.</translation>
+        <translation>Impossibile scaricare l&apos;installer.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1738"/>
@@ -508,7 +508,7 @@ Sei sicuro di voler annullare la verifica?</translation>
     <message>
         <location filename="../mainwindow.cpp" line="1739"/>
         <source>Could not launch the installer.</source>
-        <translation>Impossibile avviare l'installer.</translation>
+        <translation>Impossibile avviare l&apos;installer.</translation>
     </message>
     <message>
         <source>Verification failed at sector: %1</source>

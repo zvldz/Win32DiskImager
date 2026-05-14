@@ -224,13 +224,13 @@ Etes-vous sûr de vouloir continuer?</translation>
     <message>
         <location filename="../mainwindow.cpp" line="242"/>
         <source>Waiting for a task.</source>
-        <translation>En attente d'une tâche.</translation>
+        <translation>En attente d&apos;une tâche.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="572"/>
         <source>Exiting now will cancel verifying image.
 Are you sure you want to exit?</source>
-        <translation>Quitter maintenant annulera la vérification de l'image.
+        <translation>Quitter maintenant annulera la vérification de l&apos;image.
 Êtes-vous sûr de vouloir quitter ?</translation>
     </message>
     <message>
@@ -280,14 +280,14 @@ Are you sure you want to cancel?</source>
     <message>
         <location filename="../mainwindow.cpp" line="432"/>
         <source>Remove from history?</source>
-        <translation>Supprimer de l'historique ?</translation>
+        <translation>Supprimer de l&apos;historique ?</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="433"/>
         <source>Remove this entry from the Image File history?
 
 %1</source>
-        <translation>Supprimer cette entrée de l'historique des fichiers image ?
+        <translation>Supprimer cette entrée de l&apos;historique des fichiers image ?
 
 %1</translation>
     </message>
@@ -374,12 +374,12 @@ Are you sure you want to cancel?</source>
     <message>
         <location filename="../mainwindow.cpp" line="1132"/>
         <source>GPT-partitioned disk detected. &apos;Read Only Allocated Partitions&apos; currently parses MBR tables only — falling back to a full disk read.</source>
-        <translation>Disque partitionné en GPT détecté. 'Read Only Allocated Partitions' n'analyse actuellement que les tables MBR — repli sur une lecture complète du disque.</translation>
+        <translation>Disque partitionné en GPT détecté. &apos;Read Only Allocated Partitions&apos; n&apos;analyse actuellement que les tables MBR — repli sur une lecture complète du disque.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1135"/>
         <source>No valid MBR signature on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>Pas de signature MBR valide sur ce périphérique. 'Read Only Allocated Partitions' bascule sur une lecture complète du disque.</translation>
+        <translation>Pas de signature MBR valide sur ce périphérique. &apos;Read Only Allocated Partitions&apos; bascule sur une lecture complète du disque.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1166"/>
@@ -435,12 +435,12 @@ Are you sure you want to cancel?</source>
     <message>
         <location filename="../mainwindow.cpp" line="1548"/>
         <source>Write &amp;amp; Verify Successful.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Write:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verify:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Total:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;Card can be safely removed.&lt;/i&gt;</source>
-        <translation>Écriture et vérification réussies.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing="0" cellpadding="6"&gt;&lt;tr&gt;&lt;td bgcolor="%ZEBRA%"&gt;&lt;b&gt;Écriture :&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor="%ZEBRA%"&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Vérification :&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor="%ZEBRA%"&gt;&lt;b&gt;Total :&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor="%ZEBRA%"&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;La carte peut être retirée en toute sécurité.&lt;/i&gt;</translation>
+        <translation>Écriture et vérification réussies.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Écriture :&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Vérification :&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Total :&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;La carte peut être retirée en toute sécurité.&lt;/i&gt;</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1628"/>
         <source>A new version is available: &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;Current version: %2&lt;br&gt;&lt;br&gt;No installer asset is attached to this release. Open the release page on GitHub?</source>
-        <translation>Une nouvelle version est disponible : &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;Version actuelle : %2&lt;br&gt;&lt;br&gt;Aucun installateur n'est joint à cette version. Ouvrir la page de la version sur GitHub ?</translation>
+        <translation>Une nouvelle version est disponible : &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;Version actuelle : %2&lt;br&gt;&lt;br&gt;Aucun installateur n&apos;est joint à cette version. Ouvrir la page de la version sur GitHub ?</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1633"/>
@@ -456,7 +456,7 @@ Are you sure you want to cancel?</source>
     <message>
         <location filename="../mainwindow.cpp" line="1656"/>
         <source>You are running the latest version (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;View all releases on GitHub&lt;/a&gt;</source>
-        <translation>Vous utilisez la dernière version (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href="https://github.com/zvldz/Win32DiskImager/releases"&gt;Voir toutes les versions sur GitHub&lt;/a&gt;</translation>
+        <translation>Vous utilisez la dernière version (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;Voir toutes les versions sur GitHub&lt;/a&gt;</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1661"/>
@@ -484,17 +484,17 @@ Are you sure you want to cancel?</source>
     <message>
         <location filename="../mainwindow.cpp" line="1682"/>
         <source>Could not write to %1</source>
-        <translation>Impossible d'écrire dans %1</translation>
+        <translation>Impossible d&apos;écrire dans %1</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1688"/>
         <source>Downloading installer...</source>
-        <translation>Téléchargement de l'installateur…</translation>
+        <translation>Téléchargement de l&apos;installateur…</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1728"/>
         <source>Could not download the installer.</source>
-        <translation>Impossible de télécharger l'installateur.</translation>
+        <translation>Impossible de télécharger l&apos;installateur.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1738"/>
@@ -504,7 +504,7 @@ Are you sure you want to cancel?</source>
     <message>
         <location filename="../mainwindow.cpp" line="1739"/>
         <source>Could not launch the installer.</source>
-        <translation>Impossible de lancer l'installateur.</translation>
+        <translation>Impossible de lancer l&apos;installateur.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1483"/>
@@ -740,7 +740,7 @@ La vérification de l&apos;espace libre ne sera pas effectuée.</translation>
     <message>
         <location filename="../updatechecker.cpp" line="83"/>
         <source>Release has no tag_name</source>
-        <translation>La version n'a pas de tag_name</translation>
+        <translation>La version n&apos;a pas de tag_name</translation>
     </message>
 </context>
 </TS>

@@ -222,7 +222,7 @@ Are you sure you want to cancel?</source>
 (Target Device: %1 &quot;%2&quot;)
 Are you sure you want to continue?</source>
         <translation>இயற்பியல் சாதனத்தில் எழுதுவது சாதனத்தை சேதப்படுத்தலாம்.
-(இலக்கு சாதனம்: %1 "%2")
+(இலக்கு சாதனம்: %1 &quot;%2&quot;)
 நிச்சயமாக தொடர விரும்புகிறீர்களா?</translation>
     </message>
     <message>
@@ -377,12 +377,12 @@ Are you sure you want to continue?</source>
     <message>
         <location filename="../mainwindow.cpp" line="1132"/>
         <source>GPT-partitioned disk detected. &apos;Read Only Allocated Partitions&apos; currently parses MBR tables only — falling back to a full disk read.</source>
-        <translation>GPT பகிர்வுடைய வட்டு கண்டறியப்பட்டது. 'Read Only Allocated Partitions' தற்போது MBR அட்டவணைகளை மட்டுமே பகுப்பாய்வு செய்கிறது — முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
+        <translation>GPT பகிர்வுடைய வட்டு கண்டறியப்பட்டது. &apos;Read Only Allocated Partitions&apos; தற்போது MBR அட்டவணைகளை மட்டுமே பகுப்பாய்வு செய்கிறது — முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1135"/>
         <source>No valid MBR signature on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>இந்த சாதனத்தில் சரியான MBR கையொப்பம் இல்லை. 'Read Only Allocated Partitions' முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
+        <translation>இந்த சாதனத்தில் சரியான MBR கையொப்பம் இல்லை. &apos;Read Only Allocated Partitions&apos; முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1166"/>
@@ -438,7 +438,7 @@ Are you sure you want to continue?</source>
     <message>
         <location filename="../mainwindow.cpp" line="1548"/>
         <source>Write &amp;amp; Verify Successful.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Write:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verify:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Total:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;Card can be safely removed.&lt;/i&gt;</source>
-        <translation>எழுதுதலும் சரிபார்த்தலும் வெற்றிகரமாக முடிந்தன.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing="0" cellpadding="6"&gt;&lt;tr&gt;&lt;td bgcolor="%ZEBRA%"&gt;&lt;b&gt;எழுதுதல்:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor="%ZEBRA%"&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;சரிபார்த்தல்:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor="%ZEBRA%"&gt;&lt;b&gt;மொத்தம்:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor="%ZEBRA%"&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;அட்டையை பாதுகாப்பாக அகற்றலாம்.&lt;/i&gt;</translation>
+        <translation>எழுதுதலும் சரிபார்த்தலும் வெற்றிகரமாக முடிந்தன.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;எழுதுதல்:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;சரிபார்த்தல்:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;மொத்தம்:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;அட்டையை பாதுகாப்பாக அகற்றலாம்.&lt;/i&gt;</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1628"/>
@@ -459,7 +459,7 @@ Are you sure you want to continue?</source>
     <message>
         <location filename="../mainwindow.cpp" line="1656"/>
         <source>You are running the latest version (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;View all releases on GitHub&lt;/a&gt;</source>
-        <translation>நீங்கள் சமீபத்திய பதிப்பை இயக்குகிறீர்கள் (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href="https://github.com/zvldz/Win32DiskImager/releases"&gt;GitHub-இல் அனைத்து வெளியீடுகளையும் காண்க&lt;/a&gt;</translation>
+        <translation>நீங்கள் சமீபத்திய பதிப்பை இயக்குகிறீர்கள் (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;GitHub-இல் அனைத்து வெளியீடுகளையும் காண்க&lt;/a&gt;</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1661"/>
