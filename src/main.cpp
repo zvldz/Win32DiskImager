@@ -41,11 +41,16 @@ int main(int argc, char *argv[])
     // Translation lookup: WDI_LANG env var wins (handy for testing a
     // non-system locale or forcing English on a localised Windows),
     // otherwise fall back to the OS locale.
+    // Search "translations/" next to the executable via applicationDirPath
+    // — relative paths would resolve against the launcher's cwd, which
+    // for console launches like `C:\Users\foo> "C:\Program Files\...\Win32DiskImager.exe"`
+    // is not the install directory and the .qm files would never be found.
     QString lang = qEnvironmentVariable("WDI_LANG");
     if (lang.isEmpty())
         lang = QLocale::system().name();
     QTranslator translator;
-    if (translator.load("translations/diskimager_" + lang))
+    if (translator.load("diskimager_" + lang,
+                        QCoreApplication::applicationDirPath() + "/translations"))
         app.installTranslator(&translator);
 
     MainWindow* mainwindow = MainWindow::getInstance();
