@@ -135,7 +135,10 @@ jobs:
             | awk '/qtbase_[a-z_A-Z]+\.qm$/{print $2}' \
             | tee /tmp/qtbase-paths.txt
           for loc in es it pl nl de fr zh_CN zh_TW ta_IN ko ja uk; do
-            src=$(grep -E "/qtbase_${loc}\.qm$" /tmp/qtbase-paths.txt | head -1)
+            # `|| true` so grep returning 1 (no match — expected for
+            # locales Qt doesn't translate, e.g. ta_IN) doesn't trip
+            # set -e and abort the whole staging step.
+            src=$(grep -E "/qtbase_${loc}\.qm$" /tmp/qtbase-paths.txt | head -1 || true)
             if [ -n "$src" ] && [ -f "$src" ]; then
               cp "$src" Release/translations/
               echo "  staged qtbase_$loc.qm from $src"
