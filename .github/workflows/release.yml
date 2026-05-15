@@ -119,7 +119,6 @@ jobs:
       # disk so the runtime QTranslator::load("translations/diskimager_...")
       # path (see main.cpp) keeps working.
       - name: Stage files for installer
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p Release/translations
