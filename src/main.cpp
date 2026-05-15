@@ -40,30 +40,33 @@ int main(int argc, char *argv[])
 
     // Translation lookup: WDI_LANG env var wins (handy for testing a
     // non-system locale or forcing English on a localised Windows),
-    // otherwise fall back to the OS locale. Search "translations/" next
-    // to the executable via applicationDirPath — relative paths would
-    // resolve against the launcher's cwd, which for console launches
-    // like `C:\Users\foo> "C:\Program Files\...\Win32DiskImager.exe"`
-    // is not the install directory. Note: under requireAdministrator
-    // elevation Windows replaces the inherited environment with a
-    // fresh one from the elevated user's profile, so a process-local
-    // `set WDI_LANG=uk` in an unprivileged shell is lost — use
-    // `setx WDI_LANG uk` or launch from an already-elevated shell.
-    const QString lang  = qEnvironmentVariable("WDI_LANG",
-                                                QLocale::system().name());
-    const QString trDir = QCoreApplication::applicationDirPath() + "/translations";
+    // otherwise fall back to the OS locale. All .qm files are bundled
+    // into the .exe via translations.qrc, so the lookup goes through
+    // the Qt resource system at ":/translations" — no install-dir
+    // layout to babysit, no cwd-dependent paths.
+    //
+    // UAC caveat: requireAdministrator elevation replaces the inherited
+    // environment with a fresh one from the elevated user's profile.
+    // A process-local `set WDI_LANG=uk` in an unprivileged shell is
+    // dropped by the elevation prompt — use `setx WDI_LANG uk` to
+    // persist it in HKCU\Environment, or launch from an already-
+    // elevated shell so no UAC prompt fires and the env is preserved.
+    const QString lang = qEnvironmentVariable("WDI_LANG",
+                                              QLocale::system().name());
 
-    // Qt's standard widget translations (Yes / No / OK / Cancel,
-    // QMessageBox default button labels, file-dialog titles, ...).
-    // Static Qt 6 doesn't expose qtbase_*.qm via QLibraryInfo, so we
-    // bundle them next to our own .qm files at build time.
+    // Qt's standard widget strings (Yes / No / OK / Cancel, QMessageBox
+    // default button labels, file-dialog titles, ...). Loaded from the
+    // qtbase_<lang>.qm pulled out of mingw-w64-x86_64-qt6-translations
+    // at build time. Tamil has no qtbase translation upstream — load
+    // simply returns false and Qt falls back to English for those
+    // standard strings.
     QTranslator qtTranslator;
-    if (qtTranslator.load("qtbase_" + lang, trDir))
+    if (qtTranslator.load("qtbase_" + lang, ":/translations"))
         app.installTranslator(&qtTranslator);
 
-    // Our own UI strings.
+    // Our own UI strings (diskimager_<lang>.qm).
     QTranslator appTranslator;
-    if (appTranslator.load("diskimager_" + lang, trDir))
+    if (appTranslator.load("diskimager_" + lang, ":/translations"))
         app.installTranslator(&appTranslator);
 
     MainWindow* mainwindow = MainWindow::getInstance();

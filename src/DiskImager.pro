@@ -115,3 +115,31 @@ for(tsfile, TRANSLATIONS) {
     system($$command)|error("Failed to run: $$command")
     TRANSLATIONS_FILES += $$qmfile
 }
+
+# Qt's standard widget translations (Yes / No / OK / Cancel, QMessageBox
+# default buttons, file-dialog labels). Bundled into the binary via
+# translations.qrc alongside our own diskimager_*.qm. The qtbase_*.qm
+# files come from Qt's install translations/ dir; copy them into
+# src/lang/ at qmake time so rcc can pick them up. CI pre-stages these
+# from the mingw-w64-x86_64-qt6-translations package (the qt6-static
+# install itself has no translations dir), so the copy below is a
+# best-effort fallback for local builds with a non-static Qt. Tamil
+# (ta_IN) isn't listed — Qt itself doesn't ship qtbase_ta_IN.qm and
+# translations.qrc doesn't reference it.
+QTBASE_LANGUAGES = es it pl nl de fr zh_CN zh_TW ko ja uk
+QT_TR_SRC = $$[QT_INSTALL_TRANSLATIONS]
+for(loc, QTBASE_LANGUAGES) {
+    src_qm = $$QT_TR_SRC/qtbase_$${loc}.qm
+    dst_qm = $$PWD/lang/qtbase_$${loc}.qm
+    !exists($$dst_qm):exists($$src_qm) {
+        win32 {
+            copy_cmd = copy /Y \"$$shell_path($$src_qm)\" \"$$shell_path($$dst_qm)\"
+        } else {
+            copy_cmd = cp -f \"$$src_qm\" \"$$dst_qm\"
+        }
+        system($$copy_cmd)|error("Failed to copy $$src_qm")
+    }
+    !exists($$dst_qm) {
+        error("Missing Qt translation: $$dst_qm. Source $$src_qm is also absent — install Qt's translations component (mingw-w64-x86_64-qt6-translations on MSYS2) or copy qtbase_$${loc}.qm manually into src/lang/.")
+    }
+}

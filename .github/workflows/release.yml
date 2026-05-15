@@ -73,6 +73,27 @@ jobs:
             echo "version_suffix=-dev" >> "$GITHUB_OUTPUT"
           fi
 
+      # rcc bakes src/lang/*.qm into the binary via translations.qrc.
+      # Pull qtbase_*.qm out of mingw-w64-x86_64-qt6-translations and
+      # drop them into src/lang/ so they're picked up alongside our own
+      # diskimager_*.qm. Locales Qt doesn't translate (ta_IN) just skip
+      # — translations.qrc lists only locales known to exist in both.
+      - name: Stage qt6 translations into src/lang/
+        run: |
+          set -euo pipefail
+          pacman -Ql mingw-w64-x86_64-qt6-translations 2>/dev/null \
+            | awk '/qtbase_[a-z_A-Z]+\.qm$/{print $2}' > /tmp/qtbase-paths.txt
+          for loc in es it pl nl de fr zh_CN zh_TW ko ja uk; do
+            src=$(grep -E "/qtbase_${loc}\.qm$" /tmp/qtbase-paths.txt | head -1 || true)
+            if [ -n "$src" ] && [ -f "$src" ]; then
+              cp "$src" "src/lang/qtbase_${loc}.qm"
+              echo "  staged qtbase_${loc}.qm"
+            else
+              echo "  MISSING qtbase_${loc}.qm — rcc will fail unless translations.qrc is updated"
+              exit 1
+            fi
+          done
+
       # Static Qt in MSYS2 lives under /mingw64/qt6-static/. The GUI build uses
       # compile-gui-static.bat's qmake path via QT_STATIC_BIN; here we invoke
       # qmake directly from that directory so the rest is identical logic.
@@ -115,37 +136,15 @@ jobs:
           echo "App version: ${V}"
 
       # Inno Setup setup.iss expects a Release/ sibling directory.
-      # Static GUI needs no Qt DLLs / platforms plugin. Translations stay on
-      # disk so the runtime QTranslator::load("translations/diskimager_...")
-      # path (see main.cpp) keeps working.
+      # Static GUI needs no Qt DLLs / platforms plugin. All .qm files
+      # are already baked into Win32DiskImager.exe by rcc — there's
+      # nothing else to stage besides the two .exe.
       - name: Stage files for installer
         run: |
           set -euo pipefail
-          mkdir -p Release/translations
+          mkdir -p Release
           cp bin/Win32DiskImager.exe     Release/
           cp bin/Win32DiskImager-cli.exe Release/
-          cp src/lang/*.qm               Release/translations/ 2>/dev/null || true
-          # Qt's standard widget translations (Yes / No / OK / Cancel,
-          # QMessageBox default buttons, file-dialog labels). The
-          # mingw-w64-x86_64-qt6-translations package ships them; search
-          # the filesystem instead of hardcoding a path because the
-          # MSYS2 install location has moved across package versions.
-          echo "Locating qtbase_*.qm via pacman -Ql:"
-          pacman -Ql mingw-w64-x86_64-qt6-translations 2>/dev/null \
-            | awk '/qtbase_[a-z_A-Z]+\.qm$/{print $2}' \
-            | tee /tmp/qtbase-paths.txt
-          for loc in es it pl nl de fr zh_CN zh_TW ta_IN ko ja uk; do
-            # `|| true` so grep returning 1 (no match — expected for
-            # locales Qt doesn't translate, e.g. ta_IN) doesn't trip
-            # set -e and abort the whole staging step.
-            src=$(grep -E "/qtbase_${loc}\.qm$" /tmp/qtbase-paths.txt | head -1 || true)
-            if [ -n "$src" ] && [ -f "$src" ]; then
-              cp "$src" Release/translations/
-              echo "  staged qtbase_$loc.qm from $src"
-            else
-              echo "  skip $loc — no qtbase_$loc.qm"
-            fi
-          done
 
       - name: Install Inno Setup
         shell: pwsh

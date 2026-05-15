@@ -43,11 +43,17 @@ Name: "addclitopath"; Description: "Add Win32DiskImager-cli to system PATH"; Gro
 [Files]
 Source: "Release\Win32DiskImager.exe";     DestDir: "{app}"; Flags: ignoreversion
 Source: "Release\Win32DiskImager-cli.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Release\translations\*.qm";       DestDir: "{app}\translations"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "CHANGELOG.md";                    DestDir: "{app}"; Flags: ignoreversion
 Source: "GPL-2";                           DestDir: "{app}"; Flags: ignoreversion
 Source: "LGPL-2.1";                        DestDir: "{app}"; Flags: ignoreversion
 Source: "THIRD_PARTY_LICENSES.md";         DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+
+; Translations are now baked into Win32DiskImager.exe via Qt's resource
+; system; the old install layout had a {app}\translations\ folder with
+; loose .qm files. Sweep it out when upgrading over a pre-2.3.0 install
+; so the install dir matches what we ship today.
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\translations"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
