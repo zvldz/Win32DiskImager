@@ -21,13 +21,14 @@ This repository contains:
 - Auto-verify after Write — GUI shows a single combined success dialog, CLI runs `verify` automatically (opt out with `--no-verify`).
 - Direct, write-through I/O on the destination handle (`FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`) — reported MB/s reflects real device throughput, and "Write successful" only appears once data has actually landed on the device.
 - System idle-sleep suppressed for the duration of Write / Read / Verify, so a multi-minute SD card operation isn't interrupted by a laptop's sleep timer.
-- Device dropdown / `list` output shows each removable target with its capacity (`[E:\] 58GB` / `E: (removable, PhysicalDrive2, 29.3 GB)`).
+- Device dropdown / `list` output enumerates physical disks directly (`\\.\PhysicalDrive0..31`), so **bare disks** — unformatted cards or disks Windows hasn't assigned a letter to — show up alongside the lettered ones. GUI label: `Disk 2 [E:\] 58GB` (or `Disk 2 58GB` for a bare disk). CLI `list`: `Disk 2 (PhysicalDrive2, removable, 58.2 GB) [E:]` / `... [no letter]`. Lock + dismount covers every mounted volume on the target disk, not just one.
+- CLI `--device` accepts both the canonical numeric form (`--device 1`, matches `list` output, required for bare disks) and the legacy letter form (`--device E:`).
 - CLI progress with ASCII bar, MB/s and ETA; GUI progress bar reflects actual sectors written even for compressed sources of known size.
 - Recently-used **Image File history** in the GUI (editable drop-down, up to 20 entries; saved on successful Read / Write, persisted in `HKCU\Software\Win32DiskImager\ImageFileHistory`). Each entry has a ✕ button that removes it after confirmation.
-- **Auto-update checker** in the GUI: weekly background poll against the GitHub releases API, plus an on-demand `Check for Updates...` entry in the window's system menu (right-click on the title bar). For the installer-deployed app the updater downloads `Win32DiskImager-setup-X.Y.Z.exe` and hands off; for a standalone (zip-extracted) deployment it just opens the GitHub release page.
+- **Auto-update checker** in the GUI: weekly background poll against the GitHub releases API, plus an on-demand `Check for Updates...` entry in the window's system menu (right-click on the title bar). When a new version is available, the dialog offers to download `Win32DiskImager-setup-X.Y.Z.exe` and run it — Inno Setup handles whether this is an upgrade in place or a fresh install. Releases without an installer asset attached fall back to opening the GitHub release page.
 - Image hash generation in the GUI (MD5, SHA1, SHA256).
 - Optional read limit in CLI (`--bytes`) and allocated-only read mode (`--allocated-only`, MBR-based).
-- Multi-language UI translations (`src/lang/*.ts`).
+- **Multi-language GUI** — 12 locales (Chinese (Simplified / Traditional), Dutch, French, German, Italian, Japanese, Korean, Polish, Spanish, Tamil, Ukrainian) baked into the binary via Qt's resource system. Qt's standard widget strings (Yes / No / OK / Cancel) are bundled alongside, so dialog buttons are localised too. Override the system locale with the `WDI_LANG` env var (see below).
 
 ## Requirements
 
@@ -68,29 +69,45 @@ Usage:
 
 ```text
 Win32DiskImager-cli.exe list
-Win32DiskImager-cli.exe write  --device E: --image C:\path\image.img[.gz|.xz] [--no-verify]
-Win32DiskImager-cli.exe read   --device E: --image C:\path\backup.img [--bytes N] [--allocated-only]
-Win32DiskImager-cli.exe verify --device E: --image C:\path\image.img[.gz|.xz]
+Win32DiskImager-cli.exe write  --device <N|E:> --image C:\path\image.img[.gz|.xz] [--no-verify]
+Win32DiskImager-cli.exe read   --device <N|E:> --image C:\path\backup.img [--bytes N] [--allocated-only]
+Win32DiskImager-cli.exe verify --device <N|E:> --image C:\path\image.img[.gz|.xz]
+Win32DiskImager-cli.exe check-updates
 ```
+
+`--device` accepts a physical disk number (canonical, matches `list`
+output — required for bare disks with no recognised filesystem / no
+assigned drive letter) or a drive letter (legacy, works for any
+mounted target).
 
 `write` / `verify` accept plain `.img`, gzipped `.img.gz` and
 xz-compressed `.img.xz` — the format is detected by magic bytes, not the
 file extension. `write` runs a verify pass afterwards by default; pass
-`--no-verify` to skip it.
+`--no-verify` to skip it. `check-updates` queries the GitHub releases
+API and prints either "You are running the latest version" or the new
+tag plus a link to its release page.
 
 Examples:
 
 ```bat
 Win32DiskImager-cli.exe list
-Win32DiskImager-cli.exe write  --device E: --image C:\images\raspi.img.xz
+Win32DiskImager-cli.exe write  --device 1 --image C:\images\raspi.img.xz
 Win32DiskImager-cli.exe read   --device E: --image C:\images\backup.img --allocated-only
-Win32DiskImager-cli.exe verify --device E: --image C:\images\raspi.img
+Win32DiskImager-cli.exe verify --device 1 --image C:\images\raspi.img
 ```
 
 ## Environment Variables (GUI)
 
 - `DiskImagesDir`: default folder used by the file picker
 - `DiskImagerFiles`: custom file filter list for image selection dialog (`;;` separated)
+- `WDI_LANG`: override the system locale for the GUI's translation lookup. Useful for
+  testing a non-system language or forcing English on a localised Windows. Example
+  (PowerShell): `$env:WDI_LANG = "uk"; & "C:\Program Files\Win32DiskImager\Win32DiskImager.exe"`.
+  **UAC caveat**: launching the exe from an unprivileged shell triggers a UAC prompt,
+  and Windows replaces the inherited environment for the elevated process with a fresh
+  one — a process-local `set WDI_LANG=uk` is then lost. Use `setx WDI_LANG uk` (persists
+  in `HKCU\Environment`, picked up by new processes) or launch from an already-elevated
+  shell so no UAC prompt fires.
 
 ## Repository Layout
 
