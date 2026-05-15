@@ -128,17 +128,18 @@ jobs:
           cp src/lang/*.qm               Release/translations/ 2>/dev/null || true
           # Qt's standard widget translations (Yes / No / OK / Cancel,
           # QMessageBox default buttons, file-dialog labels). The
-          # mingw-w64-x86_64-qt6-translations package installs them under
-          # /mingw64/share/qt6/translations/. main.cpp loads them
-          # alongside our own diskimager_*.qm via a second QTranslator
-          # instance.
-          QT_TR_DIR=/mingw64/share/qt6/translations
-          echo "Available qtbase_*.qm in $QT_TR_DIR:"
-          ls "$QT_TR_DIR"/qtbase_*.qm 2>/dev/null || echo "  (none found)"
+          # mingw-w64-x86_64-qt6-translations package ships them; search
+          # the filesystem instead of hardcoding a path because the
+          # MSYS2 install location has moved across package versions.
+          echo "Locating qtbase_*.qm via pacman -Ql:"
+          pacman -Ql mingw-w64-x86_64-qt6-translations 2>/dev/null \
+            | awk '/qtbase_[a-z_A-Z]+\.qm$/{print $2}' \
+            | tee /tmp/qtbase-paths.txt
           for loc in es it pl nl de fr zh_CN zh_TW ta_IN ko ja uk; do
-            if [ -f "$QT_TR_DIR/qtbase_$loc.qm" ]; then
-              cp "$QT_TR_DIR/qtbase_$loc.qm" Release/translations/
-              echo "  staged qtbase_$loc.qm"
+            src=$(grep -E "/qtbase_${loc}\.qm$" /tmp/qtbase-paths.txt | head -1)
+            if [ -n "$src" ] && [ -f "$src" ]; then
+              cp "$src" Release/translations/
+              echo "  staged qtbase_$loc.qm from $src"
             else
               echo "  skip $loc — no qtbase_$loc.qm"
             fi
