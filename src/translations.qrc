@@ -3,6 +3,12 @@
      and "qtbase_<lang>" under the ":/translations" prefix — no install-
      dir layout, no filesystem lookup, the .exe is self-contained.
 
+     The alias="..." attribute strips the lang/ directory from the
+     resource path: the source file lives at src/lang/diskimager_uk.qm
+     but the resource is reachable as :/translations/diskimager_uk.qm
+     (without the lang/ middle segment). Matches what translator.load()
+     expects given a base directory of ":/translations".
+
      Our own UI strings:   src/lang/diskimager_<lang>.qm   (lrelease
        generates these from src/lang/diskimager_<lang>.ts at build).
      Qt's standard widget strings (Yes / No / OK / Cancel, file-dialog
@@ -17,28 +23,28 @@
      stay English. -->
 <RCC>
     <qresource prefix="/translations">
-        <file>lang/diskimager_de.qm</file>
-        <file>lang/diskimager_es.qm</file>
-        <file>lang/diskimager_fr.qm</file>
-        <file>lang/diskimager_it.qm</file>
-        <file>lang/diskimager_ja.qm</file>
-        <file>lang/diskimager_ko.qm</file>
-        <file>lang/diskimager_nl.qm</file>
-        <file>lang/diskimager_pl.qm</file>
-        <file>lang/diskimager_ta_IN.qm</file>
-        <file>lang/diskimager_uk.qm</file>
-        <file>lang/diskimager_zh_CN.qm</file>
-        <file>lang/diskimager_zh_TW.qm</file>
-        <file>lang/qtbase_de.qm</file>
-        <file>lang/qtbase_es.qm</file>
-        <file>lang/qtbase_fr.qm</file>
-        <file>lang/qtbase_it.qm</file>
-        <file>lang/qtbase_ja.qm</file>
-        <file>lang/qtbase_ko.qm</file>
-        <file>lang/qtbase_nl.qm</file>
-        <file>lang/qtbase_pl.qm</file>
-        <file>lang/qtbase_uk.qm</file>
-        <file>lang/qtbase_zh_CN.qm</file>
-        <file>lang/qtbase_zh_TW.qm</file>
+        <file alias="diskimager_de.qm">lang/diskimager_de.qm</file>
+        <file alias="diskimager_es.qm">lang/diskimager_es.qm</file>
+        <file alias="diskimager_fr.qm">lang/diskimager_fr.qm</file>
+        <file alias="diskimager_it.qm">lang/diskimager_it.qm</file>
+        <file alias="diskimager_ja.qm">lang/diskimager_ja.qm</file>
+        <file alias="diskimager_ko.qm">lang/diskimager_ko.qm</file>
+        <file alias="diskimager_nl.qm">lang/diskimager_nl.qm</file>
+        <file alias="diskimager_pl.qm">lang/diskimager_pl.qm</file>
+        <file alias="diskimager_ta_IN.qm">lang/diskimager_ta_IN.qm</file>
+        <file alias="diskimager_uk.qm">lang/diskimager_uk.qm</file>
+        <file alias="diskimager_zh_CN.qm">lang/diskimager_zh_CN.qm</file>
+        <file alias="diskimager_zh_TW.qm">lang/diskimager_zh_TW.qm</file>
+        <file alias="qtbase_de.qm">lang/qtbase_de.qm</file>
+        <file alias="qtbase_es.qm">lang/qtbase_es.qm</file>
+        <file alias="qtbase_fr.qm">lang/qtbase_fr.qm</file>
+        <file alias="qtbase_it.qm">lang/qtbase_it.qm</file>
+        <file alias="qtbase_ja.qm">lang/qtbase_ja.qm</file>
+        <file alias="qtbase_ko.qm">lang/qtbase_ko.qm</file>
+        <file alias="qtbase_nl.qm">lang/qtbase_nl.qm</file>
+        <file alias="qtbase_pl.qm">lang/qtbase_pl.qm</file>
+        <file alias="qtbase_uk.qm">lang/qtbase_uk.qm</file>
+        <file alias="qtbase_zh_CN.qm">lang/qtbase_zh_CN.qm</file>
+        <file alias="qtbase_zh_TW.qm">lang/qtbase_zh_TW.qm</file>
     </qresource>
 </RCC>
