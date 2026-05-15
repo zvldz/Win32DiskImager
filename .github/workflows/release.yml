@@ -54,6 +54,7 @@ jobs:
             mingw-w64-x86_64-freetype
             mingw-w64-x86_64-double-conversion
             mingw-w64-x86_64-md4c
+            mingw-w64-x86_64-qt6-translations
 
       # Tag pushes ship as proper releases. Anything else (manual
       # workflow_dispatch, branch pushes if we ever wire those up) gets
@@ -126,13 +127,21 @@ jobs:
           cp bin/Win32DiskImager-cli.exe Release/
           cp src/lang/*.qm               Release/translations/ 2>/dev/null || true
           # Qt's standard widget translations (Yes / No / OK / Cancel,
-          # QMessageBox default buttons, file-dialog labels). Static Qt 6
-          # ships them as .qm files in its install dir; main.cpp loads
-          # them alongside our own diskimager_*.qm via a second
-          # QTranslator instance.
-          QT_TR_DIR=/mingw64/qt6-static/translations
+          # QMessageBox default buttons, file-dialog labels). The
+          # mingw-w64-x86_64-qt6-translations package installs them under
+          # /mingw64/share/qt6/translations/. main.cpp loads them
+          # alongside our own diskimager_*.qm via a second QTranslator
+          # instance.
+          QT_TR_DIR=/mingw64/share/qt6/translations
+          echo "Available qtbase_*.qm in $QT_TR_DIR:"
+          ls "$QT_TR_DIR"/qtbase_*.qm 2>/dev/null || echo "  (none found)"
           for loc in es it pl nl de fr zh_CN zh_TW ta_IN ko ja uk; do
-            cp "$QT_TR_DIR/qtbase_$loc.qm" Release/translations/ 2>/dev/null || true
+            if [ -f "$QT_TR_DIR/qtbase_$loc.qm" ]; then
+              cp "$QT_TR_DIR/qtbase_$loc.qm" Release/translations/
+              echo "  staged qtbase_$loc.qm"
+            else
+              echo "  skip $loc — no qtbase_$loc.qm"
+            fi
           done
 
       - name: Install Inno Setup
