@@ -5,9 +5,13 @@
 #include "historydelegate.h"
 
 #include <QAbstractItemView>
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QFile>
 #include <QFont>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QTextStream>
 
 HistoryItemDelegate::HistoryItemDelegate(QObject *parent)
     : QStyledItemDelegate(parent)
@@ -91,6 +95,37 @@ void HistoryItemDelegate::paint(QPainter *p,
     p->restore();
 }
 
+// TEMP DEBUG — writes a line to wdi_history_click.log next to the exe
+// every time a mouse press / release lands on the popup viewport. Goal
+// is to confirm what arrives at our event filter for entries that visually
+// "fail" the ✕ click. Remove once the divergence is understood.
+static void logClickEvent(const QString &kind,
+                          const QPoint &pos,
+                          const QModelIndex &idx,
+                          const QRect &rowRect,
+                          const QRect &closeRect,
+                          bool insideClose,
+                          bool returnedTrue)
+{
+    QFile log(QCoreApplication::applicationDirPath() + "/wdi_history_click.log");
+    if (!log.open(QIODevice::Append | QIODevice::Text)) return;
+    QTextStream s(&log);
+    s << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << " "
+      << kind
+      << "  pos=(" << pos.x() << "," << pos.y() << ")"
+      << "  idx.valid=" << (idx.isValid() ? "yes" : "no");
+    if (idx.isValid()) {
+        s << "  row=" << idx.row()
+          << "  text=[" << idx.data(Qt::DisplayRole).toString() << "]"
+          << "  rowRect=(" << rowRect.x() << "," << rowRect.y()
+          << " " << rowRect.width() << "x" << rowRect.height() << ")"
+          << "  closeRect=(" << closeRect.x() << "," << closeRect.y()
+          << " " << closeRect.width() << "x" << closeRect.height() << ")"
+          << "  inside=" << (insideClose ? "yes" : "no");
+    }
+    s << "  returnedTrue=" << (returnedTrue ? "yes" : "no") << "\n";
+}
+
 bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
 {
     // Re-front our viewport filter every time the popup view shows.
@@ -102,6 +137,12 @@ bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
         vp->removeEventFilter(this);
         vp->installEventFilter(this);
         vp->setMouseTracking(true);
+        QFile log(QCoreApplication::applicationDirPath() + "/wdi_history_click.log");
+        if (log.open(QIODevice::Append | QIODevice::Text)) {
+            QTextStream s(&log);
+            s << "--- " << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
+              << " VIEW SHOW (re-fronted viewport filter) ---\n";
+        }
     }
 
     if (m_view && obj == m_view->viewport()) {
@@ -140,15 +181,23 @@ bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
         {
             auto *me = static_cast<QMouseEvent *>(event);
             const QModelIndex idx = m_view->indexAt(me->pos());
+            QRect rowRect, closeRect;
+            bool insideClose = false;
+            bool returnedTrue = false;
             if (idx.isValid()) {
-                const QRect rowRect = m_view->visualRect(idx);
-                if (closeButtonRect(rowRect).contains(me->pos())) {
+                rowRect = m_view->visualRect(idx);
+                closeRect = closeButtonRect(rowRect);
+                insideClose = closeRect.contains(me->pos());
+                if (insideClose) {
                     if (event->type() == QEvent::MouseButtonRelease) {
                         emit removeRequested(idx.row());
                     }
-                    return true;
+                    returnedTrue = true;
                 }
             }
+            logClickEvent(event->type() == QEvent::MouseButtonPress ? "PRESS  " : "RELEASE",
+                          me->pos(), idx, rowRect, closeRect, insideClose, returnedTrue);
+            if (returnedTrue) return true;
         }
     }
     return QStyledItemDelegate::eventFilter(obj, event);
