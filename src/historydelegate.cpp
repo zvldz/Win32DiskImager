@@ -5,13 +5,9 @@
 #include "historydelegate.h"
 
 #include <QAbstractItemView>
-#include <QCoreApplication>
-#include <QDateTime>
-#include <QFile>
 #include <QFont>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QTextStream>
 
 HistoryItemDelegate::HistoryItemDelegate(QObject *parent)
     : QStyledItemDelegate(parent)
@@ -45,6 +41,12 @@ QRect HistoryItemDelegate::closeButtonRect(const QRect &rowRect)
     // square is the click target — the visible glyph rendered inside
     // it is smaller, but the hover background fills the square so the
     // user sees the click area clearly before clicking.
+    //
+    // Caller must pass a rowRect whose right edge matches the viewport's
+    // right edge (i.e. all rows uniform width). sizeHint() below forces
+    // this by clamping every row to viewport width — otherwise QListView
+    // sizes rows to their natural text width and the ✕ drifts to the
+    // right of the visible viewport on longer paths.
     const int sz = rowRect.height();
     return QRect(rowRect.right() - sz + 1, rowRect.top(),
                  sz - 1, rowRect.height());
@@ -95,35 +97,24 @@ void HistoryItemDelegate::paint(QPainter *p,
     p->restore();
 }
 
-// TEMP DEBUG — writes a line to wdi_history_click.log next to the exe
-// every time a mouse press / release lands on the popup viewport. Goal
-// is to confirm what arrives at our event filter for entries that visually
-// "fail" the ✕ click. Remove once the divergence is understood.
-static void logClickEvent(const QString &kind,
-                          const QPoint &pos,
-                          const QModelIndex &idx,
-                          const QRect &rowRect,
-                          const QRect &closeRect,
-                          bool insideClose,
-                          bool returnedTrue)
+QSize HistoryItemDelegate::sizeHint(const QStyleOptionViewItem &option,
+                                    const QModelIndex &index) const
 {
-    QFile log(QCoreApplication::applicationDirPath() + "/wdi_history_click.log");
-    if (!log.open(QIODevice::Append | QIODevice::Text)) return;
-    QTextStream s(&log);
-    s << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << " "
-      << kind
-      << "  pos=(" << pos.x() << "," << pos.y() << ")"
-      << "  idx.valid=" << (idx.isValid() ? "yes" : "no");
-    if (idx.isValid()) {
-        s << "  row=" << idx.row()
-          << "  text=[" << idx.data(Qt::DisplayRole).toString() << "]"
-          << "  rowRect=(" << rowRect.x() << "," << rowRect.y()
-          << " " << rowRect.width() << "x" << rowRect.height() << ")"
-          << "  closeRect=(" << closeRect.x() << "," << closeRect.y()
-          << " " << closeRect.width() << "x" << closeRect.height() << ")"
-          << "  inside=" << (insideClose ? "yes" : "no");
+    QSize s = QStyledItemDelegate::sizeHint(option, index);
+    // Force every row to viewport width so all visualRects line up at
+    // the same right edge. QListView's default is to size each row to
+    // its text's natural width (uniformItemSizes=false), which makes
+    // the ✕ click target drift right for rows with longer paths —
+    // visually the ✕ ends up at different x positions per row, and
+    // the user's click (aimed at one row's ✕ location) lands in the
+    // empty space next to a different row's ✕.
+    if (m_view && m_view->viewport()) {
+        const int vw = m_view->viewport()->width();
+        if (vw > 0 && vw > s.width()) {
+            s.setWidth(vw);
+        }
     }
-    s << "  returnedTrue=" << (returnedTrue ? "yes" : "no") << "\n";
+    return s;
 }
 
 bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
@@ -137,12 +128,6 @@ bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
         vp->removeEventFilter(this);
         vp->installEventFilter(this);
         vp->setMouseTracking(true);
-        QFile log(QCoreApplication::applicationDirPath() + "/wdi_history_click.log");
-        if (log.open(QIODevice::Append | QIODevice::Text)) {
-            QTextStream s(&log);
-            s << "--- " << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
-              << " VIEW SHOW (re-fronted viewport filter) ---\n";
-        }
     }
 
     if (m_view && obj == m_view->viewport()) {
@@ -160,7 +145,6 @@ bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
                 const QModelIndex curIdx  = m_view->indexAt(m_hoverPos);
                 if (prevIdx.isValid()) m_view->update(prevIdx);
                 if (curIdx.isValid() && curIdx != prevIdx) m_view->update(curIdx);
-                else if (curIdx.isValid()) m_view->update(curIdx);
             }
             return false;   // don't swallow — let normal hover handling run
         }
@@ -181,23 +165,15 @@ bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
         {
             auto *me = static_cast<QMouseEvent *>(event);
             const QModelIndex idx = m_view->indexAt(me->pos());
-            QRect rowRect, closeRect;
-            bool insideClose = false;
-            bool returnedTrue = false;
             if (idx.isValid()) {
-                rowRect = m_view->visualRect(idx);
-                closeRect = closeButtonRect(rowRect);
-                insideClose = closeRect.contains(me->pos());
-                if (insideClose) {
+                const QRect rowRect = m_view->visualRect(idx);
+                if (closeButtonRect(rowRect).contains(me->pos())) {
                     if (event->type() == QEvent::MouseButtonRelease) {
                         emit removeRequested(idx.row());
                     }
-                    returnedTrue = true;
+                    return true;
                 }
             }
-            logClickEvent(event->type() == QEvent::MouseButtonPress ? "PRESS  " : "RELEASE",
-                          me->pos(), idx, rowRect, closeRect, insideClose, returnedTrue);
-            if (returnedTrue) return true;
         }
     }
     return QStyledItemDelegate::eventFilter(obj, event);

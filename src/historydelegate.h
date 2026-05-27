@@ -28,6 +28,8 @@ public:
 
     void paint(QPainter *p, const QStyleOptionViewItem &option,
                const QModelIndex &index) const override;
+    QSize sizeHint(const QStyleOptionViewItem &option,
+                   const QModelIndex &index) const override;
     bool eventFilter(QObject *obj, QEvent *event) override;
 
 signals:
