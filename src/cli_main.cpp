@@ -565,19 +565,26 @@ bool prepareDiskHandles(DWORD diskNumber,
                         DiskGeometry &geometry,
                         DWORD diskExtraFlags = 0)
 {
-    hDisk = INVALID_HANDLE_VALUE;
-    const bool inherited = !volumes.empty();
-    if (!inherited) {
-        if (!lockAllVolumesOnDisk(diskNumber, volumes)) {
-            return false;
-        }
-    }
-
+    // Open the raw \\.\PhysicalDriveN handle FIRST, before any
+    // FSCTL_LOCK_VOLUME / FSCTL_DISMOUNT_VOLUME. Some SD card readers
+    // do an internal device-reset on dismount: a handle opened after
+    // that point would stale-fault on the next IOCTL with
+    // ERROR_DEV_NOT_EXIST. The raw handle isn't tied to FS mount
+    // state, so pinning it up front keeps the device reference stable
+    // across the lock/dismount sequence.
     hDisk = openPhysicalDisk(diskNumber, diskAccess, diskExtraFlags);
     if (hDisk == INVALID_HANDLE_VALUE) {
         printWinError(L"Failed to open physical disk.", GetLastError());
-        closeAllVolumes(volumes);
         return false;
+    }
+
+    const bool inherited = !volumes.empty();
+    if (!inherited) {
+        if (!lockAllVolumesOnDisk(diskNumber, volumes)) {
+            CloseHandle(hDisk);
+            hDisk = INVALID_HANDLE_VALUE;
+            return false;
+        }
     }
 
     if (!getDiskGeometry(hDisk, geometry)) {

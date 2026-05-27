@@ -761,6 +761,25 @@ void MainWindow::on_bWrite_clicked()
             double mbpersec;
             unsigned long long i, lasti, availablesectors, numsectors;
             const DWORD deviceID = td.diskNumber;
+            // Open the raw \\.\PhysicalDriveN handle FIRST, before any
+            // FSCTL_LOCK_VOLUME / FSCTL_DISMOUNT_VOLUME. Some SD card
+            // readers do an internal device-reset on dismount: a handle
+            // opened after that point would briefly stale-fault on the
+            // next IOCTL with ERROR_DEV_NOT_EXIST (the "device is no
+            // longer available" dialog). The raw handle itself is
+            // unaffected by FS mount state, so opening it ahead of time
+            // pins a stable device reference across the lock/dismount.
+            //
+            // Direct I/O on the destination: bypass FS cache so MB/s reflects
+            // real device throughput and "Done" only appears once data has
+            // landed. Buffer alignment is handled by readSectorDataFromHandle.
+            hRawDisk = getHandleOnDevice(deviceID, GENERIC_WRITE,
+                                         FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
+            if (hRawDisk == INVALID_HANDLE_VALUE)
+            {
+                cleanupHandlesAndUI();
+                return;
+            }
             // Lock + dismount every volume on the target disk before raw
             // access. For a bare disk this is a no-op.
             if (!lockAllVolumesOnDisk(td))
@@ -770,16 +789,6 @@ void MainWindow::on_bWrite_clicked()
             }
             hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->currentText().utf16()), GENERIC_READ);
             if (hFile == INVALID_HANDLE_VALUE)
-            {
-                cleanupHandlesAndUI();
-                return;
-            }
-            // Direct I/O on the destination: bypass FS cache so MB/s reflects
-            // real device throughput and "Done" only appears once data has
-            // landed. Buffer alignment is handled by readSectorDataFromHandle.
-            hRawDisk = getHandleOnDevice(deviceID, GENERIC_WRITE,
-                                         FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
-            if (hRawDisk == INVALID_HANDLE_VALUE)
             {
                 cleanupHandlesAndUI();
                 return;
@@ -1082,6 +1091,15 @@ void MainWindow::on_bRead_clicked()
         double mbpersec;
         unsigned long long i, lasti, numsectors, filesize, spaceneeded = 0ull;
         const DWORD deviceID = td.diskNumber;
+        // Open the raw \\.\PhysicalDriveN handle BEFORE the lock/dismount —
+        // see the matching comment in on_bWrite_clicked for the reasoning
+        // (avoid post-dismount handle staling on certain SD card readers).
+        hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ);
+        if (hRawDisk == INVALID_HANDLE_VALUE)
+        {
+            cleanupHandlesAndUI();
+            return;
+        }
         // Lock + dismount every volume on the target disk. For a bare
         // disk (no letters) this is a no-op and we go straight to raw I/O.
         if (!lockAllVolumesOnDisk(td))
@@ -1093,12 +1111,6 @@ void MainWindow::on_bRead_clicked()
         hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(myFile.utf16()), GENERIC_WRITE,
                                 FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
         if (hFile == INVALID_HANDLE_VALUE)
-        {
-            cleanupHandlesAndUI();
-            return;
-        }
-        hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ);
-        if (hRawDisk == INVALID_HANDLE_VALUE)
         {
             cleanupHandlesAndUI();
             return;
@@ -1264,6 +1276,20 @@ void MainWindow::on_bVerify_clicked()
             double mbpersec;
             unsigned long long i, lasti, availablesectors, numsectors, result;
             const DWORD deviceID = td.diskNumber;
+            // Open the raw \\.\PhysicalDriveN handle FIRST, before any
+            // lock/dismount — see the matching comment in on_bWrite_clicked
+            // for the reasoning. NO_BUFFERING: read straight through the
+            // OS block cache so we're honest with the device controller —
+            // symmetric with the Write-side handle and avoids reading any
+            // stale cache page that lingered from before the just-finished
+            // Write.
+            hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ,
+                                         FILE_FLAG_NO_BUFFERING);
+            if (hRawDisk == INVALID_HANDLE_VALUE)
+            {
+                cleanupHandlesAndUI();
+                return;
+            }
             // If chained from auto-verify after Write, m_volumes is already
             // populated with locked + dismounted handles. Reusing them
             // keeps third-party watchers (Google Drive / indexer / antivirus)
@@ -1281,17 +1307,6 @@ void MainWindow::on_bVerify_clicked()
             }
             hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->currentText().utf16()), GENERIC_READ);
             if (hFile == INVALID_HANDLE_VALUE)
-            {
-                cleanupHandlesAndUI();
-                return;
-            }
-            // NO_BUFFERING: read straight through OS block cache so we're
-            // honest with the device controller — symmetric with the
-            // Write-side handle and avoids reading any stale cache page
-            // that lingered from before the just-finished Write.
-            hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ,
-                                         FILE_FLAG_NO_BUFFERING);
-            if (hRawDisk == INVALID_HANDLE_VALUE)
             {
                 cleanupHandlesAndUI();
                 return;

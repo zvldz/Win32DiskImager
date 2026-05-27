@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-XX-XX
+
+### Version 2.3.1
+
+#### Reliability
+- Fix occasional `Device Error 55: The specified network resource or device is no longer available` at the start of a Write / Read / Verify on certain SD card readers. Some readers do an internal device-reset when a volume is dismounted; a raw `\\.\PhysicalDriveN` handle opened **after** that point came up stale and the next `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` failed with `ERROR_DEV_NOT_EXIST`. The user heard a brief eject/reattach sound and had to re-launch the operation manually. Reordered both the GUI and CLI paths so the raw handle is acquired **before** the `FSCTL_LOCK_VOLUME` / `FSCTL_DISMOUNT_VOLUME` sequence — the raw handle is independent of FS mount state and pins a stable device reference across the lock/dismount. Matches what rufus / Raspberry Pi Imager do.
+
 ## 2026-05-15
 
 ### Version 2.3.0
