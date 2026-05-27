@@ -5,9 +5,13 @@
 #include "historydelegate.h"
 
 #include <QAbstractItemView>
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QFile>
 #include <QFont>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QTextStream>
 
 HistoryItemDelegate::HistoryItemDelegate(QObject *parent)
     : QStyledItemDelegate(parent)
@@ -117,6 +121,32 @@ QSize HistoryItemDelegate::sizeHint(const QStyleOptionViewItem &option,
     return s;
 }
 
+// TEMP DEBUG — appends to wdi_history_click.log. Goal this round: see
+// whether press/release events still reach our filter for failing rows
+// after the sizeHint width-clamp, AND what the rowRect width actually
+// is now (the sizeHint fix should make all rows uniform).
+static void logEvent2(const QString &kind, const QPoint &pos,
+                      const QModelIndex &idx, const QRect &rowRect,
+                      const QRect &closeRect, bool inside, bool ret)
+{
+    QFile log(QCoreApplication::applicationDirPath() + "/wdi_history_click.log");
+    if (!log.open(QIODevice::Append | QIODevice::Text)) return;
+    QTextStream s(&log);
+    s << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << " "
+      << kind << "  pos=(" << pos.x() << "," << pos.y() << ")";
+    if (idx.isValid()) {
+        s << "  row=" << idx.row()
+          << "  rowRect.w=" << rowRect.width()
+          << "  closeRect=(" << closeRect.x() << ".." << closeRect.right() << ")"
+          << "  inside=" << (inside ? "yes" : "no")
+          << "  ret=" << (ret ? "true" : "false")
+          << "  text=[" << idx.data(Qt::DisplayRole).toString() << "]";
+    } else {
+        s << "  idx invalid";
+    }
+    s << "\n";
+}
+
 bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
 {
     // Re-front our viewport filter every time the popup view shows.
@@ -128,6 +158,12 @@ bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
         vp->removeEventFilter(this);
         vp->installEventFilter(this);
         vp->setMouseTracking(true);
+        QFile log(QCoreApplication::applicationDirPath() + "/wdi_history_click.log");
+        if (log.open(QIODevice::Append | QIODevice::Text)) {
+            QTextStream s(&log);
+            s << "--- " << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
+              << " SHOW vp.w=" << vp->width() << " ---\n";
+        }
     }
 
     if (m_view && obj == m_view->viewport()) {
@@ -165,15 +201,22 @@ bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
         {
             auto *me = static_cast<QMouseEvent *>(event);
             const QModelIndex idx = m_view->indexAt(me->pos());
+            QRect rowRect, closeRect;
+            bool inside = false, ret = false;
             if (idx.isValid()) {
-                const QRect rowRect = m_view->visualRect(idx);
-                if (closeButtonRect(rowRect).contains(me->pos())) {
+                rowRect = m_view->visualRect(idx);
+                closeRect = closeButtonRect(rowRect);
+                inside = closeRect.contains(me->pos());
+                if (inside) {
                     if (event->type() == QEvent::MouseButtonRelease) {
                         emit removeRequested(idx.row());
                     }
-                    return true;
+                    ret = true;
                 }
             }
+            logEvent2(event->type() == QEvent::MouseButtonPress ? "PRESS  " : "RELEASE",
+                      me->pos(), idx, rowRect, closeRect, inside, ret);
+            if (ret) return true;
         }
     }
     return QStyledItemDelegate::eventFilter(obj, event);
