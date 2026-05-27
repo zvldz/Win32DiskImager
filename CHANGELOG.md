@@ -7,6 +7,9 @@
 #### Reliability
 - Fix occasional `Device Error 55: The specified network resource or device is no longer available` at the start of a Write / Read / Verify on certain SD card readers. Some readers do an internal device-reset when a volume is dismounted; a raw `\\.\PhysicalDriveN` handle opened **after** that point came up stale and the next `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` failed with `ERROR_DEV_NOT_EXIST`. The user heard a brief eject/reattach sound and had to re-launch the operation manually. Reordered both the GUI and CLI paths so the raw handle is acquired **before** the `FSCTL_LOCK_VOLUME` / `FSCTL_DISMOUNT_VOLUME` sequence — the raw handle is independent of FS mount state and pins a stable device reference across the lock/dismount. Matches what rufus / Raspberry Pi Imager do.
 
+#### GUI
+- Image File history dropdown ✕ button is now reliably clickable. Two bugs landed here together: (1) `QComboBox` installs its own viewport event filter lazily on the first `showPopup`, which then sat *in front* of our filter in Qt's "most-recent-first" filter chain and swallowed clicks as row-selections — fixed by re-fronting our filter on every popup `Show` event; (2) the ✕ glyph itself was thin, gray and small, making it visually hard to aim at — bumped to bold 1.3× row font, full row-height square click target, and a soft pill highlight on hover so the user can see the active area before clicking.
+
 ## 2026-05-15
 
 ### Version 2.3.0

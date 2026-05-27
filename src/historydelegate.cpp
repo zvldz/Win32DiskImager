@@ -5,6 +5,7 @@
 #include "historydelegate.h"
 
 #include <QAbstractItemView>
+#include <QFont>
 #include <QMouseEvent>
 #include <QPainter>
 
@@ -18,15 +19,28 @@ void HistoryItemDelegate::attachTo(QAbstractItemView *view)
     if (!view) return;
     view->setItemDelegate(this);
     // QComboBox installs its own event filter on the popup's viewport
-    // and treats any mouse press there as a row-selection. Intercept
-    // the press *before* it gets there so a click on our ✕ doesn't
-    // double as a "select this entry" action.
+    // when the popup is first shown (the private popup container is
+    // lazy-created). Qt activates the *most recently installed* filter
+    // first — so if QComboBox installs after we do, ITS filter runs
+    // first and swallows our ✕ click as a row-selection.
+    //
+    // Strategy: install on the view itself to catch Show events, and
+    // re-install our viewport filter each time the popup becomes
+    // visible. removeEventFilter + installEventFilter moves us back to
+    // the front of the filter chain.
+    view->installEventFilter(this);
     view->viewport()->installEventFilter(this);
+    // Mouse tracking so paint() can render a hover state on the ✕ as
+    // the cursor passes over it, instead of only highlighting on press.
+    view->viewport()->setMouseTracking(true);
 }
 
 QRect HistoryItemDelegate::closeButtonRect(const QRect &rowRect)
 {
-    // Square area on the right edge, sized to the row height.
+    // Square area on the right edge, sized to the row height. The full
+    // square is the click target — the visible glyph rendered inside
+    // it is smaller, but the hover background fills the square so the
+    // user sees the click area clearly before clicking.
     const int sz = rowRect.height();
     return QRect(rowRect.right() - sz + 1, rowRect.top(),
                  sz - 1, rowRect.height());
@@ -43,11 +57,35 @@ void HistoryItemDelegate::paint(QPainter *p,
     opt.rect.adjust(0, 0, -sz, 0);
     QStyledItemDelegate::paint(p, opt, index);
 
-    // Render a muted ✕ glyph on the right of the row.
     const QRect r = closeButtonRect(option.rect);
+    const bool hovered = r.contains(m_hoverPos);
+
     p->save();
+    p->setRenderHint(QPainter::Antialiasing, true);
+
+    // Pill-shaped hover background — same diameter as row height so the
+    // entire click target is visible to the user when they're aiming
+    // for it. Drops away when the cursor leaves so it never competes
+    // with the entry text for attention.
+    if (hovered) {
+        QColor bg = option.palette.color(QPalette::Highlight);
+        bg.setAlpha(110);
+        p->setPen(Qt::NoPen);
+        p->setBrush(bg);
+        const int pad = std::max(1, r.height() / 6);
+        p->drawEllipse(r.adjusted(pad, pad, -pad, -pad));
+    }
+
+    // Render the ✕ glyph: bigger and bolder than the entry-text font
+    // so it reads clearly even at low DPI, and brightened when hovered.
+    QFont f = option.font;
+    f.setPointSizeF(f.pointSizeF() * 1.3);
+    f.setBold(true);
+    p->setFont(f);
     QPen pen = p->pen();
-    pen.setColor(option.palette.color(QPalette::Disabled, QPalette::WindowText));
+    pen.setColor(hovered
+                     ? option.palette.color(QPalette::HighlightedText)
+                     : option.palette.color(QPalette::WindowText));
     p->setPen(pen);
     p->drawText(r, Qt::AlignCenter, QStringLiteral("✕"));
     p->restore();
@@ -55,7 +93,45 @@ void HistoryItemDelegate::paint(QPainter *p,
 
 bool HistoryItemDelegate::eventFilter(QObject *obj, QEvent *event)
 {
+    // Re-front our viewport filter every time the popup view shows.
+    // Without this, QComboBox's filter (installed lazily on first
+    // showPopup) sits in front of ours and consumes mouse events
+    // before we see them, making ✕ clicks register as row selections.
+    if (m_view && obj == m_view && event->type() == QEvent::Show) {
+        QWidget *vp = m_view->viewport();
+        vp->removeEventFilter(this);
+        vp->installEventFilter(this);
+        vp->setMouseTracking(true);
+    }
+
     if (m_view && obj == m_view->viewport()) {
+        // Track cursor for paint()'s hover state. MouseMove is the
+        // primary feed; press/release events also carry positions and
+        // are forwarded below.
+        if (event->type() == QEvent::MouseMove) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            const QPoint prev = m_hoverPos;
+            m_hoverPos = me->pos();
+            // Repaint the rows that changed hovered-state. Cheap, only
+            // hits visible rows touched by the move.
+            if (m_view) {
+                const QModelIndex prevIdx = m_view->indexAt(prev);
+                const QModelIndex curIdx  = m_view->indexAt(m_hoverPos);
+                if (prevIdx.isValid()) m_view->update(prevIdx);
+                if (curIdx.isValid() && curIdx != prevIdx) m_view->update(curIdx);
+                else if (curIdx.isValid()) m_view->update(curIdx);
+            }
+            return false;   // don't swallow — let normal hover handling run
+        }
+        if (event->type() == QEvent::Leave) {
+            const QPoint prev = m_hoverPos;
+            m_hoverPos = QPoint(-1, -1);
+            if (m_view) {
+                const QModelIndex prevIdx = m_view->indexAt(prev);
+                if (prevIdx.isValid()) m_view->update(prevIdx);
+            }
+            return false;
+        }
         // Catch press AND release that land on the ✕. We swallow both
         // so QComboBox doesn't see a "click", which would otherwise
         // close the popup and select the entry being deleted.

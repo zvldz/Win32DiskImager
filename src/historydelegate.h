@@ -9,8 +9,9 @@
 #ifndef HISTORYDELEGATE_H
 #define HISTORYDELEGATE_H
 
-#include <QStyledItemDelegate>
+#include <QPoint>
 #include <QPointer>
+#include <QStyledItemDelegate>
 
 class QAbstractItemView;
 
@@ -35,6 +36,11 @@ signals:
 private:
     static QRect closeButtonRect(const QRect &rowRect);
     QPointer<QAbstractItemView> m_view;
+    // Last known mouse position in viewport coordinates, used by paint()
+    // to decide whether to render the ✕ in its hovered (bright pill)
+    // state. paint() doesn't get the cursor position directly, so we
+    // track it through MouseMove in the event filter.
+    QPoint m_hoverPos;
 };
 
 #endif // HISTORYDELEGATE_H
