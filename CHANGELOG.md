@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-XX-XX
+## 2026-05-27
 
 ### Version 2.3.1
 
@@ -8,7 +8,7 @@
 - Fix occasional `Device Error 55: The specified network resource or device is no longer available` at the start of a Write / Read / Verify on certain SD card readers. Some readers do an internal device-reset when a volume is dismounted; a raw `\\.\PhysicalDriveN` handle opened **after** that point came up stale and the next `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` failed with `ERROR_DEV_NOT_EXIST`. The user heard a brief eject/reattach sound and had to re-launch the operation manually. Reordered both the GUI and CLI paths so the raw handle is acquired **before** the `FSCTL_LOCK_VOLUME` / `FSCTL_DISMOUNT_VOLUME` sequence — the raw handle is independent of FS mount state and pins a stable device reference across the lock/dismount. Matches what rufus / Raspberry Pi Imager do.
 
 #### GUI
-- Image File history dropdown ✕ button is now reliably clickable. Three bugs landed here together: (1) `QComboBox` installs its own viewport event filter lazily on the first `showPopup`, which then sat *in front* of our filter in Qt's "most-recent-first" filter chain and swallowed clicks as row-selections — fixed by re-fronting our filter on every popup `Show` event; (2) the ✕ glyph itself was thin, gray and small, making it visually hard to aim at — bumped to bold 1.3× row font, full row-height square click target, and a soft pill highlight on hover so the user can see the active area before clicking; (3) `QListView` sizes each row to the natural width of its text (uniformItemSizes is false by default), so entries with longer paths got rows *wider than the viewport* — `visualRect(idx).right()` returned e.g. x=323 while the viewport ended at x=294, putting our ✕ click target outside the visible area on those rows. Diagnosed via a temporary log of each press/release showing viewport.width=295 vs rowRect.width=324 for the affected `_mini.img` entries. Fixed by anchoring `closeButtonRect` to `viewport()->width()` instead of `rowRect.right()`, so the ✕ stays on-screen at the same x position for every row regardless of how wide QListView decided to make it.
+- Image File history dropdown ✕ button now reliably triggers the remove dialog: bolder / larger glyph with a hover highlight makes the click target visible, and the click area is anchored to the popup's viewport edge so entries with long paths (where QListView made the row wider than the visible area) no longer pushed the ✕ off-screen.
 
 ## 2026-05-15
 
