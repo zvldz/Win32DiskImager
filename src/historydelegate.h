@@ -28,15 +28,16 @@ public:
 
     void paint(QPainter *p, const QStyleOptionViewItem &option,
                const QModelIndex &index) const override;
-    QSize sizeHint(const QStyleOptionViewItem &option,
-                   const QModelIndex &index) const override;
     bool eventFilter(QObject *obj, QEvent *event) override;
 
 signals:
     void removeRequested(int row);
 
 private:
-    static QRect closeButtonRect(const QRect &rowRect);
+    // Non-static because we need m_view to anchor the rect at the
+    // viewport's right edge — QListView happily makes rows wider than
+    // the viewport for long-text entries.
+    QRect closeButtonRect(const QRect &rowRect) const;
     QPointer<QAbstractItemView> m_view;
     // Last known mouse position in viewport coordinates, used by paint()
     // to decide whether to render the ✕ in its hovered (bright pill)
