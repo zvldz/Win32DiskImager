@@ -726,10 +726,13 @@ public:
 
         // Try multi-threaded decoder first (up to 8 threads). Same fallback
         // story as the GUI XzImageReader — see src/xzimagereader.cpp.
+        // memlimit_threading is set adaptively so the decoder doesn't grab
+        // ~5 GB on a low-RAM machine; lzma reduces thread count or falls
+        // back to single-threaded to fit.
         lzma_mt mtOpts = {};
         mtOpts.flags              = LZMA_CONCATENATED;
         mtOpts.threads            = std::min(8u, std::max(2u, std::thread::hardware_concurrency()));
-        mtOpts.memlimit_threading = UINT64_MAX;
+        mtOpts.memlimit_threading = computeXzMemLimit();
         mtOpts.memlimit_stop      = UINT64_MAX;
         lzma_ret r = lzma_stream_decoder_mt(&strm_, &mtOpts);
         if (r != LZMA_OK) {
@@ -807,6 +810,35 @@ private:
     uint64_t    uncompressed_  = 0;
     std::string err_;
 };
+
+// Same idea as XzImageReader::computeXzMemLimit (src/xzimagereader.cpp) —
+// 25% of available physical RAM, clamped to [256 MB, 4 GB], with an
+// optional WDI_XZ_MEMLIMIT_MB env-var override. Passed as
+// memlimit_threading so lzma silently reduces the thread count (or
+// falls back to single-threaded) instead of always allocating one full
+// dictionary per thread.
+static uint64_t computeXzMemLimit()
+{
+    if (const char *env = std::getenv("WDI_XZ_MEMLIMIT_MB")) {
+        char *endp = nullptr;
+        const uint64_t v = std::strtoull(env, &endp, 10);
+        if (endp != env && v > 0) {
+            return v * 1024ULL * 1024ULL;
+        }
+    }
+
+    MEMORYSTATUSEX ms = {};
+    ms.dwLength = sizeof(ms);
+    if (!GlobalMemoryStatusEx(&ms)) {
+        return 1024ULL * 1024 * 1024;   // 1 GB fallback if query fails
+    }
+    uint64_t limit = ms.ullAvailPhys / 4;
+    constexpr uint64_t MIN_LIMIT = 256ULL * 1024 * 1024;
+    constexpr uint64_t MAX_LIMIT = 4ULL  * 1024 * 1024 * 1024;
+    if (limit < MIN_LIMIT) limit = MIN_LIMIT;
+    if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+    return limit;
+}
 
 // Sniff first bytes to pick the right reader. Magic bytes beat file extension.
 std::unique_ptr<ImageSource> openImageSource(const std::string &path, std::string *err)

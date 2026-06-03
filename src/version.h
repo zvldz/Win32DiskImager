@@ -15,7 +15,7 @@
 
 #define APP_VERSION_MAJOR 2
 #define APP_VERSION_MINOR 3
-#define APP_VERSION_PATCH 1
+#define APP_VERSION_PATCH 2
 
 // Set by CI when the build is not from a tag push (workflow_dispatch /
 // dev artifact builds). Adds a "-dev" SemVer pre-release suffix so the

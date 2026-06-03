@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-XX-XX
+
+### Version 2.3.2
+
+#### Resource usage
+- xz decoder memory footprint now scales with the system. Previously the multi-threaded decoder grabbed up to ~5 GB on an `xz -9` image regardless of how much RAM the machine had (8 threads × ~675 MB dictionary, with `memlimit_threading = UINT64_MAX`). Now the cap is set to ~25% of available physical RAM (clamped 256 MB ≤ X ≤ 4 GB), so on a high-spec workstation all 8 threads still spin up for maximum throughput, on an 8 GB laptop the decoder drops to 2–4 threads, and on a low-RAM system it falls back to single-threaded mode (~675 MB peak) instead of swap-thrashing. Override via the `WDI_XZ_MEMLIMIT_MB` env var if you want a specific budget. Applies to both GUI Write/Verify and CLI `write` / `verify`.
+
 ## 2026-05-27
 
 ### Version 2.3.1

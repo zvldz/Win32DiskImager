@@ -14,13 +14,45 @@
 
 #include <QFile>
 #include <QObject>
+#include <QString>
 #include <algorithm>
 #include <cstring>
 #include <thread>
+#include <windows.h>
 
 namespace {
 
 constexpr size_t XZ_INBUF_SIZE = 64 * 1024;
+
+// Computes the memlimit_threading value we pass to lzma_stream_decoder_mt.
+// lzma uses this as a soft cap and silently reduces the thread count to
+// fit; if even a single MT-mode dictionary doesn't fit, it falls back to
+// single-threaded decoding (~675 MB peak for xz -9). The cap is 25% of
+// the system's available physical RAM, clamped to [256 MB, 4 GB], so
+// peak decoding RAM scales with the host instead of always grabbing
+// ~5 GB for an 8-thread xz -9 decode. WDI_XZ_MEMLIMIT_MB overrides for
+// users who want a specific budget.
+uint64_t computeXzMemLimit()
+{
+    const QString env = qEnvironmentVariable("WDI_XZ_MEMLIMIT_MB");
+    bool ok = false;
+    const quint64 envMB = env.toULongLong(&ok);
+    if (ok && envMB > 0) {
+        return envMB * 1024ULL * 1024ULL;
+    }
+
+    MEMORYSTATUSEX ms = {};
+    ms.dwLength = sizeof(ms);
+    if (!GlobalMemoryStatusEx(&ms)) {
+        return 1024ULL * 1024 * 1024;   // 1 GB fallback if query fails
+    }
+    uint64_t limit = ms.ullAvailPhys / 4;
+    constexpr uint64_t MIN_LIMIT = 256ULL * 1024 * 1024;
+    constexpr uint64_t MAX_LIMIT = 4ULL  * 1024 * 1024 * 1024;
+    if (limit < MIN_LIMIT) limit = MIN_LIMIT;
+    if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+    return limit;
+}
 
 // Decode the xz stream footer + index at the end of the file to recover the
 // total uncompressed size. Standard `xz` CLI output always contains an index;
@@ -92,12 +124,16 @@ bool XzImageReader::open(const QString &path, QString *err)
     // Try the multi-threaded decoder first. On CPUs where single-thread
     // decode (~80 MB/s) would bottleneck a fast target (UHS-II / fast USB
     // SSD), this gives 2-4x throughput. No effect when the bottleneck is the
-    // target device — decoder just waits in the I/O pipeline. Falls back to
-    // single-threaded if unavailable (very old liblzma or OOM).
+    // target device — decoder just waits in the I/O pipeline. memlimit_threading
+    // is the cap lzma uses to decide how many threads will fit; lzma scales
+    // the thread count down (or falls back to single-threaded) instead of
+    // grabbing ~5 GB on an 8-core machine for an xz -9 image. memlimit_stop
+    // stays unbounded so the fallback path is allowed to consume whatever
+    // a single dictionary needs.
     lzma_mt mtOpts = {};
     mtOpts.flags              = LZMA_CONCATENATED;
     mtOpts.threads            = std::min(8u, std::max(2u, std::thread::hardware_concurrency()));
-    mtOpts.memlimit_threading = UINT64_MAX;
+    mtOpts.memlimit_threading = computeXzMemLimit();
     mtOpts.memlimit_stop      = UINT64_MAX;
     lzma_ret r = lzma_stream_decoder_mt(&m_strm, &mtOpts);
     if (r != LZMA_OK) {
