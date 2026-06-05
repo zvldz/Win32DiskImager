@@ -514,8 +514,23 @@ void closeAllVolumes(std::vector<HANDLE> &volumes)
 // success appends each opened handle to `volumes`. On any failure rolls
 // back the locks already taken and returns false. Bare disks (no mounted
 // letter) succeed trivially with `volumes` left empty.
-bool lockAllVolumesOnDisk(DWORD diskNumber, std::vector<HANDLE> &volumes)
+//
+// If `hDisk` is a valid \\.\PhysicalDriveN handle, we additionally try
+// FSCTL_LOCK_VOLUME on it first — the semi-documented Windows pattern
+// rufus uses, which blocks every access to the disk including the
+// unrecognised Linux partitions Windows' mountmgr otherwise keeps
+// probing on OpenHD / Raspberry Pi rootfs cards (Access Denied
+// otherwise). The lock auto-releases when hDisk is closed. When this
+// whole-disk lock succeeds, per-volume failures below are tolerable —
+// the disk-level lock already keeps everyone out.
+bool lockAllVolumesOnDisk(DWORD diskNumber, std::vector<HANDLE> &volumes,
+                          HANDLE hDisk = INVALID_HANDLE_VALUE)
 {
+    DWORD junk = 0;
+    const bool wholeDiskLock = (hDisk != INVALID_HANDLE_VALUE)
+        && DeviceIoControl(hDisk, FSCTL_LOCK_VOLUME,
+                           nullptr, 0, nullptr, 0, &junk, nullptr);
+
     const DWORD mask = GetLogicalDrives();
     for (int i = 0; i < 26; ++i) {
         if ((mask & (1u << i)) == 0) continue;
@@ -530,20 +545,23 @@ bool lockAllVolumesOnDisk(DWORD diskNumber, std::vector<HANDLE> &volumes)
 
         HANDLE hVol = openVolume(letter, GENERIC_READ | GENERIC_WRITE);
         if (hVol == INVALID_HANDLE_VALUE) {
+            if (wholeDiskLock) continue;
             printWinError(L"Failed to open volume handle.", GetLastError());
             closeAllVolumes(volumes);
             return false;
         }
         if (!lockVolumeWithRetry(hVol)) {
-            printWinError(L"Failed to lock volume.", GetLastError());
             CloseHandle(hVol);
+            if (wholeDiskLock) continue;
+            printWinError(L"Failed to lock volume.", GetLastError());
             closeAllVolumes(volumes);
             return false;
         }
         if (!dismountVolumeWithRetry(hVol)) {
-            printWinError(L"Failed to dismount volume.", GetLastError());
             unlockVolume(hVol);
             CloseHandle(hVol);
+            if (wholeDiskLock) continue;
+            printWinError(L"Failed to dismount volume.", GetLastError());
             closeAllVolumes(volumes);
             return false;
         }
@@ -580,7 +598,7 @@ bool prepareDiskHandles(DWORD diskNumber,
 
     const bool inherited = !volumes.empty();
     if (!inherited) {
-        if (!lockAllVolumesOnDisk(diskNumber, volumes)) {
+        if (!lockAllVolumesOnDisk(diskNumber, volumes, hDisk)) {
             CloseHandle(hDisk);
             hDisk = INVALID_HANDLE_VALUE;
             return false;

@@ -507,24 +507,51 @@ void MainWindow::cleanupHandlesAndUI()
 
 bool MainWindow::lockAllVolumesOnDisk(const TargetDisk &td)
 {
-    // Bare disk (no recognised FS, no assigned letter): nothing for the
-    // FS to own, raw access is unconflicted, m_volumes stays empty.
+    // Try to lock the whole disk first via FSCTL_LOCK_VOLUME on the
+    // \\.\PhysicalDriveN handle that on_b{Write,Read,Verify}_clicked
+    // opened before calling us. This is the semi-documented Windows
+    // pattern rufus uses — one IOCTL blocks every access to the disk,
+    // including the unrecognised Linux partitions Windows' mountmgr
+    // otherwise keeps probing on OpenHD / Raspberry Pi rootfs cards.
+    // Without it those partitions race with our raw write and the user
+    // sees Access Denied. The lock auto-releases when hRawDisk closes.
+    //
+    // If the IOCTL fails (some Windows versions don't honor it on
+    // physical-disk handles, returns ERROR_INVALID_FUNCTION), fall back
+    // to the per-volume locking below.
+    DWORD junk = 0;
+    const bool wholeDiskLock = (hRawDisk != INVALID_HANDLE_VALUE)
+        && DeviceIoControl(hRawDisk, FSCTL_LOCK_VOLUME,
+                           NULL, 0, NULL, 0, &junk, NULL);
+
+    // Per-volume lock + dismount. Two reasons we still want this even
+    // when wholeDiskLock succeeded:
+    //   1) flush cached FS state — Windows holds dirty pages for each
+    //      mounted volume and FSCTL_DISMOUNT_VOLUME forces them out
+    //      before we overwrite the disk with a new image;
+    //   2) on Windows builds where wholeDiskLock didn't take, this is
+    //      our only protection.
+    // When wholeDiskLock is true, individual volume failures are
+    // tolerable — the disk-level lock already blocks everyone.
     for (const QString &lt : td.letters) {
         if (lt.isEmpty()) continue;
         const int volumeIdx = lt.at(0).toUpper().toLatin1() - 'A';
         HANDLE h = getHandleOnVolume(volumeIdx, GENERIC_READ | GENERIC_WRITE);
         if (h == INVALID_HANDLE_VALUE) {
+            if (wholeDiskLock) continue;
             unlockAndCloseAllVolumes();
             return false;
         }
         if (!getLockOnVolume(h)) {
             CloseHandle(h);
+            if (wholeDiskLock) continue;
             unlockAndCloseAllVolumes();
             return false;
         }
         if (!unmountVolume(h)) {
             removeLockOnVolume(h);
             CloseHandle(h);
+            if (wholeDiskLock) continue;
             unlockAndCloseAllVolumes();
             return false;
         }

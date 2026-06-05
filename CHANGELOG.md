@@ -4,6 +4,9 @@
 
 ### Version 2.3.2
 
+#### Reliability
+- Write reliably to cards with Linux partitions (e.g. OpenHD / Raspberry Pi rootfs images). Previously these failed with "Access Denied" because Windows' `mountmgr` keeps polling unrecognised partitions (ext4, etc.) trying to identify them, and our per-volume `FSCTL_LOCK_VOLUME` only covered the FAT/NTFS partitions Windows could see — the Linux partitions stayed exposed and the polling raced with our raw write. We now additionally issue `FSCTL_LOCK_VOLUME` on the `\\.\PhysicalDriveN` handle itself (the semi-documented Windows pattern rufus uses), which locks the entire disk in one IOCTL regardless of how Windows sees its partitions. Falls back to the previous per-volume locking on Windows builds that don't honor the disk-level lock.
+
 #### Resource usage
 - xz decoder memory footprint now scales with the system. Previously the multi-threaded decoder grabbed up to ~5 GB on an `xz -9` image regardless of how much RAM the machine had (8 threads × ~675 MB dictionary, with `memlimit_threading = UINT64_MAX`). Now the cap is set to ~25% of available physical RAM (clamped 256 MB ≤ X ≤ 4 GB), so on a high-spec workstation all 8 threads still spin up for maximum throughput, on an 8 GB laptop the decoder drops to 2–4 threads, and on a low-RAM system it falls back to single-threaded mode (~675 MB peak) instead of swap-thrashing. Override via the `WDI_XZ_MEMLIMIT_MB` env var if you want a specific budget. Applies to both GUI Write/Verify and CLI `write` / `verify`.
 
