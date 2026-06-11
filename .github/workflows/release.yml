@@ -58,19 +58,23 @@ jobs:
 
       # Tag pushes ship as proper releases. Anything else (manual
       # workflow_dispatch, branch pushes if we ever wire those up) gets
-      # a "-dev" SemVer pre-release suffix baked into the binary so the
-      # auto-update checker can rank a real release ABOVE that build.
+      # a "-dev-<sha>" SemVer pre-release suffix baked into the binary
+      # so the auto-update checker can rank a real release ABOVE that
+      # build, and the running exe shows which exact commit it was
+      # built from (useful for test-cycle confirmation).
       - name: Detect build kind
         id: build_kind
         shell: bash
         run: |
           set -euo pipefail
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "extra_qmake_args=" >> "$GITHUB_OUTPUT"
+            echo "is_dev=false" >> "$GITHUB_OUTPUT"
             echo "version_suffix=" >> "$GITHUB_OUTPUT"
           else
-            echo "extra_qmake_args=DEFINES+=WDI_DEV_BUILD" >> "$GITHUB_OUTPUT"
-            echo "version_suffix=-dev" >> "$GITHUB_OUTPUT"
+            SHORT_SHA="${GITHUB_SHA::7}"
+            echo "is_dev=true" >> "$GITHUB_OUTPUT"
+            echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+            echo "version_suffix=-dev-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           fi
 
       # rcc bakes src/lang/*.qm into the binary via translations.qrc.
@@ -102,9 +106,10 @@ jobs:
           set -euo pipefail
           mkdir -p bin/gui-static-build
           cd bin/gui-static-build
-          EXTRA="${{ steps.build_kind.outputs.extra_qmake_args }}"
-          if [ -n "$EXTRA" ]; then
-            /mingw64/qt6-static/bin/qmake6 ../../src/DiskImager.pro "DESTDIR=.." "$EXTRA"
+          if [ "${{ steps.build_kind.outputs.is_dev }}" = "true" ]; then
+            /mingw64/qt6-static/bin/qmake6 ../../src/DiskImager.pro "DESTDIR=.." \
+              DEFINES+=WDI_DEV_BUILD \
+              DEFINES+=WDI_COMMIT_SHA=${{ steps.build_kind.outputs.short_sha }}
           else
             /mingw64/qt6-static/bin/qmake6 ../../src/DiskImager.pro "DESTDIR=.."
           fi
@@ -115,9 +120,10 @@ jobs:
           set -euo pipefail
           mkdir -p bin/cli-build
           cd bin/cli-build
-          EXTRA="${{ steps.build_kind.outputs.extra_qmake_args }}"
-          if [ -n "$EXTRA" ]; then
-            /mingw64/qt6-static/bin/qmake6 ../../src/DiskImagerCli.pro "DESTDIR=.." "$EXTRA"
+          if [ "${{ steps.build_kind.outputs.is_dev }}" = "true" ]; then
+            /mingw64/qt6-static/bin/qmake6 ../../src/DiskImagerCli.pro "DESTDIR=.." \
+              DEFINES+=WDI_DEV_BUILD \
+              DEFINES+=WDI_COMMIT_SHA=${{ steps.build_kind.outputs.short_sha }}
           else
             /mingw64/qt6-static/bin/qmake6 ../../src/DiskImagerCli.pro "DESTDIR=.."
           fi

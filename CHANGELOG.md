@@ -4,206 +4,175 @@
 
 ### Version 2.3.2
 
+#### GUI
+- Read / Write / Verify buttons stay disabled while an operation is in progress. Previously editing the Image File field (or picking another history entry) re-enabled them mid-operation.
+
 #### Reliability
-- Write reliably to cards with Linux partitions (e.g. OpenHD / Raspberry Pi rootfs images). Previously these failed with "Access Denied" because Windows' `mountmgr` keeps polling unrecognised partitions (ext4, etc.) trying to identify them, and our per-volume `FSCTL_LOCK_VOLUME` only covered the FAT/NTFS partitions Windows could see — the Linux partitions stayed exposed and the polling raced with our raw write. We now additionally issue `FSCTL_LOCK_VOLUME` on the `\\.\PhysicalDriveN` handle itself (the semi-documented Windows pattern rufus uses), which locks the entire disk in one IOCTL regardless of how Windows sees its partitions. Falls back to the previous per-volume locking on Windows builds that don't honor the disk-level lock.
+- Write, Read, and standalone Verify reliably on cards Windows had recently mounted (multiple FAT layouts from OpenHD / Raspberry Pi OS / radxa images, anything with Windows-recognisable partitions). Previously such operations failed mid-write with "Access Denied" or "Device not ready" on Windows 11 25H2+, or finished but failed Verify. The fix combines exclusive disk-share access, deferred first-buffer write, and a `diskpart`-mediated settling step — same approach Etcher and the older Raspberry Pi Imager (1.9.x) use, while the current Raspberry Pi Imager mainline still has this open as upstream issue #1489.
+- **`.gz` images ≥ 4 GB now write the full image** instead of silently stopping at 2 GB / 0 bytes. The gzip trailer carries the uncompressed size mod 2^32, and we were trusting it — so a 6 GB radxa Debian image (ISIZE wraps to 2 GB) finished Write + Verify in seconds but Linux refused to boot because the rootfs tail was missing. Now `.gz` is always streamed to EOF (same approach Balena Etcher / Pi Imager take). Progress switches to compressed-bytes percentage for `.gz`; `.xz` is unaffected — its 64-bit stream index is reliable for any size.
+
+#### Read Only Allocated Partitions
+- Now also works on GPT-partitioned disks (radxa, OpenHD, anything that boots a Linux board with a GPT layout). Previously these fell back to a full-disk read with an "MBR-only" notice — typical 6 GB image on a 32 GB card produced a 32 GB raw file before compression. The resulting image is a standard raw byte slice from sector 0 through the end of the last allocated partition; backup GPT is not included (Linux rebuilds it on first boot via `sgdisk -e` / first-boot resize scripts, same as how distro images normally handle being written to a larger card). Both GUI and CLI (`--allocated-only`).
+
+#### Progress / ETA
+- Time-remaining estimate during `.gz` Write and Verify is now correct. Previously the ETA extrapolated against full disk capacity — a 1-minute write of a 6 GB `.gz` into a 64 GB card displayed "11 minutes remaining" throughout. Now ETA paces off compressed bytes consumed, the same metric the progress bar uses for unknown-size sources, and converges within a few seconds of the start.
 
 #### Resource usage
-- xz decoder memory footprint now scales with the system. Previously the multi-threaded decoder grabbed up to ~5 GB on an `xz -9` image regardless of how much RAM the machine had (8 threads × ~675 MB dictionary, with `memlimit_threading = UINT64_MAX`). Now the cap is set to ~25% of available physical RAM (clamped 256 MB ≤ X ≤ 4 GB), so on a high-spec workstation all 8 threads still spin up for maximum throughput, on an 8 GB laptop the decoder drops to 2–4 threads, and on a low-RAM system it falls back to single-threaded mode (~675 MB peak) instead of swap-thrashing. Override via the `WDI_XZ_MEMLIMIT_MB` env var if you want a specific budget. Applies to both GUI Write/Verify and CLI `write` / `verify`.
+- xz decoder memory now scales with available RAM (~25% of free physical, clamped 256 MB – 4 GB). High-end machines still spin up the full multi-threaded decoder for maximum throughput; low-RAM machines no longer swap-thrash on `xz -9` images. Override with the `WDI_XZ_MEMLIMIT_MB` env var. Applies to both GUI and CLI.
 
 ## 2026-05-27
 
 ### Version 2.3.1
 
 #### Reliability
-- Fix occasional `Device Error 55: The specified network resource or device is no longer available` at the start of a Write / Read / Verify on certain SD card readers. Some readers do an internal device-reset when a volume is dismounted; a raw `\\.\PhysicalDriveN` handle opened **after** that point came up stale and the next `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` failed with `ERROR_DEV_NOT_EXIST`. The user heard a brief eject/reattach sound and had to re-launch the operation manually. Reordered both the GUI and CLI paths so the raw handle is acquired **before** the `FSCTL_LOCK_VOLUME` / `FSCTL_DISMOUNT_VOLUME` sequence — the raw handle is independent of FS mount state and pins a stable device reference across the lock/dismount. Matches what rufus / Raspberry Pi Imager do.
+- Fix occasional "Device Error 55: The specified network resource or device is no longer available" at the start of Write / Read / Verify on some SD card readers. The reader briefly resets when its volume is dismounted; the operation now survives that and proceeds without needing the user to retry.
 
 #### GUI
-- Image File history dropdown ✕ button now reliably triggers the remove dialog: bolder / larger glyph with a hover highlight makes the click target visible, and the click area is anchored to the popup's viewport edge so entries with long paths (where QListView made the row wider than the visible area) no longer pushed the ✕ off-screen.
+- Image File history dropdown ✕ button is now bolder, larger, and has a hover highlight — easier to see and to click. Click area now reliably hits even on entries with long paths.
 
 ## 2026-05-15
 
 ### Version 2.3.0
 
-#### Device enumeration / target selection
-- Both the GUI Device dropdown and the CLI `list` command now enumerate physical disks (`\\.\PhysicalDrive0..31`) directly instead of starting from `GetLogicalDrives()`. This brings *bare* disks into view — a card with no recognised filesystem, or one Windows hasn't assigned a drive letter to, finally shows up and can be written, read or verified. The writable-target filter accepts USB / SD / MMC / removable; for disks that have at least one mounted letter, the FS-level `GetDriveTypeW` is consulted per letter — this catches SD card readers (internal laptop slots, some USB hubs) that report `BusType=SCSI` / `Unknown` and `RemovableMedia=FALSE` at the bus level even though the inserted card is `DRIVE_REMOVABLE` to Windows. Empty multi-card-reader slots are suppressed via `IOCTL_STORAGE_CHECK_VERIFY2` (the `FILE_ANY_ACCESS` variant — the strict `CHECK_VERIFY` requires `FILE_READ_ACCESS` on the handle and would otherwise fail on every disk under our 0-access probe handle).
-- New combo / list label format: `Disk N [E:\, F:\] 32GB` (or `Disk N 32GB` for a bare disk). The window grew by 40 px (480 → 520) to fit a typical `Disk N [E:\] XX GB` label without eliding the Image File field next to it; multi-letter labels elide in the combo and render full in the dropdown. Internally, devices are now identified by physical disk number stored in the combo's `itemData` instead of being parsed back out of the visible label.
-- Lock + dismount now covers **every** mounted volume on the target disk, not just one. Multi-partition cards used to leave sibling partitions live during a raw write — Google Drive / Windows Search / antivirus could still poke at them. The list of locked handles is held collectively and handed across the Write → Verify boundary atomically.
-- `WM_DEVICECHANGE` handling extended with a `RegisterDeviceNotification(GUID_DEVINTERFACE_DISK)` subscription so bare-disk arrival / removal also triggers a refresh — previously only volume-letter events fired the rebuild.
+#### Device selection
+- The Device dropdown (GUI) and CLI `list` now show **bare disks** — cards with no recognised filesystem or no drive letter assigned by Windows finally show up and can be written, read, or verified. Empty multi-card-reader slots are hidden.
+- New label format: `Disk N [E:\, F:\] 32GB` (or `Disk N 32GB` for bare disks). Multi-letter cards show every letter in the dropdown; long labels elide gracefully.
+- Multi-partition cards now lock every volume on the target disk during raw operations — sibling partitions can no longer be touched by Google Drive / Windows Search / antivirus during a Write or Verify.
+- Inserting a bare disk now refreshes the dropdown automatically (previously only formatted volumes triggered a refresh).
 
-#### CLI `--device`
-- `--device` now accepts both the canonical numeric form (`--device 1`, matches `list` output) and the legacy letter form (`--device E:`, still works for scripting against formatted cards). The numeric form is required for bare disks. `list` output prints `Disk N (PhysicalDriveN, removable, 32 GB) [E:, F:]` (or `[no letter]`) and a usage hint at the bottom.
+#### CLI
+- `--device` accepts both `--device 1` (matches `list` output) and `--device E:` (legacy). The numeric form is required for bare disks.
+- `list` output now reads `Disk N (PhysicalDriveN, removable, 32 GB) [E:, F:]` with a usage hint at the bottom.
 
 #### Translations
-- `lupdate` pass against current sources brought in 23 new strings (update-checker dialogs, history-remove confirmation, MBR/GPT fallback notices, allocated-only fallback, verify-failure relative-position diagnostic, write-elapsed and chained write+verify completion dialogs); all filled across the 11 locales the project ships. Long-standing pre-existing unfinished entries in `fr` (19), `pl` (21) and `ta_IN` (51) also filled — `ta_IN` had been shipping with most of the GUI in English since the initial upstream import.
-- **Ukrainian (`uk`)** locale added — 127 strings translated, picked up automatically on a Ukrainian-locale Windows.
-- **All `.qm` files are now baked into `Win32DiskImager.exe`** via Qt's resource system instead of installed as loose files in `{app}\translations\`. The portable zip becomes truly self-contained (single .exe, drop anywhere and translations work), the install dir is one folder lighter, and the WDI_LANG override / system-locale lookup no longer depends on cwd or `applicationDirPath`. Inherited upstream bug where `translator.load("translations/...")` was a relative path against cwd is gone with it — pre-2.3.0 launches via console (`C:\Users\foo> "C:\Program Files\...\Win32DiskImager.exe"`) silently lost their translations.
-- **Qt's standard widget strings (Yes / No / OK / Cancel, file-dialog labels) now translated too.** Previously the app loaded only its own `diskimager_<lang>.qm` and Qt's stock button labels stayed English regardless of locale. CI now pulls `qtbase_<lang>.qm` out of the `mingw-w64-x86_64-qt6-translations` MSYS2 package and bundles it alongside our own translations. Covers all 11 locales except Tamil (`ta_IN`) — Qt itself doesn't ship `qtbase_ta_IN.qm`, so standard buttons stay English in that one locale.
-- New `WDI_LANG` environment variable overrides the system locale for translation lookup. Useful for testing a non-system locale without changing the Windows display language, or for forcing English on a localised Windows. **UAC caveat**: `requireAdministrator` elevation replaces the inherited environment with a fresh one from the elevated user's profile, so a process-local `set WDI_LANG=uk` from an unprivileged shell is dropped when the UAC prompt fires. Use `setx WDI_LANG uk` (persists in `HKCU\Environment` so new processes pick it up) or launch from an already-elevated shell. PowerShell syntax: `$env:WDI_LANG = "uk"`, not `set WDI_LANG=uk` — `set` in PowerShell is `Set-Variable` and doesn't touch the process environment.
-- Installer adds an `[InstallDelete]` sweep for `{app}\translations` on upgrade so the loose .qm files from pre-2.3.0 installs are removed; new installs never create the folder in the first place.
+- **Ukrainian** added (127 strings) — picks up automatically on a Ukrainian-locale Windows.
+- Long-standing untranslated strings filled across `fr`, `pl`, and `ta_IN` — the Tamil locale had been shipping with most of the GUI in English since the upstream import.
+- Standard Qt button labels (Yes / No / OK / Cancel, file-dialog labels) are now translated too — previously they stayed English regardless of locale. All 11 locales except Tamil (Qt itself doesn't ship a Tamil pack).
+- All translation files are now baked into `Win32DiskImager.exe`. The portable zip becomes a true single-file deployment (drop the .exe anywhere and translations work); the installed directory loses the `translations\` subfolder.
+- New `WDI_LANG` environment variable overrides the system locale for translation lookup. Use `setx WDI_LANG uk` to force a specific language regardless of the Windows display language (a plain `set WDI_LANG=uk` in the current shell is dropped by UAC when admin elevation kicks in).
 
-#### Build / Auto-update
-- CI builds that aren't from a tag push (manual `workflow_dispatch` / dev artifacts) now bake a `-dev` SemVer pre-release suffix into the binary — the running exe reports `2.3.0-dev` instead of `2.3.0`, and the installer asset is named accordingly. The update checker's version comparison was upgraded to SemVer rules: numeric core first, and on a tie a bare version ranks above one carrying a pre-release suffix. Net effect: a dev build correctly identifies a freshly published `2.3.0` release as newer than itself and offers the update, instead of silently treating "same numbers" as "already up to date".
+#### Updates
+- Dev builds (CI artifacts not from a release tag) now report themselves as `2.3.0-dev` instead of `2.3.0`. The update checker recognises a released `2.3.0` as newer than `2.3.0-dev` and offers the update — previously a dev build silently treated "same numbers" as "already up to date".
 
 ## 2026-05-01
 
 ### Version 2.2.5
 
-Test release. Used to verify that the auto-update flow shipped in
-2.2.4 correctly downloads `Win32DiskImager-setup-2.2.5.exe` and
-hands off to the installer.
+Test release. Verifies that the auto-update flow shipped in 2.2.4 correctly downloads and runs the installer.
 
 ## 2026-05-01
 
 ### Version 2.2.4
 
 #### GUI
-- Auto-update now downloads and runs the installer in one step. Confirming the "Update available" dialog streams `Win32DiskImager-setup-X.Y.Z.exe` to `%TEMP%`, hands off to Inno Setup and quits so the install can proceed in place. Inno Setup prompts for the install location itself, so the same flow works whether the running copy was previously installer-deployed or extracted from a zip. If a release has no installer asset attached, the dialog falls back to opening the GitHub release page in the browser.
+- Auto-update now downloads and runs the installer in one step. Confirming the "Update available" dialog streams the installer to `%TEMP%`, hands off, and the app quits so the installer can replace its exe in place. If a release ships without an installer asset, the dialog falls back to opening the GitHub release page.
 
 ## 2026-05-01
 
 ### Version 2.2.3
 
 #### CLI
-- New `check-updates` command (also accepts `--check-updates`) that hits the GitHub releases API and prints either "You are running the latest version" or the new tag plus a link to the GitHub release page. Doesn't auto-run on any other command — the CLI stays silent on scripted invocations, no network on plain `list` / `write` / `read` / `verify`. Implemented with WinHTTP so the CLI keeps its Qt-free dependency footprint.
+- New `check-updates` command (also `--check-updates`) — prints either "You are running the latest version" or the new tag plus a link to the GitHub release page. Doesn't auto-run on any other command, so scripted invocations stay silent and offline.
 
 ## 2026-05-01
 
 ### Version 2.2.2
 
 #### GUI
-- Image File history dropdown gets a small ✕ on the right side of every entry. Clicking it asks for confirmation and removes the entry from both the combo and `HKCU\Software\Win32DiskImager\ImageFileHistory`. New `HistoryItemDelegate` (`src/historydelegate.{h,cpp}`) installed on the combo's view; the click is intercepted via an event filter on the popup viewport, so it doesn't fall through to row-selection.
-- Auto-update checker for the GUI. Two access points, plus a weekly background poll:
-  - Right-click on the title bar → `Check for Updates...` (added natively to the window's system menu via `GetSystemMenu` + `AppendMenu`).
-  - On startup, at most once per 7 days, the app pings `api.github.com/repos/zvldz/Win32DiskImager/releases/latest` and stays silent unless a new tag is found.
-  - When a new version is found and the app was launched from the Inno Setup install location (detected via the uninstall registry key `HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{3DFFA293-...}_is1`), the user is offered an in-app download of `Win32DiskImager-setup-<ver>.exe` followed by a hand-off to the installer (the running app quits so the installer can replace its exe). For a standalone (zip-extracted) deployment, the dialog instead opens the GitHub release page in the browser. CLI is unaffected — it stays quiet for scripting.
+- Image File history dropdown gets a small ✕ on the right side of every entry. Click it to remove the entry from the history (with confirmation).
+- Auto-update checker. Available three ways:
+  - Right-click on the title bar → **Check for Updates...**
+  - On startup, at most once per 7 days, the app checks silently and stays quiet unless a new version exists.
+  - When a new version is found, the dialog offers an in-app download + installer hand-off (installer deployment) or opens the GitHub release page (portable / zip deployment). The CLI is unaffected.
 
 #### Convenience
-- After a successful Write (or chained Write + Verify), the volume is auto-ejected via `IOCTL_STORAGE_EJECT_MEDIA` so the card shows as "Safely Removed" in Windows — no need to click the tray icon before pulling it. Standalone Read and standalone Verify are left untouched (the user may still want the card mounted afterwards). Eject is best-effort — silent on bus types that don't support it. Helper added as `ejectVolume()` in `disk.h`. Both success dialogs ("Write Successful", "Write & Verify Successful") now also tell the user "Card can be safely removed." in italics; the CLI prints the same line.
+- After a successful Write (or chained Write + Verify), the card is auto-ejected — shows as "Safely Removed" in Windows so you can pull it right away. Standalone Read and standalone Verify leave the card mounted as before. Success dialogs add a "Card can be safely removed." line; the CLI prints the same.
 
 #### Diagnostics
-- Verify-failure message now reports both the absolute sector / byte offset **and** a relative position — e.g. `Verification failed at sector 16777216 of 30523392 (55% / 8.00 GB of 14.6 GB)`. Hitting the fail right around an even GB boundary on an SD card whose advertised capacity is much larger is the classic signature of a counterfeit card with a remapped controller; the diagnostic makes that obvious at a glance. Applied symmetrically in the GUI (`mainwindow.cpp::verifyFailMessage`) and the CLI (`cli_main.cpp::cmdVerify`).
+- Verify-failure message now shows both the absolute sector and a relative position — e.g. *"Verification failed at sector 16777216 of 30523392 (55% / 8.00 GB of 14.6 GB)"*. A failure right at an even-GB boundary on a card whose advertised capacity is much larger is the classic signature of a counterfeit card; the percentage makes that visible at a glance.
 
-#### Allocated-only read robustness
-- The `Read Only Allocated Partitions` checkbox (GUI) and `--allocated-only` flag (CLI) now sanity-check the boot sector before parsing. Two new fallbacks:
-  - If the 0x55AA MBR signature is missing — the device has no recognisable partition table and we'd otherwise be parsing 16-byte windows of garbage. Falls back to a full disk read with an info dialog (CLI: stderr message).
-  - If a GPT protective MBR is detected (any primary entry of type 0xEE) — native GPT parsing is a planned task; same fallback behavior so the operation completes instead of producing a malformed image.
+#### Read Only Allocated Partitions
+- Falls back gracefully on devices without a recognisable MBR (raw cards) or with a GPT layout — info dialog (GUI) / stderr notice (CLI), then a full disk read. Previously these produced a malformed image. (GPT got native support in 2.3.2; the fallback path still handles unrecognised cards.)
 
 #### Verify reliability
-- Verify now opens the device handle with `FILE_FLAG_NO_BUFFERING`, symmetric with the Write side. Previously the Write side bypassed the OS block cache but the Verify read went through it, so a stale page from before the just-finished Write could mask the real device data.
-- When Verify is chained from a successful Write, it now issues `FlushFileBuffers` on the volume and waits 1.5 s before starting reads. SD controllers batch-flush their internal cache and FTL state to NAND lazily; without this delay, reads close to the end of the image had a higher chance of catching the controller mid-flush — the recurring "fail just before 100%" pattern. Same behavior in GUI and CLI.
-- Per-chunk retry on memcmp mismatch: up to 3 re-reads with a 500 ms wait between attempts, both in GUI (re-issuing `readSectorDataFromHandle`) and CLI (seeking back via `SetFilePointerEx(FILE_CURRENT, -length)` and re-reading). Recovers from transient flakiness — typical when an SD card sits in a passive microSD→SD adapter, where SD-bus signal integrity degrades and reads occasionally come back wrong on the first try. A real, persistent mismatch still surfaces as a `Verify Failure` with the diagnostic position info above.
+- Verify now bypasses the Windows FS cache (same as Write), so the read can't be served from a stale page that was cached before the just-finished Write.
+- Verify-after-Write now flushes the volume and waits 1.5 s before starting reads. SD controllers batch-flush their internal state to NAND lazily; without this delay the recurring "fails just before 100%" pattern showed up.
+- Per-chunk retry on a verify-mismatch: up to 3 re-reads with 500 ms wait. Recovers from transient flakiness typical when a card sits in a passive microSD → SD adapter with degraded SD-bus signal integrity. A real persistent mismatch still surfaces as a Verify Failure with the diagnostic above.
 
 ## 2026-04-28
 
 ### Version 2.2.1
 
 #### GUI
-- Browse dialog now opens directly in the folder of the currently selected Image File (whether the path was picked from history, dropped onto the field or typed). Native `QFileDialog` on Windows would frequently ignore `selectFile(fullPath)` and fall back to its own last-used directory; the fix splits the input into `setDirectory(folder)` + `selectFile(name)` so the dialog lands in the right place even on first open.
+- Browse dialog now opens directly in the folder of the currently selected Image File — whether the path was picked from history, dropped onto the field, or typed. Previously Windows always landed in its own last-used directory.
 
 #### Reliability
-- Long-running Write / Read / Verify operations now suppress system idle-sleep via `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` for as long as the operation is in flight. A multi-minute SD-card write on a laptop with a 10-minute sleep timer no longer gets cut in half. Implemented as a tiny RAII guard (`src/keepawake.h`) so any exit path — success, error, cancel, exception — automatically releases the request. Applied symmetrically in the GUI (`on_b{Write,Read,Verify}_clicked`) and the CLI (`cmd{Write,Read,Verify}`).
+- Long-running Write / Read / Verify no longer get interrupted by system sleep. The app suppresses idle-sleep for the duration of the operation, so a multi-minute SD-card write on a laptop with a 10-minute sleep timer finishes instead of being cut short.
 
 ## 2026-04-23
 
 ### Version 2.2.0
 
-#### Compressed image input (.gz / .xz)
-- New `ImageReader` interface (`src/imagereader.h`) with three implementations: `RawImageReader` (plain `.img`), `GzImageReader` (zlib via `gzopen_w` / `gzread`) and `XzImageReader` (liblzma via `lzma_stream_decoder` / `LZMA_CONCATENATED`). Factory in `imagereader.cpp` sniffs the first 6 bytes — magic bytes beat file extension, so a `.img` that's actually `.img.xz` still works.
-- Write and Verify in the GUI now drive off the reader; size checks use `uncompressedSize()` from the format's metadata (xz stream index, gz ISIZE trailer). When the size cannot be determined (rare — gz > 4 GB without a credible ISIZE), the loop iterates to EOF and aborts the moment device capacity is reached, instead of silently truncating.
-- The truncate pre-scan (warning that the extra bytes past the device size DOES / does not contain data) only runs for raw sources — compressed streams default to the pessimistic warning since they don't allow cheap random access.
-- Progress bar has two modes: sectors-written when uncompressed size is known, compressed-bytes percentage otherwise. Either way the bar moves smoothly from 0 to 100 — same fallback RPi Imager / balenaEtcher use.
-- Browse-file filter in the GUI becomes `Disk images (*.img *.iso *.gz *.xz)` by default; raw-only and compressed-only filters are also offered.
-- The CLI gets a parallel, Qt-free `ImageSource` hierarchy (in `cli_main.cpp`) using the same magic-byte sniffing. `cmdWrite` and `cmdVerify` accept `.gz` / `.xz` transparently.
+#### Compressed images (.gz / .xz)
+- Write and Verify accept `.gz` and `.xz` images directly — no need to manually unpack first. Format is detected by magic bytes, so a `.img` that's actually `.img.xz` still works. Both GUI and CLI.
+- Browse-file filter defaults to `Disk images (*.img *.iso *.gz *.xz)` with raw-only / compressed-only filters available.
 
-#### Pipelined I/O
-- New `src/iopipeline.h` — a bounded (4-chunk) producer/consumer queue used by both the GUI and the CLI. A decoder thread fills the queue with `IoChunk`s; the main thread drains them to the device.
-- Write and Verify in both front-ends now overlap decompression with disk I/O. On a `.xz` source, prior versions hit a ~15-16 MB/s ceiling on Write because decode and `WriteFile` ran sequentially; with the pipeline the SD card is the bottleneck again (typically 30-40+ MB/s on V30, closer to spec on faster cards). Verify gets the same speedup since the decoder runs while the main thread reads the device and runs `memcmp`.
-- Cancel propagates via `ChunkQueue::requestAbort()`. The decoder thread is always `join()`ed before the operation function returns. Errors flow back to the main thread as `IoChunk::err`, never as a dead producer.
+#### Throughput
+- Decompression overlaps with disk I/O: previously `.xz` Write capped at ~15-16 MB/s because decode and write ran sequentially; now the card is the bottleneck again (typically 30-40+ MB/s on V30 cards, closer to spec on faster ones). Verify gets the same speedup.
 
 #### Auto-verify after Write
-- GUI: new `Verify after Write` checkbox next to `Read Only Allocated Partitions`, **default on**. After a successful Write, control chains into `on_bVerify_clicked()` so the user gets one combined `Verify Successful` dialog. Unchecking restores the legacy "Write only, click Verify separately" flow.
-- CLI: `write` runs `verify` afterwards by default — same as RPi Imager. Pass `--no-verify` to opt out. `printUsage()` documents the flag.
-- Write hands the still-locked, still-dismounted volume directly to the chained Verify instead of unlocking + re-opening. Closes the tiny window where Google Drive / Windows Search / antivirus latched onto the freshly-written volume and made the Verify pass's first IOCTL fail with transient 5/55 errors. GUI uses a class-level flag (`m_verifyInheritsLock`); CLI threads the handle through `cmdWrite`'s new out-param and `cmdVerify`'s new inherit-volume param.
+- New **Verify after Write** checkbox in the GUI (default on). After a successful Write the operation chains into Verify automatically and shows one combined success dialog. Uncheck to keep the legacy two-click flow.
+- CLI: `write` runs `verify` afterwards by default (same as Raspberry Pi Imager). Pass `--no-verify` to opt out.
+- The chain hands the locked, dismounted card directly to Verify without re-opening, closing a small window where Google Drive / Windows Search / antivirus could grab the freshly written card and cause Verify to start with a transient error.
 
-#### CLI polish
-- Banner: `Win32DiskImager CLI X.Y.Z` printed once before any command runs (`list` / `write` / `read` / `verify`).
-- `list` now filters by storage bus type, mirroring the GUI's `checkDriveType`: `DRIVE_REMOVABLE && BusType != SATA`, or `DRIVE_FIXED && BusType in {USB, SD, MMC}`. System SSDs (C:, D:) and virtual filesystems (Google Drive, OneDrive) no longer show up — they aren't valid write targets and listing them invited footguns.
-- `list` now also prints device capacity per drive: `E: (removable, PhysicalDrive2, 32 GB)`. Size is queried via `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` and formatted as KB / MB / GB / TB depending on magnitude.
-- Manifest changed from `requireAdministrator` to `asInvoker`. `list`, `--help` and `--version` no longer trigger UAC. `write` / `read` / `verify` still need elevation; `isRunningAsAdmin()` produces a clear "relaunch from an elevated terminal" message instead.
-- Progress printer rewritten — fixed-format `%5.1f%%` percentage, 20-char ASCII bar (`[######....]`), right-justified speed, and an ETA derived from running average. Unknown-size fallback prints `Processed: NNN.NN MB  Speed: NN.N MB/s`.
-- `--bytes` parsing: same as before. `--allocated-only` for `read` unchanged.
-
-#### Misc
-- GUI status-bar MB/s now formatted as `%.2f` (e.g. `85.32 MB/s`) instead of the default 6-significant-digit Qt rendering (`85.3214567`). CLI progress line is formatted the same way.
-- `cli_main.cpp` direct I/O on the destination handle (`FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`) plus `_aligned_malloc` chunk buffer — same correctness fix the GUI got in 2.1.1.
-- `disk.cpp`: the legacy 32-bit `SetFilePointer` replaced with `SetFilePointerEx` in `readSectorDataFromHandle` / `writeSectorDataToHandle`. Closes a latent issue for images ≥ 2 GB where the old API treated the low-part as a signed `LONG`.
-- Multi-threaded xz decoder (`lzma_stream_decoder_mt`) with up to 8 threads, falling back to single-threaded when unavailable. For modern CPUs on SD targets this changes nothing (SD is the bottleneck), but on older CPUs or fast targets (UHS-II SD, USB 3.0 SSD) it prevents decode from becoming the bottleneck.
-- Translations (.ts) refreshed for all 11 locales (de, es, fr, it, ja, ko, nl, pl, ta_IN, zh_CN, zh_TW): the completion-dialog strings gained rich-text HTML markup in 2.2.0 and required new translations; obsolete entries from earlier releases purged via `lupdate -no-obsolete`.
+#### CLI
+- Banner with version printed once before each command.
+- `list` now filters out system disks (C:\, D:) and virtual filesystems (Google Drive, OneDrive). Only valid write targets show up.
+- `list` prints capacity per drive: `E: (removable, PhysicalDrive2, 32 GB)`.
+- `list`, `--help`, `--version` no longer trigger UAC; only `write` / `read` / `verify` still need elevation. The elevation message now explicitly says "relaunch from an elevated terminal".
+- Progress printer redrawn — fixed-width percentage + ASCII bar, MB/s, and ETA.
 
 #### Status / UI feedback
-- Progress bar shows the current operation inline: `Writing: 42%`, `Reading: 78%`, `Verifying: 15%`. Important now that Auto-verify-after-Write resets the bar to 0 and starts a second pass — the user no longer has to guess which phase is running.
-- Status-bar line is prefixed too: `Writing: 85.32 MB/s`, `Verifying: 92.10 MB/s`. An initial `"Writing..."` / `"Reading..."` / `"Verifying..."` lands before the first MB/s tick so the user sees the operation start.
-- CLI prints an explicit `Writing:` / `Reading:` / `Verifying:` header on its own line before the progress bar, and inserts a blank line between a Write and its auto-chained Verify.
-- GUI: removed the fake resize grip in the bottom-right corner. The window is pinned via `setFixedSize`, but Qt still drew the diagonal grip in the status-bar and flipped the cursor to the resize arrow on hover. `sizeGripEnabled=false` on the statusbar widget kills the affordance.
-- GUI: Read / Write / Verify button state now refreshes on every keystroke in the Image File combo (`QComboBox::editTextChanged`), not only on `editingFinished`. Pressing Tab right after typing a path no longer skips past buttons that were about to become enabled.
-- GUI: Device dropdown entries now include capacity: `[E:\] 58GB`. Size is queried via `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` and rendered in compact binary units (no decimal, no space) so a worst-case `[X:\] 999TB` fits. `checkDriveType` was extended with an optional `sizeBytes` out-param; the combo's add/remove handlers use `Qt::MatchStartsWith` so lookup-by-drive-letter still works with the appended size. The combo reserves a 13-character minimum contents length before the window is pinned, so inserting a card at runtime (`DBT_DEVICEARRIVAL`) doesn't truncate the label.
-- GUI: completion dialogs (`Write Successful`, `Read Successful`, `Verify Successful`, `Write & Verify Successful`) use rich-text HTML — bold `Elapsed:` label, and the Write + Verify + Total breakdown renders as a centered zebra-striped table (row color taken from the dialog's own palette so it reads well in both light and dark themes). A shared `showComplete()` helper centers the OK button under the dialog and moves the info icon from the content area to the title bar, so the table aligns with the dialog's actual center instead of the content column's.
+- Progress bar shows the current phase inline: `Writing: 42%`, `Reading: 78%`, `Verifying: 15%`. Useful when chained Write + Verify resets the bar to 0 and starts a second pass.
+- Status bar shows `Writing: 85.32 MB/s` / `Verifying: 92.10 MB/s` instead of just the number, and "..." appears before the first speed sample so the user sees the operation start.
+- CLI prints an explicit `Writing:` / `Reading:` / `Verifying:` header before each progress bar.
+- Device dropdown entries now include capacity: `[E:\] 58GB`.
+- Removed the fake resize-grip in the bottom-right corner — the window can't be resized and the grip was misleading.
+- Read / Write / Verify buttons re-evaluate on every keystroke in the Image File field — pressing Tab right after typing no longer skips past buttons that were about to become enabled.
+- Completion dialogs now render the Write / Verify / Total elapsed-time table as a centered zebra-striped block, with bold labels. Reads cleanly in both light and dark Windows themes.
 
 #### Reliability
-- `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` is now retried through a short transient-error window (10 × 200 ms). Google Drive / OneDrive / the Explorer indexer can briefly grab a freshly-inserted SD card, during which the IOCTL returns `ERROR_DEV_NOT_EXIST (55)` or `ERROR_ACCESS_DENIED (5)`. Previously the tool bailed out with `"Failed to get disk geometry"` and the user had to retry by hand. Applied to both `cli_main.cpp::getDiskGeometry` and `disk.cpp::getNumberOfSectors`.
+- Disk-geometry probe is now retried through a short transient-error window. Previously a freshly-inserted card briefly held by Google Drive / OneDrive / the Explorer indexer bailed out the operation; now it just rides through.
+
+#### Misc
+- MB/s in the status bar formatted as `85.32` instead of `85.3214567`. CLI matches.
+- Internal: 32-bit file pointer replaced with 64-bit — closes a latent issue with images ≥ 2 GB.
 
 ## 2026-04-22
 
 ### Version 2.1.1
 
-#### I/O correctness and throughput
-- Direct I/O on the destination handle (hRawDisk for Write, hFile for Read) with `FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`. Matches the behavior of Raspberry Pi Imager / balenaEtcher: the Windows FS cache is bypassed, the status-bar MB/s now reflects real device throughput, and `"Done"` only appears once data has physically landed on the device — previously a sudden power loss or device removal in the post-`"Done"` flush window could leave the image corrupted.
-- Sector-aligned chunk buffer via `_aligned_malloc` / `_aligned_free` (required by `NO_BUFFERING`). Replaces `new[]` / `delete[]` in `readSectorDataFromHandle` and all per-chunk free sites in `on_bRead` / `on_bWrite` / `on_bVerify` and the destructor.
-- Adaptive chunk size: 4 MB target regardless of sector size. On 512-byte-sector media the per-syscall transfer grows from the legacy 512 KB (1024 × 512 B) to 4 MB; 4K-sector media keep their existing 4 MB chunk.
+#### Reliability
+- Write / Read no longer rely on the Windows FS cache. "Done" only appears once data has physically landed on the device — previously pulling the card or losing power in the brief flush window after "Done" could leave the image corrupted. The status-bar MB/s now reflects real device throughput instead of cache speed.
+
+#### Throughput
+- Larger per-write chunks on standard 512-byte-sector media (4 MB instead of 512 KB). Faster cards see noticeable speedup; SD cards limited by their controller are unchanged.
 
 ## 2026-04-22
 
 ### Version 2.1.0
 
+#### GUI
+- Image File field is now an editable drop-down with a 20-entry history. New entries are added on successful Read / Write and persist across sessions; pick from the list, edit the selected path as needed. Drag-and-drop of files into the field still works. Sub-string autocomplete on the dropdown (case-insensitive).
+- Hash type combo ("None / MD5 / SHA1 / SHA256") no longer clips "None" on Windows 11 (Qt 6.11 drew a wider drop-arrow than the fixed-size combo could hold).
+
 #### Reliability
-- Silenced the drive-enumeration probe in `GetDisksProperty` / `checkDriveType`. No more `"Error 122: The data area passed to a system call is too small"` popups at startup from virtual filesystems (Google Drive, OneDrive, Dokany, VeraCrypt, Subst, RamDisk, ...) that don't implement `IOCTL_STORAGE_QUERY_PROPERTY`. Failures in the probe path now return `false` silently so the caller simply skips the device; dialogs remain only on paths triggered by an explicit user action.
-- Removed the dead-code fallback branch in `GetDisksProperty` (the `if (bResult && GetLastError() == ERROR_INVALID_FUNCTION)` check was logically contradictory and served only to suppress a dialog we're no longer showing).
+- No more "Error 122: The data area passed to a system call is too small" popups at startup. Virtual filesystems (Google Drive, OneDrive, Dokany, VeraCrypt, Subst, RamDisk, ...) that don't implement the storage probe IOCTL are now silently skipped during drive enumeration instead of showing a dialog.
 
-#### GUI features
-- Image File field became an editable drop-down with a 20-entry **history**. New entries are added on successful Read / Write and persisted under `HKCU\Software\Win32DiskImager\ImageFileHistory`. Pick from the list and edit the selected path as needed; drag-and-drop of files into the field still works.
-- Sub-string autocomplete on the Image File drop-down (case-insensitive, `Qt::MatchContains`).
-- Removed the hard 65 px `maximumSize` on the Hash combo — Qt 6.11's `qmodernwindowsstyle` draws a wider drop-arrow than 6.10 and was clipping "None".
-- `DroppableLineEdit` (QLineEdit subclass) replaced with `DroppableComboBox` (editable `QComboBox` subclass) that keeps the drag-and-drop behavior.
-
-#### Version management
-- Introduced `src/version.h` as the **single source of truth**. Bumping `APP_VERSION_MAJOR` / `APP_VERSION_MINOR` / `APP_VERSION_PATCH` propagates via the C preprocessor to:
-  - `DiskImager.rc` / `DiskImagerCli.rc` — `FILEVERSION`, `PRODUCTVERSION`, and the string `FileVersion` / `ProductVersion` values,
-  - `main.cpp` — GUI title-bar `setApplicationDisplayName(APP_VERSION)`,
-  - `cli_main.cpp` — `--version` output,
-  - `setup.iss` — reads `PRODUCT_VERSION` back out of the built exe via `GetStringFileInfo`, so the installer filename and metadata track automatically.
-
-#### Installer (setup.iss)
-- Now bundles the CLI exe (`Win32DiskImager-cli.exe`) alongside the GUI.
-- New optional task: **"Add Win32DiskImager-cli to system PATH"**. Appends `{app}` to machine-wide `Path`; duplicate-safe via `NeedsAddPath` check function. `ChangesEnvironment=yes` broadcasts `WM_SETTINGCHANGE` on finish.
-- Default install dir: `{autopf}\Win32DiskImager` (was `{pf32}\ImageWriter`) and Start-Menu group renamed to match.
-- Explicit x64-only constraints (`ArchitecturesInstallIn64BitMode=x64compatible`, `ArchitecturesAllowed=x64compatible`).
-- Dropped the `Release\*.dll` / `Release\platforms\*.dll` entries — the static GUI build embeds Qt, no runtime DLLs need deploying.
-- Dropped the pre-Vista Quick Launch icon entry (dead code for modern Windows).
-
-#### Build system / CI
-- New GitHub Actions workflow `.github/workflows/release.yml`. One job on `windows-latest`:
-  - Sets up MSYS2 with `mingw-w64-x86_64-qt6-static` plus link-time deps (libtiff, libjpeg-turbo, libpng, openssl, pcre2, glib2, harfbuzz, freetype, brotli, ...),
-  - Builds GUI against static Qt 6 and CLI (no Qt, already static MinGW runtime),
-  - Reads version from `src/version.h` via `awk`,
-  - Stages `Release/` and runs Inno Setup,
-  - Uploads three distinct artifacts (installer, GUI zip, CLI zip) and, on `v*` tags, publishes a GitHub Release with the files attached as raw assets.
-- `_detect-toolchain.bat` helper for local builds. Auto-discovers Qt and MinGW across MSYS2 (`C:\msys64\mingw64`) and Qt online-installer layouts (`C:\Qt\<ver>\mingw*_64`, `C:\Qt\Tools\mingw*_64`). Honors `QT_BIN` / `MINGW_BIN` env overrides. Selects the preferred qmake flavor (`qmake6` > `qmake` > `qmake-qt5`).
-- `compile.bat`, `compile-cli.bat`, `compile-gui-static.bat` rewritten on top of the helper — no more hard-coded `C:\msys64\mingw64\bin` path.
-- `.pro` translations step: added a `lrelease.exe` fallback (in addition to `lrelease-qt6.exe` / `lrelease-qt5.exe`) so MSYS2 static Qt, which ships the binary without a version suffix, picks it up.
-- Added `.gitignore` entries for `bin/`, `Output/`, `artifacts/`, `.claude/`, `CLAUDE.md`. Removed tracking of upstream-shipped `bin/*.zip`.
-
-#### Documentation
-- README: documented the Image File history drop-down.
+#### Installer
+- Now bundles the CLI executable (`Win32DiskImager-cli.exe`) alongside the GUI.
+- New optional setup task: **"Add Win32DiskImager-cli to system PATH"**. With this checked, you can run `Win32DiskImager-cli` from any command prompt; safe to re-run an upgrade (no duplicate PATH entries).
+- Default install dir renamed to `Program Files\Win32DiskImager` (was `Program Files (x86)\ImageWriter`); Start-Menu group renamed to match.
 
 ## 2026-02-11
 

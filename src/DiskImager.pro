@@ -59,6 +59,7 @@ HEADERS += disk.h\
            rawimagereader.h \
            gzimagereader.h \
            xzimagereader.h \
+           partitions.h \
            updatechecker.h
 
 FORMS += mainwindow.ui
@@ -73,6 +74,7 @@ SOURCES += disk.cpp\
            rawimagereader.cpp \
            gzimagereader.cpp \
            xzimagereader.cpp \
+           partitions.cpp \
            updatechecker.cpp
 
 # zlib + liblzma are pulled in for on-the-fly .gz / .xz image decompression.

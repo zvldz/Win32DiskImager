@@ -22,3 +22,7 @@ tools/
 .vscode/
 .idea/
 CLAUDE.md
+
+# Ad-hoc working notes (session handoffs, debug summaries). Delete or
+# rename to commit if any one becomes worth tracking.
+temp_*.md

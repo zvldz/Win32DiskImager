@@ -11,36 +11,12 @@
  **********************************************************************/
 
 #include "gzimagereader.h"
+#include "partitions.h"
 
 #include <QFile>
 #include <QObject>
+#include <vector>
 #include <zlib.h>
-
-namespace {
-
-// Read the gzip ISIZE trailer — the uncompressed size mod 2^32. When the
-// original input was ≥ 4 GB the field has wrapped and is unreliable; the
-// caller treats a zero return as "size unknown" and falls back to compressed-
-// bytes progress.
-quint64 readGzIsize(const QString &path, quint64 compressedSize)
-{
-    if (compressedSize < 4) return 0;
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly)) return 0;
-    if (!f.seek((qint64)compressedSize - 4)) return 0;
-    unsigned char b[4];
-    if (f.read(reinterpret_cast<char *>(b), 4) != 4) return 0;
-    const quint32 isize = (quint32)b[0]
-                        | ((quint32)b[1] << 8)
-                        | ((quint32)b[2] << 16)
-                        | ((quint32)b[3] << 24);
-    // A credible gz never decompresses to fewer bytes than its compressed
-    // form — if ISIZE is below the compressed size the counter has wrapped.
-    if (isize < compressedSize) return 0;
-    return isize;
-}
-
-} // namespace
 
 GzImageReader::~GzImageReader()
 {
@@ -59,7 +35,25 @@ bool GzImageReader::open(const QString &path, QString *err)
     m_compressedSize = (quint64)probe.size();
     probe.close();
 
-    m_uncompressed = readGzIsize(path, m_compressedSize);
+    // ISIZE wraps at 4 GiB so it can't be trusted. Instead, peek the
+    // decompressed start of the image and read the disk size from its
+    // GPT primary header (or MBR partition entries as fallback). Same
+    // pattern Etcher uses (lib/source-destination/gzip.ts: max of
+    // ISIZE and partition-table-derived size). Returns 0 when neither
+    // is present — caller falls back to compressed-bytes progress.
+    m_uncompressed = 0;
+    {
+        constexpr size_t PEEK_BYTES = 17 * 1024;  // covers MBR + GPT primary + 32-LBA entries
+        gzFile gPeek = gzopen_w(reinterpret_cast<const wchar_t *>(path.utf16()), "rb");
+        if (gPeek) {
+            std::vector<uint8_t> buf(PEEK_BYTES);
+            int got = gzread(gPeek, buf.data(), (unsigned)PEEK_BYTES);
+            gzclose(gPeek);
+            if (got > 0) {
+                m_uncompressed = estimateImageSizeBytes(buf.data(), (uint64_t)got, 512);
+            }
+        }
+    }
 
     gzFile g = gzopen_w(reinterpret_cast<const wchar_t *>(path.utf16()), "rb");
     if (!g) {

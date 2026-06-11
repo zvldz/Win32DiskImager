@@ -13,7 +13,9 @@ QMAKE_CXXFLAGS += -Wall -Wextra
 DEFINES += WINVER=0x0A00
 DEFINES += _WIN32_WINNT=0x0A00
 
-SOURCES += cli_main.cpp
+HEADERS += partitions.h
+SOURCES += cli_main.cpp \
+           partitions.cpp
 RC_FILE = DiskImagerCli.rc
 
 # zlib + liblzma for .gz / .xz image decompression in cmdWrite / cmdVerify.

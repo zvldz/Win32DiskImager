@@ -23,11 +23,11 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "FileDescription", "Win32DiskImager CLI"
+            VALUE "FileDescription", "Win32 Disk Imager CLI"
             VALUE "FileVersion", APP_VERSION
             VALUE "InternalName", "Win32DiskImager-cli"
             VALUE "OriginalFilename", "Win32DiskImager-cli.exe"
-            VALUE "ProductName", "Win32 Image Writer CLI"
+            VALUE "ProductName", "Win32 Disk Imager"
             VALUE "ProductVersion", APP_VERSION
         END
     END

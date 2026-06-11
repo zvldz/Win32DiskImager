@@ -27,6 +27,7 @@
 #include <QDirIterator>
 #include <QClipboard>
 #include <algorithm>         // std::max for chunk-size clamp
+#include <deque>
 #include <cstdio>
 #include <cstdlib>
 #include <malloc.h>          // _aligned_free (paired with _aligned_malloc in disk.cpp)
@@ -42,6 +43,25 @@
 #include "imagereader.h"
 #include "iopipeline.h"
 #include "keepawake.h"
+#include "partitions.h"
+
+// Dev-only diag log: appends every Write / Read / Verify transition
+// to wdi_diag.log next to the exe. Pairs with disk.cpp's diagLog so
+// a single log file captures both UI flow and IOCTL / I/O outcomes.
+// Compiled out entirely in release builds.
+static void diagLog(const QString &msg)
+{
+#ifdef WDI_DEV_BUILD
+    QFile f(QCoreApplication::applicationDirPath() + "/wdi_diag.log");
+    if (f.open(QIODevice::Append | QIODevice::Text)) {
+        QTextStream s(&f);
+        s << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
+          << "  [main] " << msg << "\n";
+    }
+#else
+    Q_UNUSED(msg);
+#endif
+}
 #include "rawimagereader.h"
 #include "updatechecker.h"
 #include "version.h"
@@ -102,11 +122,7 @@ static QString buildDeviceLabel(const TargetDisk &td)
 {
     QString label = QStringLiteral("Disk %1").arg(td.diskNumber);
     if (!td.letters.isEmpty()) {
-        QStringList pretty;
-        for (const QString &lt : td.letters) {
-            pretty.append(lt + "\\");   // "E:" → "E:\\"
-        }
-        label += QStringLiteral(" [%1]").arg(pretty.join(", "));
+        label += QStringLiteral(" [%1]").arg(td.letters.join(", "));
     }
     const QString sz = formatDeviceSize(td.sizeBytes);
     if (!sz.isEmpty()) label += QLatin1Char(' ') + sz;
@@ -322,6 +338,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 MainWindow::~MainWindow()
 {
     saveSettings();
+    releaseVolumeLocks(m_volumes);
     if (hRawDisk != INVALID_HANDLE_VALUE)
     {
         CloseHandle(hRawDisk);
@@ -332,7 +349,6 @@ MainWindow::~MainWindow()
         CloseHandle(hFile);
         hFile = INVALID_HANDLE_VALUE;
     }
-    unlockAndCloseAllVolumes();
     if (sectorData != NULL)
     {
         _aligned_free(sectorData);
@@ -479,6 +495,20 @@ void MainWindow::initializeHomeDir()
 
 void MainWindow::setReadWriteButtonState()
 {
+    // While an operation is in progress keep Read/Write/Verify disabled
+    // regardless of the file/device state. Without this, typing in leFile
+    // (or picking another entry from its history) fires editTextChanged
+    // and re-enables the buttons mid-write — the user could then start a
+    // second operation on top of the running one. Cancel is enabled by
+    // the operation handlers directly; it's the only exit from a busy
+    // state, so this guard leaves it alone.
+    if (status != STATUS_IDLE) {
+        bRead->setEnabled(false);
+        bWrite->setEnabled(false);
+        bVerify->setEnabled(false);
+        return;
+    }
+
     bool fileSelected = !(leFile->currentText().isEmpty());
     bool deviceSelected = (cboxDevice->count() > 0);
     QFileInfo fi(leFile->currentText());
@@ -491,6 +521,15 @@ void MainWindow::setReadWriteButtonState()
 
 void MainWindow::cleanupHandlesAndUI()
 {
+    diagLog(QString("cleanupHandlesAndUI: hRawDisk=%1 hFile=%2 volumes=%3 status=%4")
+                .arg(hRawDisk == INVALID_HANDLE_VALUE ? "INVALID" : "VALID")
+                .arg(hFile == INVALID_HANDLE_VALUE ? "INVALID" : "VALID")
+                .arg(m_volumes.size()).arg(status));
+    // releaseVolumeLocks unlocks + closes any per-letter handles the
+    // Read / standalone-Verify path opened. For Write m_volumes is
+    // always empty (stripLettersAndPrepDisk closes handles internally).
+    // Idempotent on empty list.
+    releaseVolumeLocks(m_volumes);
     if (hRawDisk != INVALID_HANDLE_VALUE) {
         CloseHandle(hRawDisk);
         hRawDisk = INVALID_HANDLE_VALUE;
@@ -499,76 +538,9 @@ void MainWindow::cleanupHandlesAndUI()
         CloseHandle(hFile);
         hFile = INVALID_HANDLE_VALUE;
     }
-    unlockAndCloseAllVolumes();
     status = STATUS_IDLE;
     bCancel->setEnabled(false);
     setReadWriteButtonState();
-}
-
-bool MainWindow::lockAllVolumesOnDisk(const TargetDisk &td)
-{
-    // Try to lock the whole disk first via FSCTL_LOCK_VOLUME on the
-    // \\.\PhysicalDriveN handle that on_b{Write,Read,Verify}_clicked
-    // opened before calling us. This is the semi-documented Windows
-    // pattern rufus uses — one IOCTL blocks every access to the disk,
-    // including the unrecognised Linux partitions Windows' mountmgr
-    // otherwise keeps probing on OpenHD / Raspberry Pi rootfs cards.
-    // Without it those partitions race with our raw write and the user
-    // sees Access Denied. The lock auto-releases when hRawDisk closes.
-    //
-    // If the IOCTL fails (some Windows versions don't honor it on
-    // physical-disk handles, returns ERROR_INVALID_FUNCTION), fall back
-    // to the per-volume locking below.
-    DWORD junk = 0;
-    const bool wholeDiskLock = (hRawDisk != INVALID_HANDLE_VALUE)
-        && DeviceIoControl(hRawDisk, FSCTL_LOCK_VOLUME,
-                           NULL, 0, NULL, 0, &junk, NULL);
-
-    // Per-volume lock + dismount. Two reasons we still want this even
-    // when wholeDiskLock succeeded:
-    //   1) flush cached FS state — Windows holds dirty pages for each
-    //      mounted volume and FSCTL_DISMOUNT_VOLUME forces them out
-    //      before we overwrite the disk with a new image;
-    //   2) on Windows builds where wholeDiskLock didn't take, this is
-    //      our only protection.
-    // When wholeDiskLock is true, individual volume failures are
-    // tolerable — the disk-level lock already blocks everyone.
-    for (const QString &lt : td.letters) {
-        if (lt.isEmpty()) continue;
-        const int volumeIdx = lt.at(0).toUpper().toLatin1() - 'A';
-        HANDLE h = getHandleOnVolume(volumeIdx, GENERIC_READ | GENERIC_WRITE);
-        if (h == INVALID_HANDLE_VALUE) {
-            if (wholeDiskLock) continue;
-            unlockAndCloseAllVolumes();
-            return false;
-        }
-        if (!getLockOnVolume(h)) {
-            CloseHandle(h);
-            if (wholeDiskLock) continue;
-            unlockAndCloseAllVolumes();
-            return false;
-        }
-        if (!unmountVolume(h)) {
-            removeLockOnVolume(h);
-            CloseHandle(h);
-            if (wholeDiskLock) continue;
-            unlockAndCloseAllVolumes();
-            return false;
-        }
-        m_volumes.append(h);
-    }
-    return true;
-}
-
-void MainWindow::unlockAndCloseAllVolumes()
-{
-    for (HANDLE h : m_volumes) {
-        if (h != INVALID_HANDLE_VALUE) {
-            removeLockOnVolume(h);
-            CloseHandle(h);
-        }
-    }
-    m_volumes.clear();
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -785,35 +757,73 @@ void MainWindow::on_bWrite_clicked()
             bWrite->setEnabled(false);
             bRead->setEnabled(false);
             bVerify->setEnabled(false);
+            // Pump pending events so the disabled state visibly applies before
+            // the prep phase blocks the event loop for ~15-20 sec on the
+            // diskpart subprocess. Without this, the buttons stay visually
+            // enabled and the status bar stays empty while the app appears
+            // frozen.
+            statusbar->showMessage(tr("Preparing disk..."));
+            QCoreApplication::processEvents();
             double mbpersec;
             unsigned long long i, lasti, availablesectors, numsectors;
             const DWORD deviceID = td.diskNumber;
-            // Open the raw \\.\PhysicalDriveN handle FIRST, before any
-            // FSCTL_LOCK_VOLUME / FSCTL_DISMOUNT_VOLUME. Some SD card
-            // readers do an internal device-reset on dismount: a handle
-            // opened after that point would briefly stale-fault on the
-            // next IOCTL with ERROR_DEV_NOT_EXIST (the "device is no
-            // longer available" dialog). The raw handle itself is
-            // unaffected by FS mount state, so opening it ahead of time
-            // pins a stable device reference across the lock/dismount.
+            diagLog(QString("=== WRITE START === file=%1 deviceID=%2 letters=[%3]")
+                        .arg(leFile->currentText()).arg(deviceID).arg(td.letters.join(",")));
+            // RPi Imager pipeline (src/downloadthread.cpp:227-323): all
+            // pre-write disk preparation runs on disposable handles
+            // BEFORE the main write handle is opened. The main handle is
+            // opened last so it never inherits the kernel's transient
+            // "settling" state from UPDATE_PROPERTIES — the Win11 25H2+
+            // regression where the first WriteFile would otherwise come
+            // back with ERROR_NOT_READY.
             //
-            // Direct I/O on the destination: bypass FS cache so MB/s reflects
-            // real device throughput and "Done" only appears once data has
-            // landed. Buffer alignment is handled by readSectorDataFromHandle.
-            hRawDisk = getHandleOnDevice(deviceID, GENERIC_WRITE,
-                                         FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
+            // 1) stripLettersAndPrepDisk: per-letter unmount +
+            //    DeleteVolumeMountPointW + SHChangeNotify, then on
+            //    disposable scratch handles FSCTL_ALLOW_EXTENDED_DASD_IO
+            //    + IOCTL_DISK_DELETE_DRIVE_LAYOUT, then
+            //    IOCTL_DISK_UPDATE_PROPERTIES + IOCTL_DISK_ARE_VOLUMES_READY.
+            //    Letters stripped + partition table wiped before the
+            //    main write handle exists. Returns true if any letters
+            //    were processed (signals that Windows had touched the
+            //    card; controller may need extra settling).
+            const bool hadLetters = stripLettersAndPrepDisk(td);
+
+            // 2) If the card had mounted volumes, follow up with diskpart
+            //    subprocess for VDS-level settling. The direct IOCTLs
+            //    above are fast (~50 ms) but on Win11 25H2+ they don't
+            //    wait for the SD controller / USB bus to finish its
+            //    post-dismount activity — first WriteFile would come
+            //    back with ERROR_NOT_READY. diskpart routes through
+            //    VDS which waits synchronously for Mount Manager + PnP +
+            //    bus driver. Bare cards (no letters) skip this and stay
+            //    on the fast path.
+            if (hadLetters) {
+                statusbar->showMessage(tr("Settling disk (this can take 10-20 seconds)..."));
+                QCoreApplication::processEvents();
+                runDiskpartClean(td.diskNumber);
+            }
+            statusbar->showMessage(tr("Opening disk..."));
+            QCoreApplication::processEvents();
+
+            // 3) Open the main write handle LAST. Direct I/O
+            //    (NO_BUFFERING | WRITE_THROUGH) bypasses the FS cache so
+            //    MB/s reflects real device throughput and "Done" only
+            //    appears once data has landed; falls back to buffered
+            //    I/O if the device refuses direct flags. Retries 8 ×
+            //    geometric backoff from 250 ms on transient errors.
+            hRawDisk = openPhysicalDiskForWrite(deviceID);
             if (hRawDisk == INVALID_HANDLE_VALUE)
             {
+                diagLog("Write: openPhysicalDiskForWrite FAIL");
+                QMessageBox::critical(this, tr("Device Error"),
+                    tr("Could not open the target device for writing.\n\n"
+                       "Make sure no other application is using the card "
+                       "(File Explorer, antivirus scan, backup software) and try again."));
                 cleanupHandlesAndUI();
                 return;
             }
-            // Lock + dismount every volume on the target disk before raw
-            // access. For a bare disk this is a no-op.
-            if (!lockAllVolumesOnDisk(td))
-            {
-                cleanupHandlesAndUI();
-                return;
-            }
+            diagLog("Write: hRawDisk opened R/W");
+
             hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->currentText().utf16()), GENERIC_READ);
             if (hFile == INVALID_HANDLE_VALUE)
             {
@@ -829,6 +839,7 @@ void MainWindow::on_bWrite_clicked()
                 cleanupHandlesAndUI();
                 return;
             }
+
             const unsigned long long chunkSectors = sectorsize ? std::max<unsigned long long>(1ULL, CHUNK_BYTES / sectorsize) : 1ULL;
 
             // Open the image reader (sniffs magic bytes — Raw / Gz / Xz).
@@ -903,6 +914,8 @@ void MainWindow::on_bWrite_clicked()
             CloseHandle(hFile);
             hFile = INVALID_HANDLE_VALUE;
 
+            diagLog(QString("Write: starting main loop numsectors=%1 sectorsize=%2 knownSize=%3 imgBytes=%4")
+                        .arg(numsectors).arg(sectorsize).arg(knownSize).arg(imgBytes));
             // Progress bar unit: sectors when size is known, compressed-byte
             // percentage otherwise. The bar stays smooth either way.
             progressbar->setRange(0, knownSize ? (numsectors == 0ul ? 100 : (int)numsectors) : 100);
@@ -961,6 +974,51 @@ void MainWindow::on_bWrite_clicked()
             bool writeError  = false;
             QString writeErrMsg;
             i = 0ul;  // sector offset written to the device; was for(i=0; ...) before the pipeline refactor
+
+            // delayFirstBuffer pattern (OpenHD downloadthread.cpp:_writeFile,
+            // Etcher block-write-stream.ts): hold the FIRST chunk back in
+            // RAM instead of writing it. The partition table at LBA 0 stays
+            // invalid (zeroed by IOCTL_DISK_DELETE_DRIVE_LAYOUT) for the
+            // entire main loop, so Windows can't decide there's a mountable
+            // FS to auto-mount mid-write. After the loop finishes we seek
+            // to 0 and commit the held buffer — by then we're about to
+            // close the handle, leaving no race window for mountmgr /
+            // fastfat to grab the disk.
+            //
+            // NO_BUFFERING requires sector-aligned buffer; _aligned_malloc
+            // with sector size satisfies that. Buffer is freed on every
+            // exit path (success, error, cancel).
+            char *firstChunkBuf = nullptr;
+            size_t firstChunkBufLen = 0;
+            unsigned long long firstChunkSectors = 0;
+            // Cached estimate of total decompressed bytes, derived from the
+            // current decoder-vs-writer ratio while the decoder is still
+            // active. After decoder EOF the estimate freezes so the bar
+            // can keep ticking up against the WRITER's actual disk bytes
+            // — without this cache, sparse-tail images (rootfs followed
+            // by huge zero-fill that compresses tiny) have the decoder
+            // reach the end of the .gz file very early while the writer
+            // is still working through the zeroed tail on disk, leaving
+            // the bar stuck at 99% for the rest of the operation.
+            quint64 estimatedTotalCached = 0;
+            // ETA on unknown-size sources (.gz): pace off compressed bytes
+            // consumed by the decoder, via a sliding-window speed estimate.
+            // Direct cumulative averaging gets distorted by the decoder's
+            // initial burst — it fills its 4-chunk queue (~16 MB decompressed)
+            // in milliseconds while the writer is just starting, producing a
+            // wildly optimistic compressedPos/elapsed ratio that takes the
+            // whole run to wash out. A short sliding window converges in
+            // seconds. Same approach Balena Etcher takes (5-sec window via
+            // speedometer + bytes_remaining/speed). Rufus deliberately uses
+            // cumulative-since-start for stability instead but their pipeline
+            // (single-pass copy, no decompressor ahead of writes) doesn't
+            // have a burst phase to filter out; ours does.
+            // Plus a 3-sec warm-up where we suppress the ETA — until the
+            // burst has cleared, any number we show is misleading.
+            struct EtaSample { qint64 ms; quint64 cPos; };
+            std::deque<EtaSample> etaSamples;
+            constexpr int ETA_WINDOW_MS = 5000;
+            constexpr int ETA_WARMUP_MS = 3000;
             while (status == STATUS_WRITING)
             {
                 std::unique_ptr<IoChunk> c = queue.pop();
@@ -969,7 +1027,22 @@ void MainWindow::on_bWrite_clicked()
                 if (c->eof) break;
 
                 const unsigned long long chunk = c->length / sectorsize;
-                if (!writeSectorDataToHandle(hRawDisk, c->data, i, chunk, sectorsize))
+                if (firstChunkBuf == nullptr) {
+                    // Hold the first chunk in RAM (delayFirstBuffer). Copy
+                    // to an aligned buffer, skip the write, advance offset
+                    // — subsequent chunks land starting from offset = chunk.
+                    firstChunkBuf = (char *)_aligned_malloc(c->length, (size_t)sectorsize);
+                    if (!firstChunkBuf) {
+                        writeErrMsg = tr("Failed to allocate buffer for delayed first chunk.");
+                        writeError = true;
+                        break;
+                    }
+                    memcpy(firstChunkBuf, c->data, c->length);
+                    firstChunkBufLen = c->length;
+                    firstChunkSectors = chunk;
+                    diagLog(QString("Write: held first chunk size=%1 sectors=%2 (delayFirstBuffer)")
+                                .arg(c->length).arg(chunk));
+                } else if (!writeSectorDataToHandle(hRawDisk, c->data, i, chunk, sectorsize))
                 {
                     writeError = true;
                     break;
@@ -979,7 +1052,41 @@ void MainWindow::on_bWrite_clicked()
                 {
                     mbpersec = (((double)sectorsize * (i - lasti)) * ((float)ONE_SEC_IN_MS / update_timer.elapsed())) / 1024.0 / 1024.0;
                     statusbar->showMessage(tr("Writing: %1 MB/s").arg(mbpersec, 0, 'f', 2));
-                    elapsed_timer->update(i, numsectors);
+                    if (knownSize) {
+                        elapsed_timer->update(i, numsectors);
+                    } else {
+                        // Compressed-bytes ETA via sliding 5-sec window
+                        // after a 3-sec warm-up (see etaSamples declaration
+                        // above for the rationale).
+                        const quint64 cSize = reader->compressedSize();
+                        const quint64 cPos  = reader->compressedPos();
+                        if (cSize > 0 && cPos > 0 && cPos < cSize) {
+                            const qint64 nowMs = elapsed_timer->ms();
+                            etaSamples.push_back({nowMs, cPos});
+                            while (etaSamples.size() > 1
+                                && etaSamples.front().ms < nowMs - ETA_WINDOW_MS) {
+                                etaSamples.pop_front();
+                            }
+                            if (nowMs >= ETA_WARMUP_MS) {
+                                const auto &front = etaSamples.front();
+                                const quint64 dC = cPos - front.cPos;
+                                const qint64 dMs = nowMs - front.ms;
+                                if (dC > 0 && dMs > 0) {
+                                    const quint64 remC = cSize - cPos;
+                                    const qint64 etaMs = (qint64)((double)remC * dMs / dC);
+                                    // ElapsedTimer formula:
+                                    //   totalSecs = baseSecs * total/progress.
+                                    // Pass (nowMs, nowMs+etaMs) so the ratio
+                                    // gives displayed total = elapsed + eta.
+                                    elapsed_timer->update((unsigned long long)nowMs,
+                                                          (unsigned long long)(nowMs + etaMs));
+                                }
+                            }
+                            // During the warm-up, don't touch the timer —
+                            // the displayed "--:--/--:--" placeholder is
+                            // less misleading than a transient bogus ETA.
+                        }
+                    }
                     update_timer.start();
                     lasti = i;
                 }
@@ -987,12 +1094,62 @@ void MainWindow::on_bWrite_clicked()
                     progressbar->setValue((int)i);
                 } else {
                     const quint64 cSize = reader->compressedSize();
-                    if (cSize > 0) progressbar->setValue((int)(reader->compressedPos() * 100ULL / cSize));
+                    const quint64 cPos  = reader->compressedPos();
+                    const quint64 writtenBytes = i * sectorsize;
+                    if (cSize > 0 && cPos > 0 && writtenBytes > 0) {
+                        // Refresh the cached estimate while decoder is still
+                        // making progress through the compressed file; freeze
+                        // it once cPos hits cSize so we keep ticking against
+                        // the writer's actual bytes (see declaration above).
+                        if (cPos < cSize) {
+                            estimatedTotalCached = (quint64)((double)writtenBytes
+                                                              * (double)cSize / (double)cPos);
+                        }
+                        if (estimatedTotalCached > 0) {
+                            int pct = (int)(writtenBytes * 100ULL / estimatedTotalCached);
+                            if (pct > 100) pct = 100;
+                            progressbar->setValue(pct);
+                        } else {
+                            // Verifier hasn't started yet — fall back to compressedPos.
+                            progressbar->setValue((int)(cPos * 100ULL / cSize));
+                        }
+                    }
                 }
                 QCoreApplication::processEvents();
             }
             queue.requestAbort();
             decoderThread.join();
+
+            // Commit the held first chunk: seek to LBA 0 and write the
+            // buffered MBR/GPT. From this point Windows finally sees a
+            // valid partition table — but we close the handle right
+            // after, so no race window. Skipped on error/cancel paths
+            // (card is left without a partition table, requiring a
+            // re-flash — same trade-off as Etcher/OpenHD make).
+            if (!writeError && status != STATUS_CANCELED && firstChunkBuf) {
+                diagLog(QString("Write: committing held first chunk at offset 0 (sectors=%1)")
+                            .arg(firstChunkSectors));
+                if (!writeSectorDataToHandle(hRawDisk, firstChunkBuf, 0,
+                                             firstChunkSectors, sectorsize)) {
+                    writeError = true;
+                    writeErrMsg = tr("Failed to commit partition table at end of write.");
+                    diagLog("Write: first chunk commit FAILED");
+                } else {
+                    FlushFileBuffers(hRawDisk);
+                    diagLog("Write: first chunk committed OK + flushed");
+                }
+            }
+            if (firstChunkBuf) {
+                _aligned_free(firstChunkBuf);
+                firstChunkBuf = nullptr;
+            }
+
+            // Snap to 100% on clean exit — covers the residual 99% from
+            // integer truncation of the gzip trailer 8 bytes and any
+            // small lag between decoder and writer at end of stream.
+            if (!writeError && status != STATUS_CANCELED) {
+                progressbar->setValue(progressbar->maximum());
+            }
 
             if (writeError)
             {
@@ -1000,32 +1157,44 @@ void MainWindow::on_bWrite_clicked()
                 cleanupHandlesAndUI();
                 return;
             }
-            // If auto-verify is about to run, hand the still-locked, still-
-            // unmounted volume straight over to Verify. Otherwise there's a
-            // gap between unlock and Verify's re-lock where Google Drive /
-            // Windows Search / antivirus latches onto the freshly-written
-            // volume and starts poking at it.
+
+            // If auto-verify is about to run, hand the still-OPEN handle
+            // (whole-disk FSCTL_LOCK_VOLUME still held) plus the locked
+            // per-volume handles straight over to Verify. Closing-and-
+            // reopening would give Windows' mountmgr a window to grab
+            // the disk and let fastfat.sys attach to the FAT partition
+            // we just wrote. Both Etcher (FD sharing in source-
+            // destination/file.ts) and RPi Imager (single QFile through
+            // write + _verify) keep the handle alive across this
+            // transition for that exact reason.
+            diagLog(QString("Write: main loop done status=%1 writeError=%2")
+                        .arg(status).arg(writeError));
             const bool chainingVerify = (status != STATUS_CANCELED)
                                         && cbVerifyAfterWrite->isChecked();
+            diagLog(QString("Write: chainingVerify=%1").arg(chainingVerify));
             if (chainingVerify) {
-                CloseHandle(hRawDisk);
-                hRawDisk = INVALID_HANDLE_VALUE;
-                m_verifyInheritsLock = true;
+                // hRawDisk + m_volumes stay live; Verify sees them and
+                // reuses both, skipping re-open and re-acquire.
+                diagLog("Write: handing live hRawDisk + m_volumes to chained Verify");
             } else {
-                // Standalone Write success — eject so the user can pull the
-                // card immediately. Eject must run while volumes are still
-                // locked + dismounted, before unlockAndCloseAllVolumes.
-                // Bare disks (m_volumes empty) skip eject naturally.
+                // Standalone Write success — eject so the user can pull
+                // the card immediately. Under the new pipeline letters
+                // are already stripped, so we eject the physical disk
+                // handle directly (IOCTL_STORAGE_EJECT_MEDIA works on
+                // PhysicalDriveN too; some USB readers respond by spinning
+                // down / lighting the safe-to-remove indicator).
                 if (status != STATUS_CANCELED) {
-                    for (HANDLE h : m_volumes) ejectVolume(h);
+                    ejectVolume(hRawDisk);
                 }
+                releaseVolumeLocks(m_volumes);
                 CloseHandle(hRawDisk);
                 hRawDisk = INVALID_HANDLE_VALUE;
-                unlockAndCloseAllVolumes();
             }
             if (status == STATUS_CANCELED){
                 passfail = false;
             }
+            diagLog(QString("=== WRITE END === passfail=%1 chainingVerify=%2")
+                        .arg(passfail).arg(chainingVerify));
         }
         else if (!fileinfo.exists() || !fileinfo.isFile())
         {
@@ -1118,22 +1287,30 @@ void MainWindow::on_bRead_clicked()
         double mbpersec;
         unsigned long long i, lasti, numsectors, filesize, spaceneeded = 0ull;
         const DWORD deviceID = td.diskNumber;
-        // Open the raw \\.\PhysicalDriveN handle BEFORE the lock/dismount —
-        // see the matching comment in on_bWrite_clicked for the reasoning
-        // (avoid post-dismount handle staling on certain SD card readers).
-        hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ);
+        diagLog(QString("=== READ START === file=%1 deviceID=%2 letters=[%3] allocatedOnly=%4")
+                    .arg(myFile).arg(deviceID).arg(td.letters.join(","))
+                    .arg(partitionCheckBox->isChecked()));
+        // Read pipeline: open hRawDisk first, then lockVolumesForRawAccess
+        // for each mounted letter (LOCK + DISMOUNT, keep handles alive
+        // for the whole read so Windows can't re-mount mid-read).
+        // GENERIC_WRITE on hRawDisk is requested even though Read only
+        // ReadFile's: FSCTL_LOCK_VOLUME on the volume handles inside
+        // lockVolumesForRawAccess requires write access. Without it the
+        // lock silently fails and mountmgr can grab the disk between
+        // our open and the first ReadFile — visible as Error 55.
+        // Unlike Write, this path deliberately does NOT strip drive
+        // letters: after releaseVolumeLocks (in cleanup) Windows
+        // re-mounts the volumes and letters return on their own —
+        // the underlying volume signatures haven't changed.
+        hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ | GENERIC_WRITE);
         if (hRawDisk == INVALID_HANDLE_VALUE)
         {
+            diagLog(QString("Read: getHandleOnDevice FAIL err=%1").arg(GetLastError()));
             cleanupHandlesAndUI();
             return;
         }
-        // Lock + dismount every volume on the target disk. For a bare
-        // disk (no letters) this is a no-op and we go straight to raw I/O.
-        if (!lockAllVolumesOnDisk(td))
-        {
-            cleanupHandlesAndUI();
-            return;
-        }
+        diagLog("Read: hRawDisk opened R/W");
+        lockVolumesForRawAccess(td, m_volumes);
         // Direct I/O on the destination (image file) — see Write path above.
         hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(myFile.utf16()), GENERIC_WRITE,
                                 FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
@@ -1146,49 +1323,75 @@ void MainWindow::on_bRead_clicked()
         const unsigned long long chunkSectors = sectorsize ? std::max<unsigned long long>(1ULL, CHUNK_BYTES / sectorsize) : 1ULL;
         if(partitionCheckBox->isChecked())
         {
-            // Read MBR partition table
-            sectorData = readSectorDataFromHandle(hRawDisk, 0, 1ul, 512ul);
-            // Validate the 0x55AA MBR signature and detect GPT (protective
-            // MBR carries a type 0xEE entry). Without a valid MBR we'd be
-            // parsing 16-byte windows of garbage; for GPT, native parsing
-            // is a planned task — see TODO.md. Both cases fall back to a
-            // full disk read and inform the user.
-            const bool sigValid = sectorData != nullptr
-                                  && (uint8_t)sectorData[0x1FE] == 0x55
-                                  && (uint8_t)sectorData[0x1FF] == 0xAA;
-            bool isGpt = false;
-            if (sigValid) {
-                for (int p = 0; p < 4; ++p) {
-                    if ((uint8_t)sectorData[0x1BE + 16*p + 4] == 0xEE) {
-                        isGpt = true;
-                        break;
+            // Try MBR first (sector 0). On a GPT-protective MBR or no
+            // signature at all, fall through to a GPT parse — radxa-style
+            // Linux images sometimes ship sector 0 all zeros and rely on
+            // the LBA-1 GPT primary header alone.
+            sectorData = readSectorDataFromHandle(hRawDisk, 0, 1ul, sectorsize);
+            uint64_t maxEndingLba = 0;
+            PartitionScanResult res = PartitionScanResult::NoMbrSignature;
+            if (sectorData) {
+                res = scanMbrAllocated((const uint8_t*)sectorData,
+                                       (uint32_t)sectorsize, maxEndingLba);
+            }
+            QString fallbackMsg;
+            if (res == PartitionScanResult::Ok) {
+                numsectors = maxEndingLba;
+            } else if (res == PartitionScanResult::NoMbrSignature
+                    || res == PartitionScanResult::GptProtectiveMbr) {
+                _aligned_free(sectorData);
+                sectorData = readSectorDataFromHandle(hRawDisk, 1ul, 1ul, sectorsize);
+                uint64_t entriesLba = 0;
+                uint32_t numEntries = 0, entrySize = 0, expectedEntriesCrc = 0;
+                const bool gptHdrOk = sectorData != nullptr
+                    && readGptEntryArrayLocation((const uint8_t*)sectorData,
+                                                 (uint32_t)sectorsize,
+                                                 entriesLba, numEntries,
+                                                 entrySize, expectedEntriesCrc);
+                if (!gptHdrOk) {
+                    fallbackMsg = (res == PartitionScanResult::GptProtectiveMbr)
+                        ? tr("GPT header is invalid or unreadable. 'Read Only "
+                             "Allocated Partitions' falls back to a full disk read.")
+                        : tr("No valid MBR or GPT on this device. 'Read Only "
+                             "Allocated Partitions' falls back to a full disk read.");
+                } else {
+                    const uint64_t entriesBytes = (uint64_t)numEntries * entrySize;
+                    const unsigned long long entrySectors =
+                        (entriesBytes + sectorsize - 1) / sectorsize;
+                    _aligned_free(sectorData);
+                    sectorData = readSectorDataFromHandle(hRawDisk, entriesLba,
+                                                          entrySectors, sectorsize);
+                    if (sectorData == nullptr) {
+                        fallbackMsg = tr("Could not read GPT partition entries. "
+                                         "'Read Only Allocated Partitions' falls "
+                                         "back to a full disk read.");
+                    } else {
+                        PartitionScanResult gptRes = scanGptEntries(
+                            (const uint8_t*)sectorData,
+                            (uint64_t)entrySectors * sectorsize,
+                            numEntries, entrySize, expectedEntriesCrc,
+                            maxEndingLba);
+                        if (gptRes == PartitionScanResult::Ok) {
+                            numsectors = maxEndingLba;
+                        } else if (gptRes == PartitionScanResult::NoPartitions) {
+                            fallbackMsg = tr("GPT has no allocated partitions. "
+                                             "'Read Only Allocated Partitions' falls "
+                                             "back to a full disk read.");
+                        } else {
+                            fallbackMsg = tr("GPT partition entries invalid or corrupt. "
+                                             "'Read Only Allocated Partitions' falls "
+                                             "back to a full disk read.");
+                        }
                     }
                 }
             }
-            if (!sigValid || isGpt) {
-                QMessageBox::information(this, tr("Allocated-only fallback"),
-                    isGpt
-                        ? tr("GPT-partitioned disk detected. 'Read Only Allocated "
-                             "Partitions' currently parses MBR tables only — "
-                             "falling back to a full disk read.")
-                        : tr("No valid MBR signature on this device. 'Read Only "
-                             "Allocated Partitions' falls back to a full disk read."));
+            if (!fallbackMsg.isEmpty()) {
+                QMessageBox::information(this, tr("Allocated-only fallback"), fallbackMsg);
+                // numsectors stays at the full-disk value from getNumberOfSectors.
+            }
+            if (sectorData) {
                 _aligned_free(sectorData);
                 sectorData = NULL;
-                // numsectors stays at the full-disk value from getNumberOfSectors.
-            } else {
-                numsectors = 1ul;
-                // Walk the four primary partition entries; numsectors becomes
-                // the end LBA of the highest-ending partition.
-                for (i=0ul; i<4ul; i++)
-                {
-                    uint32_t partitionStartSector = *((uint32_t*) (sectorData + 0x1BE + 8 + 16*i));
-                    uint32_t partitionNumSectors = *((uint32_t*) (sectorData + 0x1BE + 12 + 16*i));
-                    if (partitionStartSector + partitionNumSectors > numsectors)
-                    {
-                        numsectors = partitionStartSector + partitionNumSectors;
-                    }
-                }
             }
         }
         filesize = getFileSizeInSectors(hFile, sectorsize);
@@ -1215,6 +1418,7 @@ void MainWindow::on_bRead_clicked()
         {
             progressbar->setRange(0, (int)numsectors);
         }
+        diagLog(QString("Read: starting main loop numsectors=%1 sectorsize=%2").arg(numsectors).arg(sectorsize));
         statusbar->showMessage(tr("Reading..."));
         lasti = 0ul;
         update_timer.start();
@@ -1248,6 +1452,7 @@ void MainWindow::on_bRead_clicked()
             QCoreApplication::processEvents();
         }
         const bool wasCanceled = (status == STATUS_CANCELED);
+        diagLog(QString("=== READ END === wasCanceled=%1").arg(wasCanceled));
         cleanupHandlesAndUI();
         progressbar->reset();
         statusbar->showMessage(tr("Done."));
@@ -1310,27 +1515,33 @@ void MainWindow::on_bVerify_clicked()
             // symmetric with the Write-side handle and avoids reading any
             // stale cache page that lingered from before the just-finished
             // Write.
-            hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ,
-                                         FILE_FLAG_NO_BUFFERING);
-            if (hRawDisk == INVALID_HANDLE_VALUE)
-            {
-                cleanupHandlesAndUI();
-                return;
-            }
-            // If chained from auto-verify after Write, m_volumes is already
-            // populated with locked + dismounted handles. Reusing them
-            // keeps third-party watchers (Google Drive / indexer / antivirus)
-            // off the volumes through the Write → Verify boundary. For a
-            // bare disk m_volumes is empty either way and the lock step
-            // is a no-op.
-            if (m_verifyInheritsLock && !m_volumes.isEmpty()) {
-                m_verifyInheritsLock = false;
-            } else {
-                m_verifyInheritsLock = false;
-                if (!lockAllVolumesOnDisk(td)) {
+            const bool chainedFromWrite = (hRawDisk != INVALID_HANDLE_VALUE);
+            diagLog(QString("=== VERIFY START === file=%1 deviceID=%2 letters=[%3] chainedFromWrite=%4")
+                        .arg(leFile->currentText()).arg(deviceID).arg(td.letters.join(","))
+                        .arg(chainedFromWrite));
+            if (!chainedFromWrite) {
+                // Standalone Verify: open a fresh handle and take exclusive
+                // access. Mirrors the Read path — lockVolumesForRawAccess
+                // locks the mounted letters and keeps handles alive so
+                // Windows can't re-mount mid-read. Letters return on
+                // their own after releaseVolumeLocks during cleanup.
+                hRawDisk = getHandleOnDevice(deviceID, GENERIC_READ | GENERIC_WRITE,
+                                             FILE_FLAG_NO_BUFFERING);
+                if (hRawDisk == INVALID_HANDLE_VALUE)
+                {
+                    diagLog(QString("Verify: getHandleOnDevice FAIL err=%1").arg(GetLastError()));
                     cleanupHandlesAndUI();
                     return;
                 }
+                diagLog("Verify: hRawDisk opened R/W");
+                lockVolumesForRawAccess(td, m_volumes);
+            } else {
+                // Chained from Write: inherit the still-locked hRawDisk
+                // and m_volumes. Skip the re-open + re-acquire — closing
+                // the handle here would let Windows briefly own the disk
+                // and fastfat.sys would attach to the FAT partition we
+                // just wrote, racing our verify reads.
+                diagLog("Verify: inherited hRawDisk + m_volumes from Write (still locked)");
             }
             hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->currentText().utf16()), GENERIC_READ);
             if (hFile == INVALID_HANDLE_VALUE)
@@ -1344,7 +1555,7 @@ void MainWindow::on_bVerify_clicked()
             // the end of the image have a higher chance of catching the
             // controller mid-flush — the classic "fail just before 100%".
             if (m_writeElapsedMs > 0) {
-                for (HANDLE h : m_volumes) FlushFileBuffers(h);
+                FlushFileBuffers(hRawDisk);
                 Sleep(1500);
             }
             availablesectors = getNumberOfSectors(hRawDisk, &sectorsize);
@@ -1477,6 +1688,13 @@ void MainWindow::on_bVerify_clicked()
             bool verifyError = false;
             QString verifyErrMsg;
             i = 0ul;  // sector offset into the device; was for(i=0; ...) before the pipeline refactor
+            // See on_bWrite_clicked's matching declaration for the rationale.
+            quint64 estimatedTotalCached = 0;
+            // Sliding-window ETA samples — see comment in on_bWrite_clicked.
+            struct EtaSample { qint64 ms; quint64 cPos; };
+            std::deque<EtaSample> etaSamples;
+            constexpr int ETA_WINDOW_MS = 5000;
+            constexpr int ETA_WARMUP_MS = 3000;
             while (status == STATUS_VERIFYING)
             {
                 std::unique_ptr<IoChunk> c = queue.pop();
@@ -1524,20 +1742,70 @@ void MainWindow::on_bVerify_clicked()
                     mbpersec = (((double)sectorsize * (i - lasti)) * ((float)ONE_SEC_IN_MS / update_timer.elapsed())) / 1024.0 / 1024.0;
                     statusbar->showMessage(tr("Verifying: %1 MB/s").arg(mbpersec, 0, 'f', 2));
                     update_timer.start();
-                    elapsed_timer->update(i, numsectors);
+                    if (knownSize) {
+                        elapsed_timer->update(i, numsectors);
+                    } else {
+                        const quint64 cSize = reader->compressedSize();
+                        const quint64 cPos  = reader->compressedPos();
+                        if (cSize > 0 && cPos > 0 && cPos < cSize) {
+                            const qint64 nowMs = elapsed_timer->ms();
+                            etaSamples.push_back({nowMs, cPos});
+                            while (etaSamples.size() > 1
+                                && etaSamples.front().ms < nowMs - ETA_WINDOW_MS) {
+                                etaSamples.pop_front();
+                            }
+                            if (nowMs >= ETA_WARMUP_MS) {
+                                const auto &front = etaSamples.front();
+                                const quint64 dC = cPos - front.cPos;
+                                const qint64 dMs = nowMs - front.ms;
+                                if (dC > 0 && dMs > 0) {
+                                    const quint64 remC = cSize - cPos;
+                                    const qint64 etaMs = (qint64)((double)remC * dMs / dC);
+                                    elapsed_timer->update((unsigned long long)nowMs,
+                                                          (unsigned long long)(nowMs + etaMs));
+                                }
+                            }
+                        }
+                    }
                     lasti = i;
                 }
                 if (knownSize) {
                     progressbar->setValue((int)i);
                 } else {
                     const quint64 cSize = reader->compressedSize();
-                    if (cSize > 0) progressbar->setValue((int)(reader->compressedPos() * 100ULL / cSize));
+                    const quint64 cPos  = reader->compressedPos();
+                    const quint64 verifiedBytes = i * sectorsize;
+                    if (cSize > 0 && cPos > 0 && verifiedBytes > 0) {
+                        // Use verifier's actual disk-byte progress against a
+                        // cached estimated-total derived from the decoder-
+                        // vs-verifier ratio while the decoder is still
+                        // active. See on_bWrite_clicked for the rationale —
+                        // same sparse-tail handling.
+                        if (cPos < cSize) {
+                            estimatedTotalCached = (quint64)((double)verifiedBytes
+                                                              * (double)cSize / (double)cPos);
+                        }
+                        if (estimatedTotalCached > 0) {
+                            int pct = (int)(verifiedBytes * 100ULL / estimatedTotalCached);
+                            if (pct > 100) pct = 100;
+                            progressbar->setValue(pct);
+                        } else {
+                            progressbar->setValue((int)(cPos * 100ULL / cSize));
+                        }
+                    }
                 }
                 QCoreApplication::processEvents();
             }
             queue.requestAbort();
             decoderThread.join();
 
+            // Snap to 100% on clean exit (matching Write's logic).
+            if (!verifyError && status != STATUS_CANCELED) {
+                progressbar->setValue(progressbar->maximum());
+            }
+
+            diagLog(QString("Verify: main loop done verifyError=%1 status=%2 passfail=%3")
+                        .arg(verifyError).arg(status).arg(passfail));
             if (verifyError)
             {
                 if (!verifyErrMsg.isEmpty()) QMessageBox::critical(this, tr("File Error"), verifyErrMsg);
@@ -1547,16 +1815,20 @@ void MainWindow::on_bVerify_clicked()
             // Eject only when this Verify was chained from a successful
             // Write — m_writeElapsedMs > 0 is the marker. Standalone
             // user-initiated Verify must NOT eject; the user may want to
-            // do something else with the card afterwards.
+            // do something else with the card afterwards. Under the new
+            // pipeline m_volumes is empty for chained Verify (Write
+            // stripped letters instead of holding volume handles), so we
+            // eject the physical disk handle directly.
             if (status != STATUS_CANCELED && m_writeElapsedMs > 0) {
-                for (HANDLE h : m_volumes) ejectVolume(h);
+                ejectVolume(hRawDisk);
             }
+            releaseVolumeLocks(m_volumes);
             CloseHandle(hRawDisk);
             hRawDisk = INVALID_HANDLE_VALUE;
-            unlockAndCloseAllVolumes();
             if (status == STATUS_CANCELED){
                 passfail = false;
             }
+            diagLog("=== VERIFY END ===");
 
         }
         else if (!fileinfo.exists() || !fileinfo.isFile())

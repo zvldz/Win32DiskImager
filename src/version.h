@@ -22,8 +22,17 @@
 // running exe reports e.g. "2.3.0-dev" instead of "2.3.0", and the
 // update checker can rank a real published 2.3.0 release ABOVE the
 // current dev build (SemVer rule: pre-release < release).
+//
+// WDI_COMMIT_SHA, when also defined (CI sets it to ${GITHUB_SHA::7}),
+// appends "-<sha>" so the exact source commit is visible in the running
+// binary — version becomes e.g. "2.3.2-dev-b95681c". Lets you confirm
+// you actually installed the test build you just kicked off.
 #ifdef WDI_DEV_BUILD
-#  define APP_VERSION_SUFFIX "-dev"
+#  ifdef WDI_COMMIT_SHA
+#    define APP_VERSION_SUFFIX "-dev-" APP_VERSION_STRINGIFY(WDI_COMMIT_SHA)
+#  else
+#    define APP_VERSION_SUFFIX "-dev"
+#  endif
 #else
 #  define APP_VERSION_SUFFIX ""
 #endif

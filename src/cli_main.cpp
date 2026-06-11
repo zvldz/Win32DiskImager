@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <winioctl.h>
 #include <winhttp.h>
+#include <shlobj.h>
 
 #include <algorithm>
 #include <sstream>
@@ -12,6 +13,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
+#include <fstream>
 #include <thread>
 #include <iomanip>
 #include <iostream>
@@ -27,9 +30,38 @@
 
 #include "iopipeline.h"
 #include "keepawake.h"
+#include "partitions.h"
 #include "version.h"
 
 namespace {
+
+// Dev-only diag log: appends every Write / Read / Verify transition
+// to wdi_diag.log next to the exe. Plain C++ mirror of disk.cpp's
+// Qt-based diagLog so a single log file captures both GUI and CLI
+// runs. Compiled out entirely in release builds.
+static void diagLog(const std::string &msg)
+{
+#ifdef WDI_DEV_BUILD
+    wchar_t exeDir[MAX_PATH] = {};
+    DWORD got = GetModuleFileNameW(nullptr, exeDir, MAX_PATH);
+    if (got == 0 || got >= MAX_PATH) return;
+    // Strip filename, keep directory
+    wchar_t *slash = wcsrchr(exeDir, L'\\');
+    if (slash) *(slash + 1) = L'\0';
+    std::wstring path = std::wstring(exeDir) + L"wdi_diag.log";
+    std::ofstream f(path.c_str(), std::ios::app);
+    if (!f) return;
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    char ts[64];
+    std::snprintf(ts, sizeof(ts), "%04u-%02u-%02uT%02u:%02u:%02u.%03u",
+                  st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
+                  st.wSecond, st.wMilliseconds);
+    f << ts << "  [cli] " << msg << "\n";
+#else
+    (void)msg;
+#endif
+}
 
 struct DiskGeometry {
     uint64_t bytesPerSector = 0;
@@ -269,42 +301,6 @@ bool getDiskGeometry(HANDLE hDisk, DiskGeometry &geometry)
     return false;
 }
 
-bool lockVolumeWithRetry(HANDLE hVolume, int retries = 100, DWORD delayMs = 100)
-{
-    DWORD bytesReturned = 0;
-    for (int i = 0; i < retries; ++i) {
-        if (DeviceIoControl(hVolume, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &bytesReturned, nullptr)) {
-            return true;
-        }
-        const DWORD err = GetLastError();
-        if (err != ERROR_ACCESS_DENIED && err != ERROR_SHARING_VIOLATION && err != ERROR_LOCK_VIOLATION) {
-            return false;
-        }
-        if (i + 1 < retries) {
-            Sleep(delayMs);
-        }
-    }
-    return false;
-}
-
-bool dismountVolumeWithRetry(HANDLE hVolume, int retries = 50, DWORD delayMs = 100)
-{
-    DWORD bytesReturned = 0;
-    for (int i = 0; i < retries; ++i) {
-        if (DeviceIoControl(hVolume, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0, &bytesReturned, nullptr)) {
-            return true;
-        }
-        const DWORD err = GetLastError();
-        if (err != ERROR_ACCESS_DENIED && err != ERROR_SHARING_VIOLATION && err != ERROR_LOCK_VIOLATION) {
-            return false;
-        }
-        if (i + 1 < retries) {
-            Sleep(delayMs);
-        }
-    }
-    return false;
-}
-
 void unlockVolume(HANDLE hVolume)
 {
     DWORD bytesReturned = 0;
@@ -316,11 +312,42 @@ bool writeAll(HANDLE handle, const char *data, DWORD length)
     DWORD total = 0;
     while (total < length) {
         DWORD written = 0;
-        if (!WriteFile(handle, data + total, length - total, &written, nullptr)) {
+        // Geometric backoff matching RPi Imager (8 × 250ms × 2^n ≈ 32s
+        // worst-case) — Win11 25H2+ holds disk handles longer.
+        BOOL ok = FALSE;
+        DWORD lastErr = 0;
+        int retries = 0;
+        DWORD backoffMs = 250;
+        for (int attempt = 0; attempt < 8; ++attempt) {
+            ok = WriteFile(handle, data + total, length - total, &written, nullptr);
+            if (ok) break;
+            lastErr = GetLastError();
+            if (lastErr != ERROR_ACCESS_DENIED
+             && lastErr != ERROR_NOT_READY            // driver settling after layout change
+             && lastErr != ERROR_SHARING_VIOLATION
+             && lastErr != ERROR_LOCK_VIOLATION
+             && lastErr != ERROR_DEV_NOT_EXIST) break;
+            {
+                std::ostringstream os;
+                os << "WriteFile retry total=" << total << " size=" << (length - total)
+                   << " attempt=" << attempt << " err=" << lastErr << " sleep=" << backoffMs << "ms";
+                diagLog(os.str());
+            }
+            retries++;
+            if (attempt < 7) Sleep(backoffMs);
+            backoffMs *= 2;
+        }
+        if (!ok) {
+            std::ostringstream os;
+            os << "WriteFile FAIL total=" << total << " retries=" << retries << " err=" << lastErr;
+            diagLog(os.str());
             return false;
         }
-        if (written == 0) {
-            return false;
+        if (written == 0) return false;
+        if (retries > 0) {
+            std::ostringstream os;
+            os << "WriteFile OK after " << retries << " retries total=" << total;
+            diagLog(os.str());
         }
         total += written;
     }
@@ -332,83 +359,144 @@ bool readExact(HANDLE handle, char *data, DWORD length)
     DWORD total = 0;
     while (total < length) {
         DWORD n = 0;
-        if (!ReadFile(handle, data + total, length - total, &n, nullptr)) {
+        BOOL ok = FALSE;
+        DWORD lastErr = 0;
+        int retries = 0;
+        // Geometric backoff symmetric to writeAll.
+        DWORD backoffMs = 250;
+        for (int attempt = 0; attempt < 8; ++attempt) {
+            ok = ReadFile(handle, data + total, length - total, &n, nullptr);
+            if (ok) break;
+            lastErr = GetLastError();
+            if (lastErr != ERROR_ACCESS_DENIED
+             && lastErr != ERROR_NOT_READY
+             && lastErr != ERROR_SHARING_VIOLATION
+             && lastErr != ERROR_LOCK_VIOLATION
+             && lastErr != ERROR_DEV_NOT_EXIST) break;
+            {
+                std::ostringstream os;
+                os << "ReadFile retry total=" << total << " size=" << (length - total)
+                   << " attempt=" << attempt << " err=" << lastErr << " sleep=" << backoffMs << "ms";
+                diagLog(os.str());
+            }
+            retries++;
+            if (attempt < 7) Sleep(backoffMs);
+            backoffMs *= 2;
+        }
+        if (!ok) {
+            std::ostringstream os;
+            os << "ReadFile FAIL total=" << total << " retries=" << retries << " err=" << lastErr;
+            diagLog(os.str());
             return false;
         }
-        if (n == 0) {
-            return false;
+        if (n == 0) return false;
+        if (retries > 0) {
+            std::ostringstream os;
+            os << "ReadFile OK after " << retries << " retries total=" << total;
+            diagLog(os.str());
         }
         total += n;
     }
     return true;
 }
 
-uint32_t readLe32(const char *p)
-{
-    const unsigned char *u = reinterpret_cast<const unsigned char *>(p);
-    return static_cast<uint32_t>(u[0]) |
-           (static_cast<uint32_t>(u[1]) << 8) |
-           (static_cast<uint32_t>(u[2]) << 16) |
-           (static_cast<uint32_t>(u[3]) << 24);
-}
-
 // Returns true on success and writes the byte range to read. Returns
-// false on a true I/O error. If the disk is recognised but unsupported
-// for allocated-only (no MBR signature or a GPT protective MBR), the
-// `reason` out-string is set and the caller should fall back to a full
-// disk read instead of treating it as an error.
-bool getAllocatedReadBytesFromMbr(HANDLE hDisk, const DiskGeometry &geometry,
-                                  uint64_t &bytesToRead, std::string &reason)
+// false on a true I/O error (the caller treats this as fatal). If the
+// disk is recognised but allocated-only can't be computed (corrupt /
+// missing MBR + GPT, GPT with no partitions), `reason` is set and the
+// caller falls back to a full disk read.
+//
+// Parses MBR first (sector 0). On a GPT-protective MBR or a missing
+// MBR signature (radxa-style Linux images ship sector 0 all zeros)
+// falls through to GPT parsing — primary header at LBA 1, then the
+// partition-entry array at the LBA the header points to. Both header
+// and entry-array CRC32 are validated per UEFI spec.
+bool getAllocatedReadBytes(HANDLE hDisk, const DiskGeometry &geometry,
+                           uint64_t &bytesToRead, std::string &reason)
 {
     reason.clear();
     if (geometry.bytesPerSector == 0) {
         return false;
     }
 
+    const uint64_t sectorSize = geometry.bytesPerSector;
     LARGE_INTEGER pos = {};
     if (!SetFilePointerEx(hDisk, pos, nullptr, FILE_BEGIN)) {
         return false;
     }
 
-    std::vector<char> sector(static_cast<size_t>(geometry.bytesPerSector), 0);
-    if (!readExact(hDisk, sector.data(), static_cast<DWORD>(geometry.bytesPerSector))) {
+    std::vector<uint8_t> sector0(static_cast<size_t>(sectorSize), 0);
+    if (!readExact(hDisk, reinterpret_cast<char *>(sector0.data()),
+                   static_cast<DWORD>(sectorSize))) {
         return false;
     }
 
-    // 0x55AA at the end of the boot sector is the standard MBR signature.
-    if ((uint8_t)sector[0x1FE] != 0x55 || (uint8_t)sector[0x1FF] != 0xAA) {
-        reason = "no MBR signature";
+    uint64_t maxEndingLba = 0;
+    PartitionScanResult res = scanMbrAllocated(sector0.data(),
+                                               static_cast<uint32_t>(sectorSize),
+                                               maxEndingLba);
+    if (res == PartitionScanResult::Ok) {
+        bytesToRead = maxEndingLba * sectorSize;
+        if (bytesToRead > geometry.totalBytes) {
+            bytesToRead = geometry.totalBytes;
+        }
+        return true;
+    }
+    if (res != PartitionScanResult::NoMbrSignature
+     && res != PartitionScanResult::GptProtectiveMbr) {
+        reason = "unrecognised partition table";
         return false;
     }
-    // A type 0xEE primary entry is the GPT protective MBR. Native GPT
-    // parsing is a planned task — see TODO.md. Until then we recognise
-    // the disk and tell the caller to fall back to a full read.
-    for (int i = 0; i < 4; ++i) {
-        if ((uint8_t)sector[0x1BE + 16*i + 4] == 0xEE) {
-            reason = "GPT-partitioned disk";
-            return false;
-        }
+    const bool hadProtectiveMbr = (res == PartitionScanResult::GptProtectiveMbr);
+
+    // GPT primary header at LBA 1.
+    pos.QuadPart = static_cast<LONGLONG>(sectorSize);
+    if (!SetFilePointerEx(hDisk, pos, nullptr, FILE_BEGIN)) {
+        return false;
+    }
+    std::vector<uint8_t> hdr(static_cast<size_t>(sectorSize), 0);
+    if (!readExact(hDisk, reinterpret_cast<char *>(hdr.data()),
+                   static_cast<DWORD>(sectorSize))) {
+        return false;
+    }
+    uint64_t entriesLba = 0;
+    uint32_t numEntries = 0, entrySize = 0, expectedEntriesCrc = 0;
+    if (!readGptEntryArrayLocation(hdr.data(),
+                                   static_cast<uint32_t>(sectorSize),
+                                   entriesLba, numEntries,
+                                   entrySize, expectedEntriesCrc)) {
+        reason = hadProtectiveMbr
+            ? "invalid or corrupt GPT header"
+            : "no valid MBR or GPT";
+        return false;
     }
 
-    uint64_t numSectors = 1;
-    for (int i = 0; i < 4; ++i) {
-        const int base = 0x1BE + (16 * i);
-        if (base + 16 > static_cast<int>(sector.size())) {
-            break;
-        }
-        const uint32_t start = readLe32(sector.data() + base + 8);
-        const uint32_t count = readLe32(sector.data() + base + 12);
-        const uint64_t end = static_cast<uint64_t>(start) + static_cast<uint64_t>(count);
-        if (end > numSectors) {
-            numSectors = end;
-        }
+    // Partition-entry array, padded out to whole sectors.
+    const uint64_t entriesBytes = static_cast<uint64_t>(numEntries) * entrySize;
+    const uint64_t readBytes = ((entriesBytes + sectorSize - 1) / sectorSize) * sectorSize;
+    pos.QuadPart = static_cast<LONGLONG>(entriesLba * sectorSize);
+    if (!SetFilePointerEx(hDisk, pos, nullptr, FILE_BEGIN)) {
+        return false;
     }
-
-    bytesToRead = numSectors * geometry.bytesPerSector;
-    if (bytesToRead > geometry.totalBytes) {
-        bytesToRead = geometry.totalBytes;
+    std::vector<uint8_t> entries(static_cast<size_t>(readBytes), 0);
+    if (!readExact(hDisk, reinterpret_cast<char *>(entries.data()),
+                   static_cast<DWORD>(readBytes))) {
+        return false;
     }
-    return true;
+    PartitionScanResult gptRes = scanGptEntries(entries.data(), readBytes,
+                                                numEntries, entrySize,
+                                                expectedEntriesCrc, maxEndingLba);
+    if (gptRes == PartitionScanResult::Ok) {
+        bytesToRead = maxEndingLba * sectorSize;
+        if (bytesToRead > geometry.totalBytes) {
+            bytesToRead = geometry.totalBytes;
+        }
+        return true;
+    }
+    reason = (gptRes == PartitionScanResult::NoPartitions)
+        ? "GPT has no allocated partitions"
+        : "GPT partition entries invalid or corrupt";
+    return false;
 }
 
 class ProgressPrinter {
@@ -416,6 +504,11 @@ public:
     explicit ProgressPrinter(uint64_t totalBytes)
         : m_totalBytes(totalBytes), m_start(std::chrono::steady_clock::now()), m_tick(m_start)
     {}
+
+    // Replace the total — used for unknown-size sources where the
+    // estimated total is dynamically computed from the current
+    // decoder-vs-writer ratio.
+    void setTotal(uint64_t totalBytes) { m_totalBytes = totalBytes; }
 
     void update(uint64_t processedBytes)
     {
@@ -497,6 +590,49 @@ private:
     std::chrono::steady_clock::time_point m_tick;
 };
 
+// Tells Explorer to drop its view of a drive letter — prevents the
+// "Insert a disk" dialog while we strip the letter, and lets Explorer
+// release any open handles before our subsequent IOCTLs. Matches the
+// notifyShellDriveRemoved helper in RPi Imager
+// (src/windows/diskpart_util.cpp).
+void notifyShellDriveRemoved(wchar_t driveLetter)
+{
+    const wchar_t path[] = { driveLetter, L':', L'\\', L'\0' };
+    SHChangeNotify(SHCNE_MEDIAREMOVED, SHCNF_PATH, path, NULL);
+    SHChangeNotify(SHCNE_DRIVEREMOVED, SHCNF_PATH, path, NULL);
+}
+
+// Tells Explorer that a freshly cleaned disk is back. Fires after
+// the scratch-handle prep IOCTLs settle so Explorer rebuilds its
+// drive list without trying to access a half-torn-down partition table.
+void notifyShellDriveAdded()
+{
+    SHChangeNotify(SHCNE_DRIVEADD, SHCNF_IDLIST, NULL, NULL);
+    SHChangeNotify(SHCNE_MEDIAINSERTED, SHCNF_IDLIST, NULL, NULL);
+}
+
+// FSCTL_LOCK_VOLUME with 8 × geometric backoff starting at 100 ms.
+// No UI dialog — caller decides whether a missed lock is fatal.
+// Matches the LOCK retry loop in RPi Imager (diskpart_util.cpp:126).
+bool lockVolumeBackoff(HANDLE handle, DWORD *outLastErr)
+{
+    DWORD junk = 0;
+    DWORD lastErr = 0;
+    int delayMs = 100;
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        if (DeviceIoControl(handle, FSCTL_LOCK_VOLUME,
+                            NULL, 0, NULL, 0, &junk, NULL)) {
+            if (outLastErr) *outLastErr = 0;
+            return true;
+        }
+        lastErr = GetLastError();
+        if (attempt < 7) Sleep(delayMs);
+        delayMs *= 2;
+    }
+    if (outLastErr) *outLastErr = lastErr;
+    return false;
+}
+
 // Releases lock + closes every handle in `volumes` and clears it. Idempotent
 // on an already-empty list.
 void closeAllVolumes(std::vector<HANDLE> &volumes)
@@ -510,26 +646,34 @@ void closeAllVolumes(std::vector<HANDLE> &volumes)
     volumes.clear();
 }
 
-// Locks + dismounts every mounted volume that lives on `diskNumber`. On
-// success appends each opened handle to `volumes`. On any failure rolls
-// back the locks already taken and returns false. Bare disks (no mounted
-// letter) succeed trivially with `volumes` left empty.
+// CLI mirror of disk.cpp's lockVolumesForRawAccess. For each mounted
+// letter on `diskNumber`: open the volume, LOCK with 8 × geometric
+// backoff, DISMOUNT, and APPEND the handle to `volumes`. Handles stay
+// open for the duration of the read session — that's what holds the
+// LOCK_VOLUME so Windows can't re-mount or re-cache mid-read.
 //
-// If `hDisk` is a valid \\.\PhysicalDriveN handle, we additionally try
-// FSCTL_LOCK_VOLUME on it first — the semi-documented Windows pattern
-// rufus uses, which blocks every access to the disk including the
-// unrecognised Linux partitions Windows' mountmgr otherwise keeps
-// probing on OpenHD / Raspberry Pi rootfs cards (Access Denied
-// otherwise). The lock auto-releases when hDisk is closed. When this
-// whole-disk lock succeeds, per-volume failures below are tolerable —
-// the disk-level lock already keeps everyone out.
-bool lockAllVolumesOnDisk(DWORD diskNumber, std::vector<HANDLE> &volumes,
-                          HANDLE hDisk = INVALID_HANDLE_VALUE)
+// Does NOT call DeleteVolumeMountPointW and does NOT touch the
+// partition table. After closeAllVolumes (= releaseVolumeLocks)
+// Windows re-mounts the volumes naturally — drive letters return
+// since the underlying volume signatures haven't changed.
+//
+// Best-effort: failures on individual letters are logged and the
+// remaining letters are still processed. `volumes` non-empty on
+// entry ⇒ chained call (e.g. cmdVerify reusing cmdWrite's handles);
+// skip entirely.
+bool lockVolumesForRawAccess(DWORD diskNumber,
+                             std::vector<HANDLE> &volumes)
 {
-    DWORD junk = 0;
-    const bool wholeDiskLock = (hDisk != INVALID_HANDLE_VALUE)
-        && DeviceIoControl(hDisk, FSCTL_LOCK_VOLUME,
-                           nullptr, 0, nullptr, 0, &junk, nullptr);
+    {
+        std::ostringstream os;
+        os << "lockVolumesForRawAccess: disk=" << diskNumber
+           << " volumes-on-entry=" << volumes.size();
+        diagLog(os.str());
+    }
+    if (!volumes.empty()) {
+        diagLog("  chained call (volumes non-empty), skipping");
+        return true;
+    }
 
     const DWORD mask = GetLogicalDrives();
     for (int i = 0; i < 26; ++i) {
@@ -545,77 +689,130 @@ bool lockAllVolumesOnDisk(DWORD diskNumber, std::vector<HANDLE> &volumes,
 
         HANDLE hVol = openVolume(letter, GENERIC_READ | GENERIC_WRITE);
         if (hVol == INVALID_HANDLE_VALUE) {
-            if (wholeDiskLock) continue;
-            printWinError(L"Failed to open volume handle.", GetLastError());
-            closeAllVolumes(volumes);
-            return false;
+            std::ostringstream os;
+            os << "  " << (char)letter << ": CreateFile FAIL err=" << GetLastError()
+               << ", continuing";
+            diagLog(os.str());
+            continue;
         }
-        if (!lockVolumeWithRetry(hVol)) {
-            CloseHandle(hVol);
-            if (wholeDiskLock) continue;
-            printWinError(L"Failed to lock volume.", GetLastError());
-            closeAllVolumes(volumes);
-            return false;
+
+        DWORD lockErr = 0;
+        if (lockVolumeBackoff(hVol, &lockErr)) {
+            std::ostringstream os;
+            os << "  " << (char)letter << ": FSCTL_LOCK_VOLUME OK";
+            diagLog(os.str());
+        } else {
+            std::ostringstream os;
+            os << "  " << (char)letter << ": FSCTL_LOCK_VOLUME FAIL err=" << lockErr
+               << " after 8 retries, continuing";
+            diagLog(os.str());
         }
-        if (!dismountVolumeWithRetry(hVol)) {
-            unlockVolume(hVol);
-            CloseHandle(hVol);
-            if (wholeDiskLock) continue;
-            printWinError(L"Failed to dismount volume.", GetLastError());
-            closeAllVolumes(volumes);
-            return false;
+
+        DWORD junk = 0;
+        if (DeviceIoControl(hVol, FSCTL_DISMOUNT_VOLUME,
+                            nullptr, 0, nullptr, 0, &junk, nullptr)) {
+            std::ostringstream os;
+            os << "  " << (char)letter << ": FSCTL_DISMOUNT_VOLUME OK";
+            diagLog(os.str());
+        } else {
+            std::ostringstream os;
+            os << "  " << (char)letter << ": FSCTL_DISMOUNT_VOLUME FAIL err="
+               << GetLastError() << ", continuing";
+            diagLog(os.str());
         }
+
         volumes.push_back(hVol);
+    }
+
+    {
+        std::ostringstream os;
+        os << "  lockVolumesForRawAccess END: volumes.size=" << volumes.size();
+        diagLog(os.str());
     }
     return true;
 }
 
-// If `volumes` is non-empty on input it's treated as inherited from a
-// prior cmdWrite that handed off open+locked+dismounted handles; the
-// open/lock/dismount step is skipped so nothing (Google Drive / Windows
-// Search / antivirus) latches onto the freshly-written volumes in the
-// Write → Verify gap. Otherwise locks every volume on the target disk
-// from scratch (no-op for a bare disk with no mounted letter).
-bool prepareDiskHandles(DWORD diskNumber,
+// Read / standalone-Verify open path: open the raw disk, lock each
+// mounted volume, get geometry. Letters are kept (NOT stripped) so
+// they return automatically after closeAllVolumes during cleanup.
+// `diskAccess` MUST include GENERIC_WRITE — FSCTL_LOCK_VOLUME on the
+// volume handles inside lockVolumesForRawAccess requires write access.
+// `volumes` non-empty on entry is a chained call (Verify reusing
+// Write's state); the lock step is skipped inside lockVolumesForRawAccess.
+bool prepareDiskForRead(DWORD diskNumber,
                         DWORD diskAccess,
                         std::vector<HANDLE> &volumes,
                         HANDLE &hDisk,
                         DiskGeometry &geometry,
                         DWORD diskExtraFlags = 0)
 {
-    // Open the raw \\.\PhysicalDriveN handle FIRST, before any
-    // FSCTL_LOCK_VOLUME / FSCTL_DISMOUNT_VOLUME. Some SD card readers
-    // do an internal device-reset on dismount: a handle opened after
-    // that point would stale-fault on the next IOCTL with
-    // ERROR_DEV_NOT_EXIST. The raw handle isn't tied to FS mount
-    // state, so pinning it up front keeps the device reference stable
-    // across the lock/dismount sequence.
     hDisk = openPhysicalDisk(diskNumber, diskAccess, diskExtraFlags);
     if (hDisk == INVALID_HANDLE_VALUE) {
         printWinError(L"Failed to open physical disk.", GetLastError());
         return false;
     }
 
-    const bool inherited = !volumes.empty();
-    if (!inherited) {
-        if (!lockAllVolumesOnDisk(diskNumber, volumes, hDisk)) {
-            CloseHandle(hDisk);
-            hDisk = INVALID_HANDLE_VALUE;
-            return false;
-        }
-    }
+    lockVolumesForRawAccess(diskNumber, volumes);
 
     if (!getDiskGeometry(hDisk, geometry)) {
         printWinError(L"Failed to get disk geometry.", GetLastError());
+        closeAllVolumes(volumes);
         CloseHandle(hDisk);
         hDisk = INVALID_HANDLE_VALUE;
-        closeAllVolumes(volumes);
         return false;
     }
 
     return true;
 }
 
+// Forward declarations for the Write-side helpers defined below.
+bool stripLettersAndPrepDisk(DWORD diskNumber);
+bool runDiskpartClean(DWORD diskNumber);
+HANDLE openPhysicalDiskForWrite(DWORD diskNumber);
+
+// Write open path: strip letters + clean partition table on
+// disposable handles, then open the main write handle FRESH with
+// retry on transient errors. The disk has no mounted volumes or
+// partitions by the time hDisk exists, so Windows can't touch it
+// during the write loop. `volumes` is left untouched (empty).
+//
+// Hybrid prep: stripLettersAndPrepDisk does the fast IOCTL path. If
+// it reports that letters were stripped (= Windows had mounted
+// volumes), follow up with diskpart subprocess for deeper VDS-level
+// settling — Win11 25H2+ ARE_VOLUMES_READY returns READY before
+// the SD controller/USB bus has actually settled, causing first
+// WriteFile to fail with NOT_READY. Bare cards (no letters) skip
+// diskpart and stay on the fast ~50 ms path.
+bool prepareDiskForRawWrite(DWORD diskNumber,
+                            HANDLE &hDisk,
+                            DiskGeometry &geometry)
+{
+    const bool hadLetters = stripLettersAndPrepDisk(diskNumber);
+    if (hadLetters) {
+        runDiskpartClean(diskNumber);
+    }
+
+    hDisk = openPhysicalDiskForWrite(diskNumber);
+    if (hDisk == INVALID_HANDLE_VALUE) {
+        std::cerr << "Could not open the target device for writing." << std::endl;
+        std::cerr << "Make sure no other application is using the card "
+                     "and try again." << std::endl;
+        return false;
+    }
+
+    if (!getDiskGeometry(hDisk, geometry)) {
+        printWinError(L"Failed to get disk geometry.", GetLastError());
+        CloseHandle(hDisk);
+        hDisk = INVALID_HANDLE_VALUE;
+        return false;
+    }
+
+    return true;
+}
+
+// Closes the per-volume handles (releasing LOCK_VOLUME — Windows
+// re-mounts the volumes and drive letters reappear) and the main
+// disk handle. Idempotent on invalid handle / empty volumes.
 void cleanupDiskHandles(std::vector<HANDLE> &volumes, HANDLE &hDisk)
 {
     if (hDisk != INVALID_HANDLE_VALUE) {
@@ -623,6 +820,369 @@ void cleanupDiskHandles(std::vector<HANDLE> &volumes, HANDLE &hDisk)
         hDisk = INVALID_HANDLE_VALUE;
     }
     closeAllVolumes(volumes);
+}
+
+// CLI mirror of disk.cpp's stripLettersAndPrepDisk. Three disposable-
+// handle stages that together convince Windows the disk is raw before
+// the caller opens the main write handle:
+//   1) per-letter unmount + DeleteVolumeMountPointW
+//   2) scratch handle: FSCTL_ALLOW_EXTENDED_DASD_IO +
+//      IOCTL_DISK_DELETE_DRIVE_LAYOUT
+//   3) scratch handle: IOCTL_DISK_UPDATE_PROPERTIES +
+//      IOCTL_DISK_ARE_VOLUMES_READY + SHChangeNotify(DRIVEADD)
+//
+// See the disk.h documentation block for the full rationale (Win11
+// 25H2+ "not ready" inheritance, RPi Imager pipeline mapping).
+bool stripLettersAndPrepDisk(DWORD diskNumber)
+{
+    {
+        std::ostringstream os;
+        os << "stripLettersAndPrepDisk: disk=" << diskNumber;
+        diagLog(os.str());
+    }
+
+    int lettersProcessed = 0;
+
+    // === Stage 1: per-letter unmount + DeleteVolumeMountPointW ===
+    const DWORD mask = GetLogicalDrives();
+    for (int i = 0; i < 26; ++i) {
+        if ((mask & (1u << i)) == 0) continue;
+        const wchar_t letter = static_cast<wchar_t>(L'A' + i);
+        HANDLE hProbe = openVolume(letter, FILE_READ_ATTRIBUTES);
+        if (hProbe == INVALID_HANDLE_VALUE) continue;
+        DWORD num = 0;
+        const bool mapped = getVolumeDiskNumber(hProbe, num);
+        CloseHandle(hProbe);
+        if (!mapped || num != diskNumber) continue;
+
+        notifyShellDriveRemoved(letter);
+
+        HANDLE hVol = openVolume(letter, GENERIC_READ | GENERIC_WRITE);
+        if (hVol == INVALID_HANDLE_VALUE) {
+            std::ostringstream os;
+            os << "  " << (char)letter << ": CreateFile FAIL err=" << GetLastError()
+               << " (already unmounted?), still trying letter strip";
+            diagLog(os.str());
+        } else {
+            DWORD lockErr = 0;
+            if (lockVolumeBackoff(hVol, &lockErr)) {
+                std::ostringstream os;
+                os << "  " << (char)letter << ": FSCTL_LOCK_VOLUME OK";
+                diagLog(os.str());
+            } else {
+                std::ostringstream os;
+                os << "  " << (char)letter << ": FSCTL_LOCK_VOLUME FAIL err=" << lockErr
+                   << " after 8 retries, continuing";
+                diagLog(os.str());
+            }
+
+            DWORD junk = 0;
+            if (DeviceIoControl(hVol, FSCTL_DISMOUNT_VOLUME,
+                                nullptr, 0, nullptr, 0, &junk, nullptr)) {
+                std::ostringstream os;
+                os << "  " << (char)letter << ": FSCTL_DISMOUNT_VOLUME OK";
+                diagLog(os.str());
+            } else {
+                std::ostringstream os;
+                os << "  " << (char)letter << ": FSCTL_DISMOUNT_VOLUME FAIL err="
+                   << GetLastError() << ", continuing";
+                diagLog(os.str());
+            }
+
+            DeviceIoControl(hVol, FSCTL_UNLOCK_VOLUME,
+                            nullptr, 0, nullptr, 0, &junk, nullptr);
+            CloseHandle(hVol);
+        }
+
+        const wchar_t mp[] = { letter, L':', L'\\', L'\0' };
+        const BOOL stripOk = DeleteVolumeMountPointW(mp);
+        std::ostringstream os;
+        os << "  DeleteVolumeMountPointW " << (char)letter << ":\\ = "
+           << (stripOk ? "OK" : "FAIL") << " err=" << (stripOk ? 0 : GetLastError());
+        diagLog(os.str());
+
+        notifyShellDriveRemoved(letter);
+        ++lettersProcessed;
+        Sleep(100);
+    }
+
+    // === Stage 2: scratch handle "cleanDiskFast" — clear partition table ===
+    HANDLE hScratch = openPhysicalDisk(diskNumber, GENERIC_READ | GENERIC_WRITE);
+    if (hScratch == INVALID_HANDLE_VALUE) {
+        std::ostringstream os;
+        os << "  scratch1 CreateFile FAIL err=" << GetLastError()
+           << ", skipping clean+rescan";
+        diagLog(os.str());
+        // Stage 1 may still have stripped letters; signal that to the
+        // caller so it can fall back to diskpart subprocess.
+        return lettersProcessed > 0;
+    }
+
+    DWORD junk = 0;
+    DeviceIoControl(hScratch, FSCTL_ALLOW_EXTENDED_DASD_IO,
+                    nullptr, 0, nullptr, 0, &junk, nullptr);
+
+    BOOL ok = DeviceIoControl(hScratch, IOCTL_DISK_DELETE_DRIVE_LAYOUT,
+                              nullptr, 0, nullptr, 0, &junk, nullptr);
+    if (ok) {
+        diagLog("  IOCTL_DISK_DELETE_DRIVE_LAYOUT OK");
+    } else {
+        const DWORD err = GetLastError();
+        if (err == ERROR_INVALID_FUNCTION || err == ERROR_FILE_NOT_FOUND) {
+            std::ostringstream os;
+            os << "  IOCTL_DISK_DELETE_DRIVE_LAYOUT no-op (err=" << err << ")";
+            diagLog(os.str());
+        } else {
+            std::ostringstream os;
+            os << "  IOCTL_DISK_DELETE_DRIVE_LAYOUT FAIL err=" << err
+               << ", zeroing first sector manually";
+            diagLog(os.str());
+            LARGE_INTEGER zero = {};
+            SetFilePointerEx(hScratch, zero, nullptr, FILE_BEGIN);
+            char emptyMBR[512] = {0};
+            DWORD bytesWritten = 0;
+            if (WriteFile(hScratch, emptyMBR, sizeof(emptyMBR),
+                          &bytesWritten, nullptr)
+                && bytesWritten == sizeof(emptyMBR)) {
+                diagLog("  manual first-sector zero OK");
+            } else {
+                std::ostringstream os2;
+                os2 << "  manual first-sector zero FAIL err=" << GetLastError();
+                diagLog(os2.str());
+            }
+        }
+    }
+    CloseHandle(hScratch);
+
+    // === Stage 3: scratch handle "rescanDisk" — refresh OS view ===
+    hScratch = openPhysicalDisk(diskNumber, GENERIC_READ | GENERIC_WRITE);
+    if (hScratch == INVALID_HANDLE_VALUE) {
+        std::ostringstream os;
+        os << "  scratch2 CreateFile FAIL err=" << GetLastError()
+           << ", skipping rescan";
+        diagLog(os.str());
+        notifyShellDriveAdded();
+        return lettersProcessed > 0;
+    }
+
+    if (DeviceIoControl(hScratch, IOCTL_DISK_UPDATE_PROPERTIES,
+                        nullptr, 0, nullptr, 0, &junk, nullptr)) {
+        diagLog("  IOCTL_DISK_UPDATE_PROPERTIES OK");
+    } else {
+        std::ostringstream os;
+        os << "  IOCTL_DISK_UPDATE_PROPERTIES FAIL err=" << GetLastError()
+           << ", continuing";
+        diagLog(os.str());
+    }
+
+#ifndef IOCTL_DISK_ARE_VOLUMES_READY
+#define IOCTL_DISK_ARE_VOLUMES_READY CTL_CODE(IOCTL_DISK_BASE, 0x0087, METHOD_BUFFERED, FILE_READ_ACCESS)
+#endif
+    if (DeviceIoControl(hScratch, IOCTL_DISK_ARE_VOLUMES_READY,
+                        nullptr, 0, nullptr, 0, &junk, nullptr)) {
+        diagLog("  IOCTL_DISK_ARE_VOLUMES_READY OK");
+    } else {
+        std::ostringstream os;
+        os << "  IOCTL_DISK_ARE_VOLUMES_READY FAIL err=" << GetLastError()
+           << ", sleeping 500ms";
+        diagLog(os.str());
+        Sleep(500);
+    }
+    CloseHandle(hScratch);
+
+    notifyShellDriveAdded();
+    {
+        std::ostringstream os;
+        os << "stripLettersAndPrepDisk: done (returning hadLetters="
+           << (lettersProcessed > 0 ? "true" : "false") << ")";
+        diagLog(os.str());
+    }
+    return lettersProcessed > 0;
+}
+
+// CLI mirror of disk.cpp's runDiskpartClean. Spawns diskpart.exe with
+// a `select disk N / clean / rescan` script via temporary script file
+// (CreateProcessW + diskpart /s). See disk.cpp for the full rationale —
+// VDS-level settling, RPi Imager #1489, Win11 25H2+.
+//
+// Uses temp-file rather than stdin piping because the CLI side is
+// pure Win32 (no Qt/QProcess); CreateProcess pipe setup is more
+// verbose than just dropping the script in a temp file.
+bool runDiskpartClean(DWORD diskNumber)
+{
+    {
+        std::ostringstream os;
+        os << "runDiskpartClean: disk=" << diskNumber
+           << " (VDS-level settling via diskpart subprocess)";
+        diagLog(os.str());
+    }
+
+    wchar_t tempPath[MAX_PATH] = {};
+    wchar_t scriptPath[MAX_PATH] = {};
+    if (!GetTempPathW(MAX_PATH, tempPath)
+        || !GetTempFileNameW(tempPath, L"wdi", 0, scriptPath)) {
+        std::ostringstream os;
+        os << "  failed to create temp file, err=" << GetLastError();
+        diagLog(os.str());
+        return false;
+    }
+
+    HANDLE hScript = CreateFileW(scriptPath, GENERIC_WRITE, 0, nullptr,
+                                 CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+    if (hScript == INVALID_HANDLE_VALUE) {
+        std::ostringstream os;
+        os << "  failed to open temp file for write, err=" << GetLastError();
+        diagLog(os.str());
+        DeleteFileW(scriptPath);
+        return false;
+    }
+    const std::string script =
+        "select disk " + std::to_string(diskNumber) + "\r\nclean\r\nrescan\r\nexit\r\n";
+    DWORD written = 0;
+    WriteFile(hScript, script.data(),
+              static_cast<DWORD>(script.size()), &written, nullptr);
+    CloseHandle(hScript);
+
+    std::wstring cmdLine = L"diskpart /s \"";
+    cmdLine += scriptPath;
+    cmdLine += L"\"";
+
+    STARTUPINFOW si = {};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi = {};
+    BOOL spawned = CreateProcessW(nullptr, cmdLine.data(),
+                                  nullptr, nullptr, FALSE,
+                                  CREATE_NO_WINDOW,
+                                  nullptr, nullptr, &si, &pi);
+    if (!spawned) {
+        std::ostringstream os;
+        os << "  CreateProcess(diskpart) FAIL err=" << GetLastError();
+        diagLog(os.str());
+        DeleteFileW(scriptPath);
+        return false;
+    }
+
+    DWORD waitResult = WaitForSingleObject(pi.hProcess, 60000);
+    DWORD exitCode = 1;
+    if (waitResult == WAIT_OBJECT_0) {
+        GetExitCodeProcess(pi.hProcess, &exitCode);
+    } else {
+        diagLog("  diskpart timed out after 60s, killing");
+        TerminateProcess(pi.hProcess, 1);
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    DeleteFileW(scriptPath);
+
+    std::ostringstream os;
+    os << "  diskpart exit code=" << exitCode;
+    diagLog(os.str());
+    return exitCode == 0;
+}
+
+// CLI mirror of disk.cpp's openPhysicalDiskForWrite. See the GUI-side
+// documentation block for the full rationale (OpenHD-pattern exclusive
+// share + RPi-pattern direct I/O flags + 8 × geometric backoff).
+//
+// CreateFileW is inlined here rather than going through the
+// `openPhysicalDisk` helper because that helper hard-codes permissive
+// share mode; we want exclusive share as the primary path.
+HANDLE openPhysicalDiskForWrite(DWORD diskNumber)
+{
+    const std::wstring path = toPhysicalDrivePath(diskNumber);
+    LPCWSTR namePtr = path.c_str();
+    const DWORD exclusiveShare  = FILE_SHARE_READ;
+    const DWORD permissiveShare = FILE_SHARE_READ | FILE_SHARE_WRITE;
+    const DWORD primaryFlags =
+        FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH | FILE_FLAG_SEQUENTIAL_SCAN;
+    const DWORD fallbackFlags = FILE_FLAG_SEQUENTIAL_SCAN;
+
+    auto tryOpen = [&](DWORD share, DWORD flags) -> HANDLE {
+        return CreateFileW(namePtr, GENERIC_READ | GENERIC_WRITE,
+                           share, nullptr, OPEN_EXISTING, flags, nullptr);
+    };
+
+    DWORD delayMs = 250;
+    DWORD lastErr = 0;
+
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        // 1) Exclusive share + direct I/O
+        HANDLE h = tryOpen(exclusiveShare, primaryFlags);
+        if (h != INVALID_HANDLE_VALUE) {
+            std::ostringstream os;
+            os << "openPhysicalDiskForWrite OK exclusive+direct (attempt " << attempt << ")";
+            diagLog(os.str());
+            return h;
+        }
+        lastErr = GetLastError();
+
+        // 2) Exclusive share + buffered I/O
+        if (lastErr == ERROR_INVALID_PARAMETER) {
+            h = tryOpen(exclusiveShare, fallbackFlags);
+            if (h != INVALID_HANDLE_VALUE) {
+                std::ostringstream os;
+                os << "openPhysicalDiskForWrite OK exclusive+buffered (attempt "
+                   << attempt << ")";
+                diagLog(os.str());
+                return h;
+            }
+            lastErr = GetLastError();
+        }
+
+        // 3) Permissive share + direct I/O
+        if (lastErr == ERROR_SHARING_VIOLATION) {
+            std::ostringstream os;
+            os << "openPhysicalDiskForWrite exclusive denied (attempt " << attempt
+               << "), relaxing share";
+            diagLog(os.str());
+            h = tryOpen(permissiveShare, primaryFlags);
+            if (h != INVALID_HANDLE_VALUE) {
+                std::ostringstream os2;
+                os2 << "openPhysicalDiskForWrite OK permissive+direct (attempt "
+                    << attempt << ") — mountmgr race risk";
+                diagLog(os2.str());
+                return h;
+            }
+            lastErr = GetLastError();
+
+            // 4) Permissive share + buffered I/O
+            if (lastErr == ERROR_INVALID_PARAMETER) {
+                h = tryOpen(permissiveShare, fallbackFlags);
+                if (h != INVALID_HANDLE_VALUE) {
+                    std::ostringstream os3;
+                    os3 << "openPhysicalDiskForWrite OK permissive+buffered (attempt "
+                        << attempt << ")";
+                    diagLog(os3.str());
+                    return h;
+                }
+                lastErr = GetLastError();
+            }
+        }
+
+        const bool transient = (lastErr == ERROR_ACCESS_DENIED
+                             || lastErr == ERROR_SHARING_VIOLATION
+                             || lastErr == ERROR_NOT_READY);
+        if (!transient) {
+            std::ostringstream os;
+            os << "openPhysicalDiskForWrite FAIL non-transient err=" << lastErr
+               << " attempt=" << attempt;
+            diagLog(os.str());
+            return INVALID_HANDLE_VALUE;
+        }
+
+        std::ostringstream os;
+        os << "openPhysicalDiskForWrite transient err=" << lastErr
+           << " attempt=" << attempt << " sleep=" << delayMs << "ms";
+        diagLog(os.str());
+        if (attempt < 7) Sleep(delayMs);
+        delayMs *= 2;
+    }
+
+    std::ostringstream os;
+    os << "openPhysicalDiskForWrite FAIL after 8 retries err=" << lastErr;
+    diagLog(os.str());
+    return INVALID_HANDLE_VALUE;
 }
 
 HANDLE openImageFileWrite(const std::string &path, DWORD extraFlags = 0)
@@ -688,18 +1248,24 @@ public:
         if (h == INVALID_HANDLE_VALUE) { if (err) *err = "Cannot open gzip image."; return false; }
         LARGE_INTEGER s; GetFileSizeEx(h, &s);
         compressed_ = (uint64_t)s.QuadPart;
-        // ISIZE trailer (last 4 bytes) — mod 2^32 so unreliable for > 4 GB inputs.
-        if (compressed_ >= 4) {
-            LARGE_INTEGER pos; pos.QuadPart = (LONGLONG)compressed_ - 4;
-            SetFilePointerEx(h, pos, nullptr, FILE_BEGIN);
-            unsigned char b[4]; DWORD got = 0;
-            if (ReadFile(h, b, 4, &got, nullptr) && got == 4) {
-                const uint32_t isize = (uint32_t)b[0] | ((uint32_t)b[1] << 8)
-                                     | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
-                if (isize >= compressed_) uncompressed_ = isize;
+        CloseHandle(h);
+        // ISIZE wraps at 4 GiB so it can't be trusted. Peek the
+        // decompressed start and derive size from the image's GPT
+        // primary header (or MBR partition entries) — same Etcher
+        // pattern, see GzImageReader::open for details.
+        uncompressed_ = 0;
+        {
+            constexpr size_t PEEK_BYTES = 17 * 1024;
+            gzFile gPeek = gzopen_w(path.c_str(), "rb");
+            if (gPeek) {
+                std::vector<uint8_t> buf(PEEK_BYTES);
+                int got = gzread(gPeek, buf.data(), (unsigned)PEEK_BYTES);
+                gzclose(gPeek);
+                if (got > 0) {
+                    uncompressed_ = estimateImageSizeBytes(buf.data(), (uint64_t)got, 512);
+                }
             }
         }
-        CloseHandle(h);
         gz_ = gzopen_w(path.c_str(), "rb");
         if (!gz_) { if (err) *err = "gzopen_w failed."; return false; }
         return true;
@@ -1184,14 +1750,27 @@ int cmdList()
     return 0;
 }
 
-// If keepVolumesOut is non-null and the write succeeds, ownership of the
-// still-locked, still-dismounted volume handles is handed to the caller so
-// an auto-verify pass can reuse them without ever releasing the locks.
+// Carries the still-OPEN disk handle + per-volume lock handles from
+// cmdWrite into a chained cmdVerify so the FSCTL_LOCK_VOLUME stays
+// held continuously across the transition. Etcher and RPi Imager
+// both reuse the write handle for the verify read pass — closing and
+// reopening lets Windows' mountmgr grab the disk and fastfat.sys
+// attach to the FAT partition we just wrote, racing the verify reads.
+struct ChainHandoff {
+    std::vector<HANDLE> volumes;
+    HANDLE hDisk = INVALID_HANDLE_VALUE;
+};
+
+// If keepOut is non-null and the write succeeds, ownership of the
+// still-locked hDisk + per-volume handles is handed to the caller so
+// the chained verify pass can reuse them without ever releasing the
+// locks.
 int cmdWrite(const std::string &imagePath, const std::string &device,
-             std::vector<HANDLE> *keepVolumesOut = nullptr)
+             ChainHandoff *keepOut = nullptr)
 {
+    diagLog("=== WRITE START === file=" + imagePath + " device=" + device);
     KeepAwake keepAwake;  // suppress idle sleep for the whole operation
-    if (keepVolumesOut) keepVolumesOut->clear();
+    if (keepOut) { keepOut->volumes.clear(); keepOut->hDisk = INVALID_HANDLE_VALUE; }
     std::string srcErr;
     std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
     if (!src) {
@@ -1202,13 +1781,17 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
     DWORD diskNumber = 0;
     if (!parseDevice(device, diskNumber)) return 1;
 
-    std::vector<HANDLE> volumes;
+    std::vector<HANDLE> volumes;  // stays empty for Write — letters are stripped, not held
     HANDLE hDisk = INVALID_HANDLE_VALUE;
     DiskGeometry geometry;
-    // Direct I/O on the destination: honest MB/s, and "Write successful"
-    // means data is on the device (no ghost flush after the CLI exits).
-    if (!prepareDiskHandles(diskNumber, GENERIC_WRITE, volumes, hDisk, geometry,
-                            FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH)) {
+    // RPi Imager pipeline: strip letters + clean partition table on
+    // disposable handles, THEN open the main write handle fresh. The
+    // main handle never inherits the kernel's transient "settling"
+    // state from IOCTL_DISK_UPDATE_PROPERTIES (Win11 25H2+ regression).
+    // openPhysicalDiskForWrite uses direct I/O (NO_BUFFERING |
+    // WRITE_THROUGH) so MB/s is honest and "Write successful" means
+    // data has reached the device.
+    if (!prepareDiskForRawWrite(diskNumber, hDisk, geometry)) {
         return 1;
     }
 
@@ -1288,6 +1871,14 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
     std::cout << "Writing:" << std::endl;
     ProgressPrinter progress(imageBytes > 0 ? imageBytes : src->compressedSize());
 
+    // delayFirstBuffer pattern (OpenHD/Etcher). See mainwindow.cpp
+    // for the full rationale. Held first chunk is committed at the
+    // very end so the partition table at LBA 0 stays invalid for
+    // the entire main loop — Windows can't auto-mount what doesn't
+    // look like a partitioned disk yet.
+    char *firstChunkBuf = nullptr;
+    size_t firstChunkBufLen = 0;
+
     while (true) {
         std::unique_ptr<IoChunk> c = queue.pop();
         if (!c) break;
@@ -1305,7 +1896,32 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
             break;
         }
 
-        if (!writeAll(hDisk, c->data, (DWORD)c->length)) {
+        if (firstChunkBuf == nullptr) {
+            firstChunkBuf = static_cast<char *>(
+                _aligned_malloc(c->length, sectorSize));
+            if (!firstChunkBuf) {
+                std::cerr << "\nOut of memory allocating delayed first chunk."
+                          << std::endl;
+                rc = 1;
+                break;
+            }
+            memcpy(firstChunkBuf, c->data, c->length);
+            firstChunkBufLen = c->length;
+            // Advance the file pointer past the held chunk so subsequent
+            // writeAll calls land at the right offset.
+            LARGE_INTEGER li;
+            li.QuadPart = static_cast<LONGLONG>(c->length);
+            if (!SetFilePointerEx(hDisk, li, nullptr, FILE_BEGIN)) {
+                printWinError(L"Failed to seek past held first chunk.",
+                              GetLastError());
+                rc = 1;
+                break;
+            }
+            std::ostringstream os;
+            os << "Write: held first chunk size=" << c->length
+               << " (delayFirstBuffer)";
+            diagLog(os.str());
+        } else if (!writeAll(hDisk, c->data, (DWORD)c->length)) {
             printWinError(L"Failed while writing to physical disk.", GetLastError());
             rc = 1;
             break;
@@ -1315,39 +1931,82 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
         if (imageBytes > 0) {
             progress.update(processed > imageBytes ? imageBytes : processed);
         } else {
+            // Unknown size — estimate total from current ratio and use
+            // writer's actual disk byte position. See mainwindow.cpp
+            // Write loop for the sparse-tail rationale.
             const uint64_t cp = src->compressedPos();
-            if (cp != compLast) { progress.update(cp); compLast = cp; }
+            const uint64_t cSize = src->compressedSize();
+            if (cp > 0 && cSize > 0 && processed > 0 && cp < cSize) {
+                const uint64_t estTotal =
+                    (uint64_t)((double)processed * (double)cSize / (double)cp);
+                progress.setTotal(estTotal);
+            }
+            progress.update(processed);
+            compLast = cp;
         }
     }
     queue.requestAbort();
     decoderThread.join();
 
+    // Commit the held first chunk to LBA 0 (delayFirstBuffer). Skipped
+    // on error/cancel — card is left without partition table, requires
+    // re-flash. Same trade-off as Etcher/OpenHD.
+    if (rc == 0 && firstChunkBuf) {
+        LARGE_INTEGER zero = {};
+        if (!SetFilePointerEx(hDisk, zero, nullptr, FILE_BEGIN)) {
+            printWinError(L"Failed to seek to LBA 0 for first-chunk commit.",
+                          GetLastError());
+            rc = 1;
+        } else if (!writeAll(hDisk, firstChunkBuf, (DWORD)firstChunkBufLen)) {
+            printWinError(L"Failed to commit partition table at end of write.",
+                          GetLastError());
+            rc = 1;
+        } else {
+            std::ostringstream os;
+            os << "Write: first chunk committed OK at LBA 0 (size=" << firstChunkBufLen << ")";
+            diagLog(os.str());
+        }
+    }
+    if (firstChunkBuf) {
+        _aligned_free(firstChunkBuf);
+        firstChunkBuf = nullptr;
+    }
+
     FlushFileBuffers(hDisk);
-    if (rc == 0 && keepVolumesOut) {
-        // Hand the still-locked volumes to the chained verify so nothing
-        // (Google Drive / indexer / antivirus) grabs the freshly-written
-        // volumes in the Write → Verify gap.
-        if (hDisk != INVALID_HANDLE_VALUE) CloseHandle(hDisk);
-        *keepVolumesOut = std::move(volumes);
+    if (rc == 0 && keepOut) {
+        // Hand the still-OPEN, still-LOCKED hDisk + volumes to the
+        // chained verify. Keeping the handle alive means the whole-
+        // disk FSCTL_LOCK_VOLUME stays held across the transition,
+        // preventing mountmgr from grabbing the disk between Write
+        // and Verify (Etcher / RPi Imager pattern).
+        keepOut->volumes = std::move(volumes);
+        keepOut->hDisk = hDisk;
+        hDisk = INVALID_HANDLE_VALUE;   // ownership transferred
     } else {
         // Standalone Write success — eject so the user can pull the
-        // card immediately. Eject must run while volumes are still
-        // locked + dismounted, before cleanupDiskHandles releases them.
-        // Bare disks (volumes empty) skip eject naturally.
+        // card immediately. Under the new pipeline `volumes` is empty
+        // for Write (stripLettersAndPrepDisk doesn't keep handles), so
+        // we eject the physical disk handle directly
+        // (IOCTL_STORAGE_EJECT_MEDIA works on PhysicalDriveN too).
         if (rc == 0) {
-            for (HANDLE h : volumes) {
-                DWORD junk = 0;
-                DeviceIoControl(h, IOCTL_STORAGE_EJECT_MEDIA,
-                                NULL, 0, NULL, 0, &junk, NULL);
-            }
+            DWORD junk = 0;
+            DeviceIoControl(hDisk, IOCTL_STORAGE_EJECT_MEDIA,
+                            NULL, 0, NULL, 0, &junk, NULL);
         }
         cleanupDiskHandles(volumes, hDisk);
     }
     if (rc == 0) {
-        progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
+        // Final tick — for unknown-size, total = processed so progress
+        // snaps to 100% (matches the GUI's progressbar->setValue(max)).
+        if (imageBytes > 0) {
+            progress.done(imageBytes);
+        } else {
+            progress.setTotal(processed);
+            progress.done(processed);
+        }
         std::cout << "Write successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
         // Eject already issued above when this is a standalone write.
-        if (!keepVolumesOut) {
+        if (!keepOut) {
             std::cout << "Card can be safely removed." << std::endl;
         }
     }
@@ -1356,6 +2015,8 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
 
 int cmdRead(const std::string &imagePath, const std::string &device, uint64_t requestedBytes, bool allocatedOnly)
 {
+    diagLog("=== READ START === file=" + imagePath + " device=" + device
+            + " allocatedOnly=" + (allocatedOnly ? "true" : "false"));
     KeepAwake keepAwake;  // suppress idle sleep for the whole operation
     // Direct I/O on the destination image file: "Read successful" means the
     // bytes are on disk (no ghost flush after the CLI exits).
@@ -1374,7 +2035,14 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     std::vector<HANDLE> volumes;
     HANDLE hDisk = INVALID_HANDLE_VALUE;
     DiskGeometry geometry;
-    if (!prepareDiskHandles(diskNumber, GENERIC_READ, volumes, hDisk, geometry)) {
+    // GENERIC_WRITE required even for Read — FSCTL_LOCK_VOLUME needs
+    // write access on the handle. Without it the lock silently fails
+    // and Windows' mountmgr can grab the disk on cards without a
+    // recognised filesystem (radxa GPT, OpenHD), surfacing as Error
+    // 55 on the geometry IOCTL or the first ReadFile. Matches what
+    // rufus / RPi Imager / dd-for-windows do.
+    if (!prepareDiskForRead(diskNumber, GENERIC_READ | GENERIC_WRITE,
+                            volumes, hDisk, geometry)) {
         CloseHandle(hImage);
         return 1;
     }
@@ -1383,15 +2051,15 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     if (allocatedOnly) {
         uint64_t allocatedBytes = 0;
         std::string reason;
-        if (getAllocatedReadBytesFromMbr(hDisk, geometry, allocatedBytes, reason)) {
+        if (getAllocatedReadBytes(hDisk, geometry, allocatedBytes, reason)) {
             bytesToRead = allocatedBytes;
         } else if (!reason.empty()) {
-            // Recognised but unsupported (no MBR signature / GPT) —
-            // tell the user and fall back to a full disk read.
+            // Recognised but allocated-only can't be computed — tell
+            // the user and fall back to a full disk read.
             std::cerr << "--allocated-only not supported: " << reason
                       << "; falling back to full disk read." << std::endl;
         } else {
-            printWinError(L"Failed to compute allocated partition range from MBR.", GetLastError());
+            printWinError(L"Failed to read partition table from disk.", GetLastError());
             cleanupDiskHandles(volumes, hDisk);
             CloseHandle(hImage);
             return 1;
@@ -1463,47 +2131,70 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     return rc;
 }
 
-// If `inheritedVolumes` is non-null and non-empty, those are locked +
-// dismounted volume handles handed over from a prior cmdWrite — the
-// open/lock/dismount step is skipped so nothing latches onto the
-// freshly-written volumes in the Write → Verify gap.
+// If `inherited` is non-null and carries a valid hDisk, the disk handle
+// and per-volume locks from a prior cmdWrite are reused directly — no
+// close-and-reopen, no re-acquire, no race with mountmgr / fastfat.sys.
 int cmdVerify(const std::string &imagePath, const std::string &device,
-              std::vector<HANDLE> *inheritedVolumes = nullptr)
+              ChainHandoff *inherited = nullptr)
 {
+    const bool chainedFromWrite = inherited && inherited->hDisk != INVALID_HANDLE_VALUE;
+    diagLog(std::string("=== VERIFY START === file=") + imagePath + " device=" + device
+            + " chainedFromWrite=" + (chainedFromWrite ? "yes" : "no"));
     KeepAwake keepAwake;  // suppress idle sleep for the whole operation
     std::string srcErr;
     std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
     if (!src) {
-        if (inheritedVolumes) closeAllVolumes(*inheritedVolumes);
+        if (inherited) {
+            closeAllVolumes(inherited->volumes);
+            if (inherited->hDisk != INVALID_HANDLE_VALUE) CloseHandle(inherited->hDisk);
+        }
         std::cerr << "Failed to open image: " << srcErr << std::endl;
         return 1;
     }
 
     DWORD diskNumber = 0;
     if (!parseDevice(device, diskNumber)) {
-        if (inheritedVolumes) closeAllVolumes(*inheritedVolumes);
+        if (inherited) {
+            closeAllVolumes(inherited->volumes);
+            if (inherited->hDisk != INVALID_HANDLE_VALUE) CloseHandle(inherited->hDisk);
+        }
         return 1;
     }
 
     std::vector<HANDLE> volumes;
-    if (inheritedVolumes) volumes = std::move(*inheritedVolumes);
-    const bool chainedFromWrite = !volumes.empty()
-                                  || (inheritedVolumes != nullptr);
     HANDLE hDisk = INVALID_HANDLE_VALUE;
+    if (inherited) {
+        volumes = std::move(inherited->volumes);
+        hDisk = inherited->hDisk;
+        inherited->hDisk = INVALID_HANDLE_VALUE;
+    }
     DiskGeometry geometry;
-    // NO_BUFFERING on the read handle — symmetric with the write side and
-    // keeps any stale block-cache page from masking the real device data.
-    if (!prepareDiskHandles(diskNumber, GENERIC_READ, volumes, hDisk, geometry,
-                            FILE_FLAG_NO_BUFFERING)) {
-        return 1;
+    if (chainedFromWrite) {
+        // Reuse inherited hDisk — lock + dismount state from cmdWrite is
+        // still in effect on the same kernel objects. Just query geometry.
+        diagLog("Verify: reusing inherited hDisk (still locked from cmdWrite)");
+        if (!getDiskGeometry(hDisk, geometry)) {
+            printWinError(L"Failed to get disk geometry on inherited handle.", GetLastError());
+            cleanupDiskHandles(volumes, hDisk);
+            return 1;
+        }
+    } else {
+        // Standalone Verify — open + lockVolumesForRawAccess, same as
+        // cmdRead. NO_BUFFERING bypasses the OS block cache so we read
+        // straight from the device. GENERIC_WRITE is required so the
+        // per-volume FSCTL_LOCK_VOLUME inside lockVolumesForRawAccess
+        // can take the locks that keep Windows off the disk.
+        if (!prepareDiskForRead(diskNumber, GENERIC_READ | GENERIC_WRITE,
+                                volumes, hDisk, geometry, FILE_FLAG_NO_BUFFERING)) {
+            return 1;
+        }
     }
     // When chained from a successful Write, give the SD controller a moment
     // to flush its cache / FTL state before we start reading. Mitigates the
     // "fail just before 100%" pattern where Verify catches the controller
-    // mid-flush near the end of the image. For a bare disk volumes is empty
-    // and the FlushFileBuffers loop is a no-op, but the Sleep still helps.
+    // mid-flush near the end of the image.
     if (chainedFromWrite) {
-        for (HANDLE h : volumes) FlushFileBuffers(h);
+        FlushFileBuffers(hDisk);
         Sleep(1500);
     }
 
@@ -1639,8 +2330,17 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
         if (imageBytes > 0) {
             progress.update(processed > imageBytes ? imageBytes : processed);
         } else {
+            // Unknown size — use verifier's actual disk-byte position
+            // against an estimated total. See cmdWrite's matching code.
             const uint64_t cp = src->compressedPos();
-            if (cp != compLast) { progress.update(cp); compLast = cp; }
+            const uint64_t cSize = src->compressedSize();
+            if (cp > 0 && cSize > 0 && processed > 0 && cp < cSize) {
+                const uint64_t estTotal =
+                    (uint64_t)((double)processed * (double)cSize / (double)cp);
+                progress.setTotal(estTotal);
+            }
+            progress.update(processed);
+            compLast = cp;
         }
     }
     queue.requestAbort();
@@ -1648,18 +2348,23 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
 
     // Eject only when this Verify was chained from a Write (auto-verify
     // path). Standalone user-initiated Verify must NOT eject — the user
-    // may want to do something else with the card afterwards. Bare disks
-    // (volumes empty) skip eject naturally.
+    // may want to do something else with the card afterwards. Under the
+    // new pipeline `volumes` is empty for chained Verify (Write
+    // stripped letters instead of holding volume handles), so we eject
+    // the physical disk handle directly.
     if (rc == 0 && chainedFromWrite) {
-        for (HANDLE h : volumes) {
-            DWORD junk = 0;
-            DeviceIoControl(h, IOCTL_STORAGE_EJECT_MEDIA,
-                            NULL, 0, NULL, 0, &junk, NULL);
-        }
+        DWORD junk = 0;
+        DeviceIoControl(hDisk, IOCTL_STORAGE_EJECT_MEDIA,
+                        NULL, 0, NULL, 0, &junk, NULL);
     }
     cleanupDiskHandles(volumes, hDisk);
     if (rc == 0) {
-        progress.done(imageBytes > 0 ? imageBytes : src->compressedSize());
+        if (imageBytes > 0) {
+            progress.done(imageBytes);
+        } else {
+            progress.setTotal(processed);
+            progress.done(processed);
+        }
         std::cout << "Verify successful. (" << formatElapsed(progress.elapsedSeconds()) << ")" << std::endl;
         if (chainedFromWrite) {
             std::cout << "Card can be safely removed." << std::endl;
@@ -1794,15 +2499,16 @@ int main(int argc, char *argv[])
 
     if (opt.command == "write") {
         const auto totalStart = std::chrono::steady_clock::now();
-        std::vector<HANDLE> keepVolumes;
-        // When auto-verify is scheduled, ask cmdWrite to hand the locked
-        // volumes straight to cmdVerify — no third party gets a foothold
-        // in the gap.
+        ChainHandoff handoff;
+        // When auto-verify is scheduled, ask cmdWrite to hand the still-
+        // OPEN disk handle plus locked volumes straight to cmdVerify —
+        // the FSCTL_LOCK_VOLUME on hDisk stays held continuously so
+        // mountmgr / fastfat.sys never gets a foothold in the gap.
         const int wrc = cmdWrite(opt.image, opt.device,
-                                 opt.noVerify ? nullptr : &keepVolumes);
+                                 opt.noVerify ? nullptr : &handoff);
         if (wrc != 0 || opt.noVerify) return wrc;
         std::cout << std::endl;  // blank line between Write and auto-Verify
-        const int vrc = cmdVerify(opt.image, opt.device, &keepVolumes);
+        const int vrc = cmdVerify(opt.image, opt.device, &handoff);
         if (vrc == 0) {
             const double total = std::chrono::duration_cast<std::chrono::duration<double>>(
                 std::chrono::steady_clock::now() - totalStart).count();

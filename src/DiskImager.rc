@@ -71,12 +71,12 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "Comments", "Image Writer for Windows to write USB and SD images"
-            VALUE "FileDescription", "DiskImager"
+            VALUE "FileDescription", "Win32 Disk Imager"
             VALUE "FileVersion", APP_VERSION
-            VALUE "InternalName", "win32-image-writer"
+            VALUE "InternalName", "Win32DiskImager"
             VALUE "LegalCopyright", "Copyright (C) 2009-2017 Windows ImageWriter Team"
             VALUE "OriginalFilename", "Win32DiskImager"
-            VALUE "ProductName", "Win32 Image Writer"
+            VALUE "ProductName", "Win32 Disk Imager"
             VALUE "ProductVersion", APP_VERSION
         END
     END
