@@ -393,27 +393,27 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <message>
         <location filename="../mainwindow.cpp" line="1353"/>
         <source>GPT header is invalid or unreadable. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>Заголовок GPT недійсний або не читається. 'Read Only Allocated Partitions' повертається до повного зчитування диска.</translation>
+        <translation>Заголовок GPT недійсний або не читається. &apos;Read Only Allocated Partitions&apos; повертається до повного зчитування диска.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1355"/>
         <source>No valid MBR or GPT on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>На цьому пристрої немає дійсного MBR або GPT. 'Read Only Allocated Partitions' повертається до повного зчитування диска.</translation>
+        <translation>На цьому пристрої немає дійсного MBR або GPT. &apos;Read Only Allocated Partitions&apos; повертається до повного зчитування диска.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1365"/>
         <source>Could not read GPT partition entries. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>Не вдалося прочитати записи розділів GPT. 'Read Only Allocated Partitions' повертається до повного зчитування диска.</translation>
+        <translation>Не вдалося прочитати записи розділів GPT. &apos;Read Only Allocated Partitions&apos; повертається до повного зчитування диска.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1377"/>
         <source>GPT has no allocated partitions. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT не містить виділених розділів. 'Read Only Allocated Partitions' повертається до повного зчитування диска.</translation>
+        <translation>GPT не містить виділених розділів. &apos;Read Only Allocated Partitions&apos; повертається до повного зчитування диска.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1381"/>
         <source>GPT partition entries invalid or corrupt. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>Записи розділів GPT недійсні або пошкоджені. 'Read Only Allocated Partitions' повертається до повного зчитування диска.</translation>
+        <translation>Записи розділів GPT недійсні або пошкоджені. &apos;Read Only Allocated Partitions&apos; повертається до повного зчитування диска.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1389"/>
@@ -565,7 +565,7 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <name>QObject</name>
     <message>
         <location filename="../disk.cpp" line="69"/>
-        <location filename="../disk.cpp" line="849"/>
+        <location filename="../disk.cpp" line="813"/>
         <source>File Error</source>
         <translation>Помилка файлу</translation>
     </message>
@@ -577,93 +577,73 @@ Error %1: %2</source>
 Помилка %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="85"/>
-        <location filename="../disk.cpp" line="122"/>
-        <source>Volume Error</source>
-        <translation>Помилка тому</translation>
-    </message>
-    <message>
         <location filename="../disk.cpp" line="86"/>
-        <source>An error occurred when attempting to get information on volume.
-Error %1: %2</source>
-        <translation>Сталася помилка при спробі отримати інформацію про том.
-Помилка %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="103"/>
-        <location filename="../disk.cpp" line="824"/>
+        <location filename="../disk.cpp" line="788"/>
         <source>Device Error</source>
         <translation>Помилка пристрою</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="104"/>
+        <location filename="../disk.cpp" line="87"/>
         <source>An error occurred when attempting to get a handle on the device.
 Error %1: %2</source>
         <translation>Сталася помилка при спробі отримати дескриптор пристрою.
 Помилка %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="123"/>
-        <source>An error occurred when attempting to get a handle on the volume.
-Error %1: %2</source>
-        <translation>Сталася помилка при спробі отримати дескриптор тому.
-Помилка %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="672"/>
-        <location filename="../disk.cpp" line="710"/>
+        <location filename="../disk.cpp" line="636"/>
+        <location filename="../disk.cpp" line="674"/>
         <source>Read Error</source>
         <translation>Помилка читання</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="673"/>
-        <location filename="../disk.cpp" line="736"/>
+        <location filename="../disk.cpp" line="637"/>
+        <location filename="../disk.cpp" line="700"/>
         <source>Seek failed at offset %1.
 Error %2: %3</source>
         <translation>Не вдалося перейти за зміщенням %1.
 Помилка %2: %3</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="711"/>
+        <location filename="../disk.cpp" line="675"/>
         <source>An error occurred when attempting to read data from handle.
 Error %1: %2</source>
         <translation>Сталася помилка при спробі прочитати дані з дескриптора.
 Помилка %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="735"/>
-        <location filename="../disk.cpp" line="785"/>
+        <location filename="../disk.cpp" line="699"/>
+        <location filename="../disk.cpp" line="749"/>
         <source>Write Error</source>
         <translation>Помилка запису</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="786"/>
+        <location filename="../disk.cpp" line="750"/>
         <source>An error occurred when attempting to write data to handle.
 Error %1: %2</source>
         <translation>Сталася помилка при спробі записати дані у дескриптор.
 Помилка %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="825"/>
+        <location filename="../disk.cpp" line="789"/>
         <source>An error occurred when attempting to get the device&apos;s geometry.
 Error %1: %2</source>
         <translation>Сталася помилка при спробі отримати геометрію пристрою.
 Помилка %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="850"/>
+        <location filename="../disk.cpp" line="814"/>
         <source>An error occurred while getting the file size.
 Error %1: %2</source>
         <translation>Сталася помилка при отриманні розміру файлу.
 Помилка %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="873"/>
+        <location filename="../disk.cpp" line="837"/>
         <source>Free Space Error</source>
         <translation>Помилка вільного місця</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="874"/>
+        <location filename="../disk.cpp" line="838"/>
         <source>Failed to get the free space on drive %1.
 Error %2: %3
 Checking of free space will be skipped.</source>

@@ -403,27 +403,27 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <message>
         <location filename="../mainwindow.cpp" line="1353"/>
         <source>GPT header is invalid or unreadable. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT 头无效或无法读取. 'Read Only Allocated Partitions' 回退到读取整个磁盘.</translation>
+        <translation>GPT 头无效或无法读取. &apos;Read Only Allocated Partitions&apos; 回退到读取整个磁盘.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1355"/>
         <source>No valid MBR or GPT on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>此设备上没有有效的 MBR 或 GPT. 'Read Only Allocated Partitions' 回退到读取整个磁盘.</translation>
+        <translation>此设备上没有有效的 MBR 或 GPT. &apos;Read Only Allocated Partitions&apos; 回退到读取整个磁盘.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1365"/>
         <source>Could not read GPT partition entries. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>无法读取 GPT 分区条目. 'Read Only Allocated Partitions' 回退到读取整个磁盘.</translation>
+        <translation>无法读取 GPT 分区条目. &apos;Read Only Allocated Partitions&apos; 回退到读取整个磁盘.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1377"/>
         <source>GPT has no allocated partitions. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT 中没有已分配的分区. 'Read Only Allocated Partitions' 回退到读取整个磁盘.</translation>
+        <translation>GPT 中没有已分配的分区. &apos;Read Only Allocated Partitions&apos; 回退到读取整个磁盘.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1381"/>
         <source>GPT partition entries invalid or corrupt. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT 分区条目无效或损坏. 'Read Only Allocated Partitions' 回退到读取整个磁盘.</translation>
+        <translation>GPT 分区条目无效或损坏. &apos;Read Only Allocated Partitions&apos; 回退到读取整个磁盘.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1389"/>
@@ -565,7 +565,7 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <name>QObject</name>
     <message>
         <location filename="../disk.cpp" line="69"/>
-        <location filename="../disk.cpp" line="849"/>
+        <location filename="../disk.cpp" line="813"/>
         <source>File Error</source>
         <translation>文件错误</translation>
     </message>
@@ -577,93 +577,73 @@ Error %1: %2</source>
 错误 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="103"/>
-        <location filename="../disk.cpp" line="824"/>
+        <location filename="../disk.cpp" line="86"/>
+        <location filename="../disk.cpp" line="788"/>
         <source>Device Error</source>
         <translation>设备错误</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="104"/>
+        <location filename="../disk.cpp" line="87"/>
         <source>An error occurred when attempting to get a handle on the device.
 Error %1: %2</source>
         <translation>获取设备句柄失败.
 错误 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="85"/>
-        <location filename="../disk.cpp" line="122"/>
-        <source>Volume Error</source>
-        <translation>卷错误</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="86"/>
-        <source>An error occurred when attempting to get information on volume.
-Error %1: %2</source>
-        <translation>获取卷信息失败
-错误 %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="123"/>
-        <source>An error occurred when attempting to get a handle on the volume.
-Error %1: %2</source>
-        <translation>获取卷句柄失败
-错误 %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="672"/>
-        <location filename="../disk.cpp" line="710"/>
+        <location filename="../disk.cpp" line="636"/>
+        <location filename="../disk.cpp" line="674"/>
         <source>Read Error</source>
         <translation>读取失败</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="673"/>
-        <location filename="../disk.cpp" line="736"/>
+        <location filename="../disk.cpp" line="637"/>
+        <location filename="../disk.cpp" line="700"/>
         <source>Seek failed at offset %1.
 Error %2: %3</source>
         <translation>在偏移 %1 处定位失败。
 错误 %2: %3</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="711"/>
+        <location filename="../disk.cpp" line="675"/>
         <source>An error occurred when attempting to read data from handle.
 Error %1: %2</source>
         <translation>从该句柄中读取数据发生错误.
 错误 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="735"/>
-        <location filename="../disk.cpp" line="785"/>
+        <location filename="../disk.cpp" line="699"/>
+        <location filename="../disk.cpp" line="749"/>
         <source>Write Error</source>
         <translation>写入失败</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="786"/>
+        <location filename="../disk.cpp" line="750"/>
         <source>An error occurred when attempting to write data to handle.
 Error %1: %2</source>
         <translation>向该句柄写入数据时发生错误.
 错误 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="825"/>
+        <location filename="../disk.cpp" line="789"/>
         <source>An error occurred when attempting to get the device&apos;s geometry.
 Error %1: %2</source>
         <translation>无法获取设备容量.
 错误 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="850"/>
+        <location filename="../disk.cpp" line="814"/>
         <source>An error occurred while getting the file size.
 Error %1: %2</source>
         <translation>无法获取文件大小.
 错误 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="873"/>
+        <location filename="../disk.cpp" line="837"/>
         <source>Free Space Error</source>
         <translation>剩余空间错误</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="874"/>
+        <location filename="../disk.cpp" line="838"/>
         <source>Failed to get the free space on drive %1.
 Error %2: %3
 Checking of free space will be skipped.</source>

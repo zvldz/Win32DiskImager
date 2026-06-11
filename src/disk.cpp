@@ -72,23 +72,6 @@ HANDLE getHandleOnFile(LPCWSTR filelocation, DWORD access, DWORD extraFlags)
     }
     return hFile;
 }
-DWORD getDeviceID(HANDLE hVolume)
-{
-    VOLUME_DISK_EXTENTS sd;
-    DWORD bytesreturned;
-    if (!DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, &sd, sizeof(sd), &bytesreturned, NULL))
-    {
-        wchar_t *errormessage=NULL;
-        ::FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, GetLastError(), 0,
-                         (LPWSTR)&errormessage, 0, NULL);
-        QString errText = QString::fromUtf16((const char16_t *)errormessage);
-        QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("Volume Error"),
-                              QObject::tr("An error occurred when attempting to get information on volume.\n"
-                                          "Error %1: %2").arg(GetLastError()).arg(errText));
-        LocalFree(errormessage);
-    }
-    return sd.Extents[0].DiskNumber;
-}
 
 HANDLE getHandleOnDevice(int device, DWORD access, DWORD extraFlags)
 {
@@ -106,25 +89,6 @@ HANDLE getHandleOnDevice(int device, DWORD access, DWORD extraFlags)
         LocalFree(errormessage);
     }
     return hDevice;
-}
-
-HANDLE getHandleOnVolume(int volume, DWORD access, DWORD extraFlags)
-{
-    HANDLE hVolume;
-    wchar_t volumename[] = L"\\\\.\\A:";
-    volumename[4] += volume;
-    hVolume = CreateFileW(volumename, access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, extraFlags, NULL);
-    if (hVolume == INVALID_HANDLE_VALUE)
-    {
-        wchar_t *errormessage=NULL;
-        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, GetLastError(), 0, (LPWSTR)&errormessage, 0, NULL);
-        QString errText = QString::fromUtf16((const char16_t *)errormessage);
-        QMessageBox::critical(MainWindow::getInstanceIfAvailable(), QObject::tr("Volume Error"),
-                              QObject::tr("An error occurred when attempting to get a handle on the volume.\n"
-                                          "Error %1: %2").arg(GetLastError()).arg(errText));
-        LocalFree(errormessage);
-    }
-    return hVolume;
 }
 
 // Tells Explorer to drop its view of a drive letter — prevents the
@@ -880,7 +844,6 @@ bool spaceAvailable(char *location, unsigned long long spaceneeded)
 }
 
 // given a drive letter (ending in a slash), return the label for that drive
-// TODO make this more robust by adding input verification
 QString getDriveLabel(const char *drv)
 {
     QString retVal;

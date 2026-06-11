@@ -50,9 +50,7 @@ typedef struct _DEVICE_NUMBER
 // (see readSectorDataFromHandle).
 HANDLE getHandleOnFile(LPCWSTR filelocation, DWORD access, DWORD extraFlags = 0);
 HANDLE getHandleOnDevice(int device, DWORD access, DWORD extraFlags = 0);
-HANDLE getHandleOnVolume(int volume, DWORD access, DWORD extraFlags = 0);
 QString getDriveLabel(const char *drv);
-DWORD getDeviceID(HANDLE handle);
 // Issues IOCTL_STORAGE_EJECT_MEDIA on a volume that's already locked +
 // dismounted. Used after a successful Write so the user can pull the
 // card immediately (the volume shows as "Safely Removed" in Windows).

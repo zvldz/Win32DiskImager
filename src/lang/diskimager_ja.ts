@@ -403,27 +403,27 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <message>
         <location filename="../mainwindow.cpp" line="1353"/>
         <source>GPT header is invalid or unreadable. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT ヘッダーが無効か読み取れません。'Read Only Allocated Partitions' はディスク全体の読込みに切り替わります。</translation>
+        <translation>GPT ヘッダーが無効か読み取れません。&apos;Read Only Allocated Partitions&apos; はディスク全体の読込みに切り替わります。</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1355"/>
         <source>No valid MBR or GPT on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>このデバイスに有効な MBR / GPT がありません。'Read Only Allocated Partitions' はディスク全体の読込みに切り替わります。</translation>
+        <translation>このデバイスに有効な MBR / GPT がありません。&apos;Read Only Allocated Partitions&apos; はディスク全体の読込みに切り替わります。</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1365"/>
         <source>Could not read GPT partition entries. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT パーティションエントリを読み取れませんでした。'Read Only Allocated Partitions' はディスク全体の読込みに切り替わります。</translation>
+        <translation>GPT パーティションエントリを読み取れませんでした。&apos;Read Only Allocated Partitions&apos; はディスク全体の読込みに切り替わります。</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1377"/>
         <source>GPT has no allocated partitions. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT に割り当て済みパーティションがありません。'Read Only Allocated Partitions' はディスク全体の読込みに切り替わります。</translation>
+        <translation>GPT に割り当て済みパーティションがありません。&apos;Read Only Allocated Partitions&apos; はディスク全体の読込みに切り替わります。</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1381"/>
         <source>GPT partition entries invalid or corrupt. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT パーティションエントリが無効か破損しています。'Read Only Allocated Partitions' はディスク全体の読込みに切り替わります。</translation>
+        <translation>GPT パーティションエントリが無効か破損しています。&apos;Read Only Allocated Partitions&apos; はディスク全体の読込みに切り替わります。</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1389"/>
@@ -565,7 +565,7 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <name>QObject</name>
     <message>
         <location filename="../disk.cpp" line="69"/>
-        <location filename="../disk.cpp" line="849"/>
+        <location filename="../disk.cpp" line="813"/>
         <source>File Error</source>
         <translation>ファイルエラー</translation>
     </message>
@@ -577,93 +577,73 @@ Error %1: %2</source>
 エラー%1：%2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="103"/>
-        <location filename="../disk.cpp" line="824"/>
+        <location filename="../disk.cpp" line="86"/>
+        <location filename="../disk.cpp" line="788"/>
         <source>Device Error</source>
         <translation>デバイスエラー</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="104"/>
+        <location filename="../disk.cpp" line="87"/>
         <source>An error occurred when attempting to get a handle on the device.
 Error %1: %2</source>
         <translation>デバイス上でハンドルを取得しようとしたときにエラーが発生しました。
 エラー%1：%2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="85"/>
-        <location filename="../disk.cpp" line="122"/>
-        <source>Volume Error</source>
-        <translation>ボリュームエラー</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="86"/>
-        <source>An error occurred when attempting to get information on volume.
-Error %1: %2</source>
-        <translation>ボリュームに関する情報を取得中にエラーが発生しました。
-エラー%1：%2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="123"/>
-        <source>An error occurred when attempting to get a handle on the volume.
-Error %1: %2</source>
-        <translation>ボリューム上でハンドルを取得しようとしたときにエラーが発生しました。
-エラー%1：%2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="672"/>
-        <location filename="../disk.cpp" line="710"/>
+        <location filename="../disk.cpp" line="636"/>
+        <location filename="../disk.cpp" line="674"/>
         <source>Read Error</source>
         <translation>読込みエラー</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="673"/>
-        <location filename="../disk.cpp" line="736"/>
+        <location filename="../disk.cpp" line="637"/>
+        <location filename="../disk.cpp" line="700"/>
         <source>Seek failed at offset %1.
 Error %2: %3</source>
         <translation>オフセット %1 でのシーク失敗。
 エラー %2: %3</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="711"/>
+        <location filename="../disk.cpp" line="675"/>
         <source>An error occurred when attempting to read data from handle.
 Error %1: %2</source>
         <translation>ハンドルからデータを読み取ろうとしているときにエラーが発生しました。
 エラー%1：%2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="735"/>
-        <location filename="../disk.cpp" line="785"/>
+        <location filename="../disk.cpp" line="699"/>
+        <location filename="../disk.cpp" line="749"/>
         <source>Write Error</source>
         <translation>書込みエラー</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="786"/>
+        <location filename="../disk.cpp" line="750"/>
         <source>An error occurred when attempting to write data to handle.
 Error %1: %2</source>
         <translation>データの書き込み中にエラーが発生しました。
 エラー%1：%2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="825"/>
+        <location filename="../disk.cpp" line="789"/>
         <source>An error occurred when attempting to get the device&apos;s geometry.
 Error %1: %2</source>
         <translation>デバイスのジオメトリを取得中にエラーが発生しました。
 エラー%1：%2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="850"/>
+        <location filename="../disk.cpp" line="814"/>
         <source>An error occurred while getting the file size.
 Error %1: %2</source>
         <translation>ファイルサイズを取得中にエラーが発生しました。
 エラー%1：%2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="873"/>
+        <location filename="../disk.cpp" line="837"/>
         <source>Free Space Error</source>
         <translation>空き領域エラー</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="874"/>
+        <location filename="../disk.cpp" line="838"/>
         <source>Failed to get the free space on drive %1.
 Error %2: %3
 Checking of free space will be skipped.</source>

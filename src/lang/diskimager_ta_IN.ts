@@ -403,27 +403,27 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <message>
         <location filename="../mainwindow.cpp" line="1353"/>
         <source>GPT header is invalid or unreadable. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT தலைப்பு தவறானது அல்லது படிக்க முடியாதது. 'Read Only Allocated Partitions' முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
+        <translation>GPT தலைப்பு தவறானது அல்லது படிக்க முடியாதது. &apos;Read Only Allocated Partitions&apos; முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1355"/>
         <source>No valid MBR or GPT on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>இந்த சாதனத்தில் சரியான MBR அல்லது GPT இல்லை. 'Read Only Allocated Partitions' முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
+        <translation>இந்த சாதனத்தில் சரியான MBR அல்லது GPT இல்லை. &apos;Read Only Allocated Partitions&apos; முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1365"/>
         <source>Could not read GPT partition entries. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT பகிர்வு உள்ளீடுகளைப் படிக்க முடியவில்லை. 'Read Only Allocated Partitions' முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
+        <translation>GPT பகிர்வு உள்ளீடுகளைப் படிக்க முடியவில்லை. &apos;Read Only Allocated Partitions&apos; முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1377"/>
         <source>GPT has no allocated partitions. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT-இல் ஒதுக்கப்பட்ட பகிர்வுகள் இல்லை. 'Read Only Allocated Partitions' முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
+        <translation>GPT-இல் ஒதுக்கப்பட்ட பகிர்வுகள் இல்லை. &apos;Read Only Allocated Partitions&apos; முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1381"/>
         <source>GPT partition entries invalid or corrupt. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT பகிர்வு உள்ளீடுகள் தவறானவை அல்லது சிதைந்தவை. 'Read Only Allocated Partitions' முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
+        <translation>GPT பகிர்வு உள்ளீடுகள் தவறானவை அல்லது சிதைந்தவை. &apos;Read Only Allocated Partitions&apos; முழு வட்டு வாசிப்புக்கு திரும்புகிறது.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1389"/>
@@ -565,7 +565,7 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <name>QObject</name>
     <message>
         <location filename="../disk.cpp" line="69"/>
-        <location filename="../disk.cpp" line="849"/>
+        <location filename="../disk.cpp" line="813"/>
         <source>File Error</source>
         <translation>கோப்பு பிழை</translation>
     </message>
@@ -577,93 +577,73 @@ Error %1: %2</source>
 பிழை %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="103"/>
-        <location filename="../disk.cpp" line="824"/>
+        <location filename="../disk.cpp" line="86"/>
+        <location filename="../disk.cpp" line="788"/>
         <source>Device Error</source>
         <translation>சாதனப் பிழை</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="104"/>
+        <location filename="../disk.cpp" line="87"/>
         <source>An error occurred when attempting to get a handle on the device.
 Error %1: %2</source>
         <translation>சாதனத்தின் ஹேண்டிலைப் பெற முயற்சிக்கும்போது பிழை ஏற்பட்டது.
 பிழை %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="85"/>
-        <location filename="../disk.cpp" line="122"/>
-        <source>Volume Error</source>
-        <translation>தொகுதி பிழை</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="86"/>
-        <source>An error occurred when attempting to get information on volume.
-Error %1: %2</source>
-        <translation>தொகுதி பற்றிய தகவல்களைப் பெற முயற்சிக்கும்போது பிழை ஏற்பட்டது.
-பிழை %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="123"/>
-        <source>An error occurred when attempting to get a handle on the volume.
-Error %1: %2</source>
-        <translation>தொகுதியின் ஹேண்டிலைப் பெற முயற்சிக்கும்போது பிழை ஏற்பட்டது.
-பிழை %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="672"/>
-        <location filename="../disk.cpp" line="710"/>
+        <location filename="../disk.cpp" line="636"/>
+        <location filename="../disk.cpp" line="674"/>
         <source>Read Error</source>
         <translation>வாசிப்புப் பிழை</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="673"/>
-        <location filename="../disk.cpp" line="736"/>
+        <location filename="../disk.cpp" line="637"/>
+        <location filename="../disk.cpp" line="700"/>
         <source>Seek failed at offset %1.
 Error %2: %3</source>
         <translation>%1 நிலையில் நாடுதல் தோல்வியடைந்தது.
 பிழை %2: %3</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="711"/>
+        <location filename="../disk.cpp" line="675"/>
         <source>An error occurred when attempting to read data from handle.
 Error %1: %2</source>
         <translation>ஹேண்டிலிலிருந்து தரவைப் படிக்க முயற்சிக்கும்போது பிழை ஏற்பட்டது.
 பிழை %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="735"/>
-        <location filename="../disk.cpp" line="785"/>
+        <location filename="../disk.cpp" line="699"/>
+        <location filename="../disk.cpp" line="749"/>
         <source>Write Error</source>
         <translation>எழுதுதல் பிழை</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="786"/>
+        <location filename="../disk.cpp" line="750"/>
         <source>An error occurred when attempting to write data to handle.
 Error %1: %2</source>
         <translation>ஹேண்டிலுக்குத் தரவை எழுத முயற்சிக்கும்போது பிழை ஏற்பட்டது.
 பிழை %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="825"/>
+        <location filename="../disk.cpp" line="789"/>
         <source>An error occurred when attempting to get the device&apos;s geometry.
 Error %1: %2</source>
         <translation>சாதனத்தின் வடிவத்தை பெற முயற்சிக்கும்போது பிழை ஏற்பட்டது.
 பிழை %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="850"/>
+        <location filename="../disk.cpp" line="814"/>
         <source>An error occurred while getting the file size.
 Error %1: %2</source>
         <translation>கோப்பின் அளவைப் பெறும்போது பிழை ஏற்பட்டது.
 பிழை %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="873"/>
+        <location filename="../disk.cpp" line="837"/>
         <source>Free Space Error</source>
         <translation>காலி இட பிழை</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="874"/>
+        <location filename="../disk.cpp" line="838"/>
         <source>Failed to get the free space on drive %1.
 Error %2: %3
 Checking of free space will be skipped.</source>

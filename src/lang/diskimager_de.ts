@@ -396,27 +396,27 @@ Stellen Sie sicher, dass keine andere Anwendung die Karte verwendet (Datei-Explo
     <message>
         <location filename="../mainwindow.cpp" line="1353"/>
         <source>GPT header is invalid or unreadable. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT-Header ist ungültig oder nicht lesbar. 'Read Only Allocated Partitions' fällt auf einen vollständigen Lesevorgang zurück.</translation>
+        <translation>GPT-Header ist ungültig oder nicht lesbar. &apos;Read Only Allocated Partitions&apos; fällt auf einen vollständigen Lesevorgang zurück.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1355"/>
         <source>No valid MBR or GPT on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>Keine gültige MBR oder GPT auf diesem Gerät. 'Read Only Allocated Partitions' fällt auf einen vollständigen Lesevorgang zurück.</translation>
+        <translation>Keine gültige MBR oder GPT auf diesem Gerät. &apos;Read Only Allocated Partitions&apos; fällt auf einen vollständigen Lesevorgang zurück.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1365"/>
         <source>Could not read GPT partition entries. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT-Partitionseinträge konnten nicht gelesen werden. 'Read Only Allocated Partitions' fällt auf einen vollständigen Lesevorgang zurück.</translation>
+        <translation>GPT-Partitionseinträge konnten nicht gelesen werden. &apos;Read Only Allocated Partitions&apos; fällt auf einen vollständigen Lesevorgang zurück.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1377"/>
         <source>GPT has no allocated partitions. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT enthält keine zugewiesenen Partitionen. 'Read Only Allocated Partitions' fällt auf einen vollständigen Lesevorgang zurück.</translation>
+        <translation>GPT enthält keine zugewiesenen Partitionen. &apos;Read Only Allocated Partitions&apos; fällt auf einen vollständigen Lesevorgang zurück.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1381"/>
         <source>GPT partition entries invalid or corrupt. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT-Partitionseinträge sind ungültig oder beschädigt. 'Read Only Allocated Partitions' fällt auf einen vollständigen Lesevorgang zurück.</translation>
+        <translation>GPT-Partitionseinträge sind ungültig oder beschädigt. &apos;Read Only Allocated Partitions&apos; fällt auf einen vollständigen Lesevorgang zurück.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1389"/>
@@ -558,7 +558,7 @@ Stellen Sie sicher, dass keine andere Anwendung die Karte verwendet (Datei-Explo
     <name>QObject</name>
     <message>
         <location filename="../disk.cpp" line="69"/>
-        <location filename="../disk.cpp" line="849"/>
+        <location filename="../disk.cpp" line="813"/>
         <source>File Error</source>
         <translation>Dateifehler</translation>
     </message>
@@ -569,86 +569,68 @@ Error %1: %2</source>
         <translation>Fehler beim Versuch, ein Handle auf die Datei zu erhalten. Fehler %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="103"/>
-        <location filename="../disk.cpp" line="824"/>
+        <location filename="../disk.cpp" line="86"/>
+        <location filename="../disk.cpp" line="788"/>
         <source>Device Error</source>
         <translation>Gerätefehler</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="104"/>
+        <location filename="../disk.cpp" line="87"/>
         <source>An error occurred when attempting to get a handle on the device.
 Error %1: %2</source>
         <translation>Fehler beim Versuch, ein Handle auf das Gerät zu erhalten. Fehler %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="85"/>
-        <location filename="../disk.cpp" line="122"/>
-        <source>Volume Error</source>
-        <translation>Datenträger</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="86"/>
-        <source>An error occurred when attempting to get information on volume.
-Error %1: %2</source>
-        <translation>Fehler beim Versuch, Informationen über den Datenträger zu erhalten. Fehler %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="123"/>
-        <source>An error occurred when attempting to get a handle on the volume.
-Error %1: %2</source>
-        <translation>Fehler beim Versuch, ein Handle auf den Datenträger zu erhalten. Fehler %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="672"/>
-        <location filename="../disk.cpp" line="710"/>
+        <location filename="../disk.cpp" line="636"/>
+        <location filename="../disk.cpp" line="674"/>
         <source>Read Error</source>
         <translation>Lesefehler</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="673"/>
-        <location filename="../disk.cpp" line="736"/>
+        <location filename="../disk.cpp" line="637"/>
+        <location filename="../disk.cpp" line="700"/>
         <source>Seek failed at offset %1.
 Error %2: %3</source>
         <translation>Positionierung bei Offset %1 fehlgeschlagen.
 Fehler %2: %3</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="711"/>
+        <location filename="../disk.cpp" line="675"/>
         <source>An error occurred when attempting to read data from handle.
 Error %1: %2</source>
         <translation>Fehler beim Versuch, Daten zu lesen. Fehler %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="735"/>
-        <location filename="../disk.cpp" line="785"/>
+        <location filename="../disk.cpp" line="699"/>
+        <location filename="../disk.cpp" line="749"/>
         <source>Write Error</source>
         <translation>Fehler beim Schreiben</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="786"/>
+        <location filename="../disk.cpp" line="750"/>
         <source>An error occurred when attempting to write data to handle.
 Error %1: %2</source>
         <translation>Fehler beim Versuch, Daten zu schreiben. Fehler %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="825"/>
+        <location filename="../disk.cpp" line="789"/>
         <source>An error occurred when attempting to get the device&apos;s geometry.
 Error %1: %2</source>
         <translation>Fehler beim Versuch, die Gerätegeometrie abzufragen. Fehler %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="850"/>
+        <location filename="../disk.cpp" line="814"/>
         <source>An error occurred while getting the file size.
 Error %1: %2</source>
         <translation>Fehler beim Versuch, die Dateigröße abzufragen. Fehler %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="873"/>
+        <location filename="../disk.cpp" line="837"/>
         <source>Free Space Error</source>
         <translation>Fehler</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="874"/>
+        <location filename="../disk.cpp" line="838"/>
         <source>Failed to get the free space on drive %1.
 Error %2: %3
 Checking of free space will be skipped.</source>

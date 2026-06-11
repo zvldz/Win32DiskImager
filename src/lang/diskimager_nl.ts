@@ -400,27 +400,27 @@ Zorg ervoor dat geen andere applicatie de kaart gebruikt (Verkenner, antivirussc
     <message>
         <location filename="../mainwindow.cpp" line="1353"/>
         <source>GPT header is invalid or unreadable. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT-header is ongeldig of onleesbaar. 'Read Only Allocated Partitions' valt terug op een volledige diskread.</translation>
+        <translation>GPT-header is ongeldig of onleesbaar. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1355"/>
         <source>No valid MBR or GPT on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>Geen geldige MBR of GPT op dit apparaat. 'Read Only Allocated Partitions' valt terug op een volledige diskread.</translation>
+        <translation>Geen geldige MBR of GPT op dit apparaat. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1365"/>
         <source>Could not read GPT partition entries. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>Kon GPT-partitievermeldingen niet lezen. 'Read Only Allocated Partitions' valt terug op een volledige diskread.</translation>
+        <translation>Kon GPT-partitievermeldingen niet lezen. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1377"/>
         <source>GPT has no allocated partitions. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT heeft geen toegewezen partities. 'Read Only Allocated Partitions' valt terug op een volledige diskread.</translation>
+        <translation>GPT heeft geen toegewezen partities. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1381"/>
         <source>GPT partition entries invalid or corrupt. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT-partitievermeldingen zijn ongeldig of beschadigd. 'Read Only Allocated Partitions' valt terug op een volledige diskread.</translation>
+        <translation>GPT-partitievermeldingen zijn ongeldig of beschadigd. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1389"/>
@@ -562,7 +562,7 @@ Zorg ervoor dat geen andere applicatie de kaart gebruikt (Verkenner, antivirussc
     <name>QObject</name>
     <message>
         <location filename="../disk.cpp" line="69"/>
-        <location filename="../disk.cpp" line="849"/>
+        <location filename="../disk.cpp" line="813"/>
         <source>File Error</source>
         <translation>Bestandsfout</translation>
     </message>
@@ -574,95 +574,73 @@ Error %1: %2</source>
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="103"/>
-        <location filename="../disk.cpp" line="824"/>
+        <location filename="../disk.cpp" line="86"/>
+        <location filename="../disk.cpp" line="788"/>
         <source>Device Error</source>
         <translation>Apparaat fout</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="104"/>
+        <location filename="../disk.cpp" line="87"/>
         <source>An error occurred when attempting to get a handle on the device.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het opvragen van de handle van het apparaat.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="85"/>
-        <location filename="../disk.cpp" line="122"/>
-        <source>Volume Error</source>
-        <translatorcomment>wat is de nederlandse vertaling van volume?</translatorcomment>
-        <translation>Volume fout</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="86"/>
-        <source>An error occurred when attempting to get information on volume.
-Error %1: %2</source>
-        <translation>Een fout is opgetreden bij het opvragen van de informatie van het volume.
-Error %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="123"/>
-        <source>An error occurred when attempting to get a handle on the volume.
-Error %1: %2</source>
-        <translatorcomment>wat is de nederlandse vertaling van volume?</translatorcomment>
-        <translation>Een fout is opgetreden bij het opvragen van de handle van het volume.
-Error %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="672"/>
-        <location filename="../disk.cpp" line="710"/>
+        <location filename="../disk.cpp" line="636"/>
+        <location filename="../disk.cpp" line="674"/>
         <source>Read Error</source>
         <translation>Leesfout</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="673"/>
-        <location filename="../disk.cpp" line="736"/>
+        <location filename="../disk.cpp" line="637"/>
+        <location filename="../disk.cpp" line="700"/>
         <source>Seek failed at offset %1.
 Error %2: %3</source>
         <translation>Zoeken mislukt op offset %1.
 Fout %2: %3</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="711"/>
+        <location filename="../disk.cpp" line="675"/>
         <source>An error occurred when attempting to read data from handle.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het lezen van data van de handle.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="735"/>
-        <location filename="../disk.cpp" line="785"/>
+        <location filename="../disk.cpp" line="699"/>
+        <location filename="../disk.cpp" line="749"/>
         <source>Write Error</source>
         <translation>Schrijffout</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="786"/>
+        <location filename="../disk.cpp" line="750"/>
         <source>An error occurred when attempting to write data to handle.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het schrijven van data naar de handle.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="825"/>
+        <location filename="../disk.cpp" line="789"/>
         <source>An error occurred when attempting to get the device&apos;s geometry.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het opvragen van de geometrie van het apparaat.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="850"/>
+        <location filename="../disk.cpp" line="814"/>
         <source>An error occurred while getting the file size.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het opvragen van de bestandsgrootte.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="873"/>
+        <location filename="../disk.cpp" line="837"/>
         <source>Free Space Error</source>
         <translation>Beschikbare ruimte fout</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="874"/>
+        <location filename="../disk.cpp" line="838"/>
         <source>Failed to get the free space on drive %1.
 Error %2: %3
 Checking of free space will be skipped.</source>

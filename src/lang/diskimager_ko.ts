@@ -403,27 +403,27 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <message>
         <location filename="../mainwindow.cpp" line="1353"/>
         <source>GPT header is invalid or unreadable. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT 헤더가 잘못되었거나 읽을 수 없습니다. 'Read Only Allocated Partitions'는 전체 디스크 읽기로 대체됩니다.</translation>
+        <translation>GPT 헤더가 잘못되었거나 읽을 수 없습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1355"/>
         <source>No valid MBR or GPT on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>이 장치에 유효한 MBR 또는 GPT가 없습니다. 'Read Only Allocated Partitions'는 전체 디스크 읽기로 대체됩니다.</translation>
+        <translation>이 장치에 유효한 MBR 또는 GPT가 없습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1365"/>
         <source>Could not read GPT partition entries. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT 파티션 항목을 읽을 수 없습니다. 'Read Only Allocated Partitions'는 전체 디스크 읽기로 대체됩니다.</translation>
+        <translation>GPT 파티션 항목을 읽을 수 없습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1377"/>
         <source>GPT has no allocated partitions. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT에 할당된 파티션이 없습니다. 'Read Only Allocated Partitions'는 전체 디스크 읽기로 대체됩니다.</translation>
+        <translation>GPT에 할당된 파티션이 없습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1381"/>
         <source>GPT partition entries invalid or corrupt. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
-        <translation>GPT 파티션 항목이 잘못되었거나 손상되었습니다. 'Read Only Allocated Partitions'는 전체 디스크 읽기로 대체됩니다.</translation>
+        <translation>GPT 파티션 항목이 잘못되었거나 손상되었습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1389"/>
@@ -565,7 +565,7 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
     <name>QObject</name>
     <message>
         <location filename="../disk.cpp" line="69"/>
-        <location filename="../disk.cpp" line="849"/>
+        <location filename="../disk.cpp" line="813"/>
         <source>File Error</source>
         <translation>파일 오</translation>
     </message>
@@ -577,93 +577,73 @@ Error %1: %2</source>
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="103"/>
-        <location filename="../disk.cpp" line="824"/>
+        <location filename="../disk.cpp" line="86"/>
+        <location filename="../disk.cpp" line="788"/>
         <source>Device Error</source>
         <translation>기기 오류</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="104"/>
+        <location filename="../disk.cpp" line="87"/>
         <source>An error occurred when attempting to get a handle on the device.
 Error %1: %2</source>
         <translation>기기의 핸들을 얻기 시도할 때 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="85"/>
-        <location filename="../disk.cpp" line="122"/>
-        <source>Volume Error</source>
-        <translation>볼륨 오류</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="86"/>
-        <source>An error occurred when attempting to get information on volume.
-Error %1: %2</source>
-        <translation>볼륨 정보를 얻으려고 시도할 때 오류가 발생.
-오류 %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="123"/>
-        <source>An error occurred when attempting to get a handle on the volume.
-Error %1: %2</source>
-        <translation>볼륨에서 핸들을 얻으려고 시도할 때 오류가 발생.
-오류 %1: %2</translation>
-    </message>
-    <message>
-        <location filename="../disk.cpp" line="672"/>
-        <location filename="../disk.cpp" line="710"/>
+        <location filename="../disk.cpp" line="636"/>
+        <location filename="../disk.cpp" line="674"/>
         <source>Read Error</source>
         <translation>읽기 오류</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="673"/>
-        <location filename="../disk.cpp" line="736"/>
+        <location filename="../disk.cpp" line="637"/>
+        <location filename="../disk.cpp" line="700"/>
         <source>Seek failed at offset %1.
 Error %2: %3</source>
         <translation>오프셋 %1에서 탐색 실패.
 오류 %2: %3</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="711"/>
+        <location filename="../disk.cpp" line="675"/>
         <source>An error occurred when attempting to read data from handle.
 Error %1: %2</source>
         <translation>핸들로부터 자료를 읽으려고 시도할 때 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="735"/>
-        <location filename="../disk.cpp" line="785"/>
+        <location filename="../disk.cpp" line="699"/>
+        <location filename="../disk.cpp" line="749"/>
         <source>Write Error</source>
         <translation>쓰기 오류</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="786"/>
+        <location filename="../disk.cpp" line="750"/>
         <source>An error occurred when attempting to write data to handle.
 Error %1: %2</source>
         <translation>핸들로 자료를 쓰려고 할 때 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="825"/>
+        <location filename="../disk.cpp" line="789"/>
         <source>An error occurred when attempting to get the device&apos;s geometry.
 Error %1: %2</source>
         <translation>기기의 지오메트리를 얻으려고 할 때 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="850"/>
+        <location filename="../disk.cpp" line="814"/>
         <source>An error occurred while getting the file size.
 Error %1: %2</source>
         <translation>파일크기를 얻는 동안 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="873"/>
+        <location filename="../disk.cpp" line="837"/>
         <source>Free Space Error</source>
         <translation>저장공간 오류</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="874"/>
+        <location filename="../disk.cpp" line="838"/>
         <source>Failed to get the free space on drive %1.
 Error %2: %3
 Checking of free space will be skipped.</source>
