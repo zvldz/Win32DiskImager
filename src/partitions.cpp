@@ -36,6 +36,20 @@ static uint64_t readLe64(const uint8_t *p)
          | ((uint64_t)readLe32(p + 4) << 32);
 }
 
+static void writeLe32(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v        & 0xFFu);
+    p[1] = (uint8_t)((v >> 8)  & 0xFFu);
+    p[2] = (uint8_t)((v >> 16) & 0xFFu);
+    p[3] = (uint8_t)((v >> 24) & 0xFFu);
+}
+
+static void writeLe64(uint8_t *p, uint64_t v)
+{
+    writeLe32(p,     (uint32_t)(v          & 0xFFFFFFFFULL));
+    writeLe32(p + 4, (uint32_t)((v >> 32) & 0xFFFFFFFFULL));
+}
+
 // Semantic of maxEndingLba returned by both scanners:
 //   one past the last LBA that is part of any allocated partition.
 // I.e. the number of sectors the caller needs to read from offset 0 to
@@ -224,4 +238,74 @@ PartitionScanResult scanGptEntries(const uint8_t *entriesBuf,
         return PartitionScanResult::NoPartitions;
     }
     return PartitionScanResult::Ok;
+}
+
+// Arithmetic shared by normalizeGptPrimaryHeader / buildGptBackupHeader.
+// Given:
+//   maxEndingLba  = sector count of allocated partition data
+//                   (the value scanGptEntries returns — one past the
+//                   last partition data LBA)
+//   entrySectors  = ceil(numEntries * entrySize / sectorSize)
+//                   = number of sectors the backup entries take
+// The truncated image layout is:
+//
+//   LBA 0 .. maxEndingLba - 1                            partition data
+//   LBA maxEndingLba .. maxEndingLba + entrySectors - 1  backup partition entries
+//   LBA maxEndingLba + entrySectors                       backup GPT header
+//
+// So:
+//   backupHeaderLba   = maxEndingLba + entrySectors
+//   backupEntriesLba  = maxEndingLba
+//   lastUsableLba     = maxEndingLba - 1
+//   imageSizeSectors  = maxEndingLba + entrySectors + 1
+//
+// For standard GPT (128 entries × 128 bytes on 512-byte sectors),
+// entrySectors = 32. Pass that value here. For non-standard layouts
+// (4K sectors, custom entry counts) compute it from numEntries /
+// entrySize / sectorSize at the call site.
+
+bool normalizeGptPrimaryHeader(uint8_t *header,
+                               uint64_t maxEndingLba,
+                               uint32_t entrySectors)
+{
+    if (header == nullptr) return false;
+    if (maxEndingLba < 34) return false;   // need room for primary + entries + at least 1 partition data sector
+    if (entrySectors == 0) return false;
+    if (std::memcmp(header, "EFI PART", 8) != 0) return false;
+    const uint32_t headerSize = readLe32(header + 12);
+    if (headerSize < 92 || headerSize > 512) return false;
+
+    const uint64_t backupHeaderLba = maxEndingLba + (uint64_t)entrySectors;
+    writeLe64(header + 32, backupHeaderLba);        // AlternateLBA = backup header LBA
+    writeLe64(header + 48, maxEndingLba - 1ULL);    // LastUsableLBA = last data sector
+    // CRC32 over header with the CRC field zeroed
+    writeLe32(header + 16, 0);
+    const uint32_t crc = (uint32_t)crc32(0L, header, (uInt)headerSize);
+    writeLe32(header + 16, crc);
+    return true;
+}
+
+bool buildGptBackupHeader(uint8_t *backup, const uint8_t *primary,
+                          uint64_t maxEndingLba,
+                          uint32_t entrySectors)
+{
+    if (backup == nullptr || primary == nullptr) return false;
+    if (maxEndingLba < 34) return false;
+    if (entrySectors == 0) return false;
+    if (std::memcmp(primary, "EFI PART", 8) != 0) return false;
+    const uint32_t headerSize = readLe32(primary + 12);
+    if (headerSize < 92 || headerSize > 512) return false;
+
+    const uint64_t backupHeaderLba = maxEndingLba + (uint64_t)entrySectors;
+    std::memcpy(backup, primary, headerSize);
+    // Swap MyLBA / AlternateLBA for the backup copy.
+    writeLe64(backup + 24, backupHeaderLba);        // MyLBA = backup header position
+    writeLe64(backup + 32, 1ULL);                    // AlternateLBA = primary at LBA 1
+    // PartitionEntryLBA points to the backup entries copy at maxEndingLba.
+    writeLe64(backup + 72, maxEndingLba);
+    // CRC32 over header with the CRC field zeroed
+    writeLe32(backup + 16, 0);
+    const uint32_t crc = (uint32_t)crc32(0L, backup, (uInt)headerSize);
+    writeLe32(backup + 16, crc);
+    return true;
 }

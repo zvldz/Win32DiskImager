@@ -102,4 +102,43 @@ uint64_t estimateImageSizeBytes(const uint8_t *bootSectors,
                                 uint64_t available,
                                 uint32_t sectorSize);
 
+// Normalize a GPT primary header in-place so a truncated allocated-
+// only image is self-consistent. `maxEndingLba` = sector count of
+// allocated partition data (output of scanGptEntries); `entrySectors`
+// = ceil(numEntries × entrySize / sectorSize), i.e. how many sectors
+// the backup partition entries occupy. The new image is sized
+// (maxEndingLba + entrySectors + 1) sectors.
+//
+// Modifies in `header`:
+//   AlternateLBA  ← maxEndingLba + entrySectors   (backup header LBA)
+//   LastUsableLBA ← maxEndingLba - 1              (last data LBA)
+//   Header CRC32  ← recomputed
+//
+// Returns false on signature / HeaderSize sanity failures, on
+// entrySectors == 0, or when maxEndingLba < 34. On false the buffer
+// is left untouched.
+bool normalizeGptPrimaryHeader(uint8_t *header,
+                               uint64_t maxEndingLba,
+                               uint32_t entrySectors);
+
+// Build a GPT backup header from a (normalized) primary header.
+// Writes exactly HeaderSize bytes into `backup`; the caller is
+// responsible for placing it inside a sector-sized buffer (zero-
+// padded) and writing it at LBA (maxEndingLba + entrySectors) of
+// the file. `entrySectors` matches the value passed to
+// normalizeGptPrimaryHeader.
+//
+// The backup header has:
+//   MyLBA              ← maxEndingLba + entrySectors
+//   AlternateLBA       ← 1                  (primary header LBA)
+//   PartitionEntryLBA  ← maxEndingLba       (backup entries position)
+//   Header CRC32       ← recomputed
+//
+// All other fields (including PartitionEntryArrayCRC32) are inherited
+// from the primary, since the backup entries are a byte-identical
+// copy of the primary entries.
+bool buildGptBackupHeader(uint8_t *backup, const uint8_t *primary,
+                          uint64_t maxEndingLba,
+                          uint32_t entrySectors);
+
 #endif // PARTITIONS_H

@@ -28,6 +28,8 @@
 #include <QClipboard>
 #include <algorithm>         // std::max for chunk-size clamp
 #include <deque>
+#include <vector>            // std::vector for GPT normalisation buffers
+#include <cstring>           // std::memcpy / std::memset for GPT buffers
 #include <cstdio>
 #include <cstdlib>
 #include <malloc.h>          // _aligned_free (paired with _aligned_malloc in disk.cpp)
@@ -1321,6 +1323,14 @@ void MainWindow::on_bRead_clicked()
         }
         numsectors = getNumberOfSectors(hRawDisk, &sectorsize);
         const unsigned long long chunkSectors = sectorsize ? std::max<unsigned long long>(1ULL, CHUNK_BYTES / sectorsize) : 1ULL;
+        // GPT normalisation state. Stays empty unless we successfully
+        // detected a GPT in the allocated-only branch below; populated
+        // there with the primary header sector + entries bytes +
+        // maxEndingLba so we can append a self-consistent backup GPT
+        // to the truncated image after the main read loop completes.
+        std::vector<uint8_t> gptPrimaryHeader;
+        std::vector<uint8_t> gptEntries;
+        uint64_t gptMaxEndingLba = 0;
         if(partitionCheckBox->isChecked())
         {
             // Try MBR first (sector 0). On a GPT-protective MBR or no
@@ -1373,6 +1383,23 @@ void MainWindow::on_bRead_clicked()
                             maxEndingLba);
                         if (gptRes == PartitionScanResult::Ok) {
                             numsectors = maxEndingLba;
+                            // Capture GPT primary header + entries bytes so the
+                            // post-loop normaliser can build a backup GPT at the
+                            // truncated tail. Re-read sector 1 because we freed
+                            // its buffer earlier; sectorData currently holds the
+                            // entries we just validated.
+                            char *hdrSec = readSectorDataFromHandle(hRawDisk, 1ul, 1ul, sectorsize);
+                            if (hdrSec) {
+                                gptPrimaryHeader.assign(
+                                    reinterpret_cast<const uint8_t *>(hdrSec),
+                                    reinterpret_cast<const uint8_t *>(hdrSec) + (size_t)sectorsize);
+                                _aligned_free(hdrSec);
+                            }
+                            const uint64_t entriesBytes = (uint64_t)numEntries * entrySize;
+                            gptEntries.assign(
+                                reinterpret_cast<const uint8_t *>(sectorData),
+                                reinterpret_cast<const uint8_t *>(sectorData) + (size_t)entriesBytes);
+                            gptMaxEndingLba = maxEndingLba;
                         } else if (gptRes == PartitionScanResult::NoPartitions) {
                             fallbackMsg = tr("GPT has no allocated partitions. "
                                              "'Read Only Allocated Partitions' falls "
@@ -1452,6 +1479,68 @@ void MainWindow::on_bRead_clicked()
             QCoreApplication::processEvents();
         }
         const bool wasCanceled = (status == STATUS_CANCELED);
+
+        // GPT normalisation for allocated-only reads (D-2). Only runs when
+        // partitionCheckBox is on AND scanGptEntries succeeded — guaranteed
+        // by gptPrimaryHeader being non-empty (populated only in that branch).
+        // Skipped on cancel — keeps the partial image as-is rather than
+        // writing an inconsistent backup over corrupt-but-uncancelled data.
+        if (!wasCanceled
+                && !gptPrimaryHeader.empty()
+                && !gptEntries.empty()
+                && gptMaxEndingLba >= 34ULL) {
+            diagLog(QString("Read: normalising GPT — appending backup GPT and patching primary "
+                            "(maxEndingLba=%1, new image sectors=%2)")
+                        .arg(gptMaxEndingLba).arg(gptMaxEndingLba + 33ULL));
+
+            // 1) Backup partition entries at LBA maxEndingLba (32 sectors).
+            const uint64_t entrySectors =
+                (gptEntries.size() + sectorsize - 1) / sectorsize;
+            const size_t entriesPaddedBytes = (size_t)(entrySectors * sectorsize);
+            if (char *bufE = (char *)_aligned_malloc(entriesPaddedBytes, (size_t)sectorsize)) {
+                std::memset(bufE, 0, entriesPaddedBytes);
+                std::memcpy(bufE, gptEntries.data(), gptEntries.size());
+                if (!writeSectorDataToHandle(hFile, bufE, gptMaxEndingLba,
+                                             entrySectors, sectorsize)) {
+                    diagLog("Read: backup-entries write FAILED — image left without backup GPT");
+                }
+                _aligned_free(bufE);
+            }
+
+            // 2) Backup GPT header at LBA maxEndingLba + entrySectors.
+            if (char *bufH = (char *)_aligned_malloc((size_t)sectorsize, (size_t)sectorsize)) {
+                std::memset(bufH, 0, (size_t)sectorsize);
+                if (buildGptBackupHeader(reinterpret_cast<uint8_t *>(bufH),
+                                         gptPrimaryHeader.data(),
+                                         gptMaxEndingLba,
+                                         (uint32_t)entrySectors)) {
+                    if (!writeSectorDataToHandle(hFile, bufH,
+                                                 gptMaxEndingLba + entrySectors,
+                                                 1, sectorsize)) {
+                        diagLog("Read: backup-header write FAILED");
+                    }
+                }
+                _aligned_free(bufH);
+            }
+
+            // 3) Patch the primary header at LBA 1 — overwrite the original
+            //    primary we already wrote during the read loop so AlternateLBA
+            //    and LastUsableLBA match the new truncated image extent.
+            if (char *bufP = (char *)_aligned_malloc((size_t)sectorsize, (size_t)sectorsize)) {
+                std::memset(bufP, 0, (size_t)sectorsize);
+                std::memcpy(bufP, gptPrimaryHeader.data(), gptPrimaryHeader.size());
+                if (normalizeGptPrimaryHeader(reinterpret_cast<uint8_t *>(bufP),
+                                              gptMaxEndingLba,
+                                              (uint32_t)entrySectors)) {
+                    if (!writeSectorDataToHandle(hFile, bufP, 1ULL, 1, sectorsize)) {
+                        diagLog("Read: primary-patch write FAILED — primary still points to original AlternateLBA");
+                    }
+                }
+                _aligned_free(bufP);
+            }
+            diagLog("Read: GPT normalise done");
+        }
+
         diagLog(QString("=== READ END === wasCanceled=%1").arg(wasCanceled));
         cleanupHandlesAndUI();
         progressbar->reset();

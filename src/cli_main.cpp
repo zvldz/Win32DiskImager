@@ -414,7 +414,10 @@ bool readExact(HANDLE handle, char *data, DWORD length)
 // partition-entry array at the LBA the header points to. Both header
 // and entry-array CRC32 are validated per UEFI spec.
 bool getAllocatedReadBytes(HANDLE hDisk, const DiskGeometry &geometry,
-                           uint64_t &bytesToRead, std::string &reason)
+                           uint64_t &bytesToRead, std::string &reason,
+                           std::vector<uint8_t> *outGptPrimary = nullptr,
+                           std::vector<uint8_t> *outGptEntries = nullptr,
+                           uint64_t *outMaxEndingLba = nullptr)
 {
     reason.clear();
     if (geometry.bytesPerSector == 0) {
@@ -493,6 +496,15 @@ bool getAllocatedReadBytes(HANDLE hDisk, const DiskGeometry &geometry,
         if (bytesToRead > geometry.totalBytes) {
             bytesToRead = geometry.totalBytes;
         }
+        // Hand the GPT bytes back to the caller so it can build a
+        // backup GPT at the truncated tail (D-2 normalisation).
+        if (outGptPrimary) *outGptPrimary = std::move(hdr);
+        if (outGptEntries) {
+            const size_t entriesBytesValid = static_cast<size_t>(entriesBytes);
+            outGptEntries->assign(entries.begin(),
+                                  entries.begin() + entriesBytesValid);
+        }
+        if (outMaxEndingLba) *outMaxEndingLba = maxEndingLba;
         return true;
     }
     reason = (gptRes == PartitionScanResult::NoPartitions)
@@ -2172,10 +2184,18 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     }
 
     uint64_t bytesToRead = geometry.totalBytes;
+    // GPT-normalisation state. Stays empty unless allocated-only succeeded
+    // with a GPT (not MBR) — populated by getAllocatedReadBytes and used
+    // after the read loop to append a self-consistent backup GPT.
+    std::vector<uint8_t> gptPrimaryHeader;
+    std::vector<uint8_t> gptEntries;
+    uint64_t gptMaxEndingLba = 0;
     if (allocatedOnly) {
         uint64_t allocatedBytes = 0;
         std::string reason;
-        if (getAllocatedReadBytes(hDisk, geometry, allocatedBytes, reason)) {
+        if (getAllocatedReadBytes(hDisk, geometry, allocatedBytes, reason,
+                                  &gptPrimaryHeader, &gptEntries,
+                                  &gptMaxEndingLba)) {
             bytesToRead = allocatedBytes;
         } else if (!reason.empty()) {
             // Recognised but allocated-only can't be computed — tell
@@ -2245,6 +2265,78 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     }
 
     _aligned_free(buffer);
+
+    // GPT normalisation for allocated-only reads (D-2). Only runs when
+    // allocatedOnly was on AND scanGptEntries succeeded — guaranteed by
+    // gptPrimaryHeader being non-empty (only populated by
+    // getAllocatedReadBytes in the GPT-Ok branch). Skipped on read error
+    // so a partially-written image stays as-is.
+    if (rc == 0
+            && !gptPrimaryHeader.empty()
+            && !gptEntries.empty()
+            && gptMaxEndingLba >= 34ULL) {
+        const uint64_t sectorSize = geometry.bytesPerSector;
+        diagLog("Read: normalising GPT (appending backup, patching primary): maxEndingLba="
+                + std::to_string(gptMaxEndingLba)
+                + ", new image sectors=" + std::to_string(gptMaxEndingLba + 33ULL));
+
+        const uint64_t entrySectors =
+            (gptEntries.size() + sectorSize - 1) / sectorSize;
+        const size_t entriesPaddedBytes =
+            static_cast<size_t>(entrySectors * sectorSize);
+
+        // 1) Backup partition entries at LBA maxEndingLba.
+        if (char *bufE = static_cast<char *>(
+                _aligned_malloc(entriesPaddedBytes, (size_t)sectorSize))) {
+            std::memset(bufE, 0, entriesPaddedBytes);
+            std::memcpy(bufE, gptEntries.data(), gptEntries.size());
+            LARGE_INTEGER off;
+            off.QuadPart = static_cast<LONGLONG>(gptMaxEndingLba * sectorSize);
+            if (!SetFilePointerEx(hImage, off, nullptr, FILE_BEGIN)
+                    || !writeAll(hImage, bufE, static_cast<DWORD>(entriesPaddedBytes))) {
+                diagLog("Read: backup-entries write FAILED");
+            }
+            _aligned_free(bufE);
+        }
+
+        // 2) Backup GPT header at LBA maxEndingLba + entrySectors.
+        if (char *bufH = static_cast<char *>(
+                _aligned_malloc((size_t)sectorSize, (size_t)sectorSize))) {
+            std::memset(bufH, 0, (size_t)sectorSize);
+            if (buildGptBackupHeader(reinterpret_cast<uint8_t *>(bufH),
+                                     gptPrimaryHeader.data(),
+                                     gptMaxEndingLba,
+                                     (uint32_t)entrySectors)) {
+                LARGE_INTEGER off;
+                off.QuadPart = static_cast<LONGLONG>((gptMaxEndingLba + entrySectors) * sectorSize);
+                if (!SetFilePointerEx(hImage, off, nullptr, FILE_BEGIN)
+                        || !writeAll(hImage, bufH, static_cast<DWORD>(sectorSize))) {
+                    diagLog("Read: backup-header write FAILED");
+                }
+            }
+            _aligned_free(bufH);
+        }
+
+        // 3) Patch the primary header at LBA 1.
+        if (char *bufP = static_cast<char *>(
+                _aligned_malloc((size_t)sectorSize, (size_t)sectorSize))) {
+            std::memset(bufP, 0, (size_t)sectorSize);
+            std::memcpy(bufP, gptPrimaryHeader.data(), gptPrimaryHeader.size());
+            if (normalizeGptPrimaryHeader(reinterpret_cast<uint8_t *>(bufP),
+                                          gptMaxEndingLba,
+                                          (uint32_t)entrySectors)) {
+                LARGE_INTEGER off;
+                off.QuadPart = static_cast<LONGLONG>(sectorSize);
+                if (!SetFilePointerEx(hImage, off, nullptr, FILE_BEGIN)
+                        || !writeAll(hImage, bufP, static_cast<DWORD>(sectorSize))) {
+                    diagLog("Read: primary-patch write FAILED");
+                }
+            }
+            _aligned_free(bufP);
+        }
+        diagLog("Read: GPT normalise done");
+    }
+
     FlushFileBuffers(hImage);
     cleanupDiskHandles(volumes, hDisk);
     CloseHandle(hImage);
