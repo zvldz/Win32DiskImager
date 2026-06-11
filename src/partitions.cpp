@@ -137,8 +137,33 @@ uint64_t estimateImageSizeBytes(const uint8_t *bootSectors,
         if (readGptEntryArrayLocation(gptHdr, sectorSize,
                                       entriesLba, numEntries,
                                       entrySize, entriesCrc32)) {
-            // Header validated. AlternateLBA at offset 32-39 is the
-            // sector where the backup GPT lives, i.e. disk_size - 1.
+            // Primary preference: max ending LBA across allocated
+            // partition entries. AlternateLBA in the header points to
+            // the backup GPT, i.e. disk_size - 1 — which equals the
+            // image size only for factory images. For images that were
+            // produced by a Read-allocated-only pass on a card whose
+            // GPT had been rewritten to match physical capacity
+            // (Linux first-boot resize / sgdisk -e / VDS auto-repair),
+            // AlternateLBA over-reports by up to 4x. Partition entries
+            // are not touched by any of those resize paths, so they're
+            // the reliable signal for "where the data ends".
+            const uint64_t entriesByteOffset =
+                entriesLba * (uint64_t)sectorSize;
+            const uint64_t entriesByteSize =
+                (uint64_t)numEntries * (uint64_t)entrySize;
+            if (entriesByteOffset + entriesByteSize <= available) {
+                uint64_t maxEndingLba = 0;
+                PartitionScanResult res = scanGptEntries(
+                    bootSectors + entriesByteOffset, entriesByteSize,
+                    numEntries, entrySize, entriesCrc32, maxEndingLba);
+                if (res == PartitionScanResult::Ok && maxEndingLba > 0) {
+                    return (maxEndingLba + 1ULL) * (uint64_t)sectorSize;
+                }
+            }
+            // Fallback: AlternateLBA = disk_size - 1. Used when the
+            // entries don't fit in the peek buffer or fail CRC32 —
+            // off by at most the size of the backup GPT (~16 KB) for
+            // factory images.
             const uint64_t altLba = readLe64(gptHdr + 32);
             if (altLba > 0) {
                 return (altLba + 1ULL) * (uint64_t)sectorSize;
