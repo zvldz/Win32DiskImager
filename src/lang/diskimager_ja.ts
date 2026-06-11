@@ -222,6 +222,16 @@ Are you sure you want to continue?</source>
         <translation>タスクを待っています。</translation>
     </message>
     <message>
+        <location filename="../mainwindow.cpp" line="328"/>
+        <source>Disk images (*.img *.iso *.gz *.xz *.zst)</source>
+        <translation>ディスクイメージ (*.img *.iso *.gz *.xz *.zst)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="334"/>
+        <source>Compressed images (*.gz *.xz *.zst)</source>
+        <translation>圧縮イメージ (*.gz *.xz *.zst)</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="571"/>
         <source>Exiting now will cancel verifying image.
 Are you sure you want to exit?</source>
@@ -258,19 +268,9 @@ Are you sure you want to cancel?</source>
         <translation>ファイルエラー</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="328"/>
-        <source>Disk images (*.img *.iso *.gz *.xz)</source>
-        <translation>ディスクイメージ (*.img *.iso *.gz *.xz)</translation>
-    </message>
-    <message>
         <location filename="../mainwindow.cpp" line="333"/>
         <source>Raw images (*.img *.iso)</source>
         <translation>非圧縮イメージ (*.img *.iso)</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="334"/>
-        <source>Compressed images (*.gz *.xz)</source>
-        <translation>圧縮イメージ (*.gz *.xz)</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="448"/>
@@ -717,6 +717,26 @@ Checking of free space will be skipped.</source>
 (%3% / %4 of %5).</source>
         <translation>セクタ %1 / %2 で検証に失敗しました
 (%3% / %4 / %5)。</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="92"/>
+        <source>Unable to open zstd image.</source>
+        <translation>zstd イメージを開けません。</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="98"/>
+        <source>Failed to initialize zstd decoder.</source>
+        <translation>zstd デコーダーの初期化に失敗しました。</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="121"/>
+        <source>Failed to read from zstd image.</source>
+        <translation>zstd イメージからの読込みに失敗しました。</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="135"/>
+        <source>zstd decode error: %1</source>
+        <translation>zstd デコードエラー: %1</translation>
     </message>
 </context>
 <context>

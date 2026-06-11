@@ -26,6 +26,7 @@
 #include <vector>
 
 #include <zlib.h>
+#include <zstd.h>
 #include <lzma.h>
 
 #include "iopipeline.h"
@@ -126,16 +127,17 @@ void printUsage()
 {
     std::cout << "Usage:\n";
     std::cout << "  Win32DiskImager-cli.exe list\n";
-    std::cout << "  Win32DiskImager-cli.exe write  --device <N|E:> --image C:\\path\\image.img[.gz|.xz] [--no-verify]\n";
+    std::cout << "  Win32DiskImager-cli.exe write  --device <N|E:> --image C:\\path\\image.img[.gz|.xz|.zst] [--no-verify]\n";
     std::cout << "  Win32DiskImager-cli.exe read   --device <N|E:> --image C:\\path\\backup.img [--bytes N] [--allocated-only]\n";
-    std::cout << "  Win32DiskImager-cli.exe verify --device <N|E:> --image C:\\path\\image.img[.gz|.xz]\n";
+    std::cout << "  Win32DiskImager-cli.exe verify --device <N|E:> --image C:\\path\\image.img[.gz|.xz|.zst]\n";
     std::cout << "  Win32DiskImager-cli.exe check-updates\n";
     std::cout << "\n";
     std::cout << "--device accepts a physical disk number (canonical, e.g. 1) or a drive\n";
     std::cout << "letter (e.g. E:). Use `list` to see available disks. The numeric form\n";
     std::cout << "is required for bare disks with no recognised filesystem / no letter.\n";
     std::cout << "\n";
-    std::cout << "write / verify accept plain .img, gzipped .img.gz and xz-compressed .img.xz.\n";
+    std::cout << "write / verify accept plain .img, gzipped .img.gz, xz-compressed .img.xz,\n";
+    std::cout << "and zstd-compressed .img.zst.\n";
     std::cout << "Format is detected by magic bytes, not file extension.\n";
     std::cout << "\n";
     std::cout << "`write` runs a verify pass afterwards by default; pass --no-verify to skip it.\n";
@@ -1424,6 +1426,124 @@ private:
     std::string err_;
 };
 
+// Plain C++ mirror of GUI ZstdImageReader (src/zstdimagereader.cpp).
+// Streaming decode via ZSTD_DStream. Uncompressed size comes from a
+// peek-and-parse of the decompressed front (GPT primary header or MBR
+// entries) — zstd's frame header has an optional content-size field
+// but real-world SD images don't always set it, so we don't rely on it.
+class ZstdImageSource : public ImageSource {
+public:
+    ~ZstdImageSource() override {
+        if (zds_) ZSTD_freeDStream(zds_);
+        if (fp_) fclose(fp_);
+    }
+    bool open(const std::wstring &path, std::string *err) {
+        FILE *probe = _wfopen(path.c_str(), L"rb");
+        if (!probe) { if (err) *err = "Cannot open zstd image."; return false; }
+        _fseeki64(probe, 0, SEEK_END);
+        compressed_ = (uint64_t)_ftelli64(probe);
+        fclose(probe);
+
+        uncompressed_ = probeZstdSize(path);
+
+        fp_ = _wfopen(path.c_str(), L"rb");
+        if (!fp_) { if (err) *err = "Cannot open zstd image."; return false; }
+
+        zds_ = ZSTD_createDStream();
+        if (!zds_) { if (err) *err = "ZSTD_createDStream failed."; return false; }
+        ZSTD_initDStream(zds_);
+        inBuf_.resize(ZSTD_DStreamInSize());
+        return true;
+    }
+    int64_t read(void *buf, size_t maxBytes) override {
+        if (!fp_ || maxBytes == 0 || eof_) return 0;
+
+        ZSTD_inBuffer  in  = { inBuf_.data(), inSize_, inPos_ };
+        ZSTD_outBuffer out = { buf, maxBytes, 0 };
+
+        while (out.pos < out.size && !eof_) {
+            if (in.pos >= in.size && !feof(fp_)) {
+                size_t n = fread(inBuf_.data(), 1, inBuf_.size(), fp_);
+                if (ferror(fp_)) { err_ = "fread on zstd file failed."; return -1; }
+                in.src  = inBuf_.data();
+                in.size = n;
+                in.pos  = 0;
+                compressedPos_ += n;
+            }
+
+            const size_t beforeOut = out.pos;
+            const size_t beforeIn  = in.pos;
+            const size_t ret = ZSTD_decompressStream(zds_, &out, &in);
+            if (ZSTD_isError(ret)) {
+                err_ = std::string("zstd decode error: ") + ZSTD_getErrorName(ret);
+                return -1;
+            }
+
+            if (ret == 0 && in.pos >= in.size && feof(fp_)) {
+                eof_ = true; break;
+            }
+            if (out.pos == beforeOut && in.pos == beforeIn && feof(fp_)
+                    && in.pos >= in.size) {
+                eof_ = true; break;
+            }
+        }
+
+        inPos_  = in.pos;
+        inSize_ = in.size;
+        return (int64_t)out.pos;
+    }
+    uint64_t uncompressedSize() const override { return uncompressed_; }
+    uint64_t compressedPos()    const override { return compressedPos_; }
+    uint64_t compressedSize()   const override { return compressed_; }
+    std::string errorString()   const override { return err_; }
+private:
+    static uint64_t probeZstdSize(const std::wstring &path) {
+        FILE *fp = _wfopen(path.c_str(), L"rb");
+        if (!fp) return 0;
+        ZSTD_DStream *zds = ZSTD_createDStream();
+        if (!zds) { fclose(fp); return 0; }
+        ZSTD_initDStream(zds);
+
+        constexpr size_t PEEK_BYTES = 17 * 1024;
+        std::vector<uint8_t> outBuf(PEEK_BYTES);
+        std::vector<uint8_t> inBuf(ZSTD_DStreamInSize());
+        ZSTD_inBuffer  in  = { inBuf.data(), 0, 0 };
+        ZSTD_outBuffer out = { outBuf.data(), PEEK_BYTES, 0 };
+        bool fileEof = false;
+        while (out.pos < out.size && !fileEof) {
+            if (in.pos >= in.size) {
+                size_t n = fread(inBuf.data(), 1, inBuf.size(), fp);
+                if (n == 0) {
+                    fileEof = true;
+                } else {
+                    in.size = n;
+                    in.pos  = 0;
+                }
+            }
+            size_t ret = ZSTD_decompressStream(zds, &out, &in);
+            if (ZSTD_isError(ret)) break;
+            if (ret == 0 && fileEof) break;
+        }
+        uint64_t result = 0;
+        if (out.pos > 0) {
+            result = estimateImageSizeBytes(outBuf.data(), (uint64_t)out.pos, 512);
+        }
+        ZSTD_freeDStream(zds);
+        fclose(fp);
+        return result;
+    }
+    FILE         *fp_            = nullptr;
+    ZSTD_DStream *zds_           = nullptr;
+    bool          eof_           = false;
+    std::vector<unsigned char> inBuf_;
+    size_t        inPos_         = 0;
+    size_t        inSize_        = 0;
+    uint64_t      compressed_    = 0;
+    uint64_t      compressedPos_ = 0;
+    uint64_t      uncompressed_  = 0;
+    std::string   err_;
+};
+
 // Sniff first bytes to pick the right reader. Magic bytes beat file extension.
 std::unique_ptr<ImageSource> openImageSource(const std::string &path, std::string *err)
 {
@@ -1436,20 +1556,24 @@ std::unique_ptr<ImageSource> openImageSource(const std::string &path, std::strin
     ReadFile(h, magic, 6, &got, nullptr);
     CloseHandle(h);
 
-    const bool isGz = (got >= 2) && magic[0] == 0x1F && magic[1] == 0x8B;
-    const bool isXz = (got >= 6) && magic[0] == 0xFD && magic[1] == '7'
-                   && magic[2] == 'z' && magic[3] == 'X'
-                   && magic[4] == 'Z' && magic[5] == 0x00;
+    const bool isGz   = (got >= 2) && magic[0] == 0x1F && magic[1] == 0x8B;
+    const bool isXz   = (got >= 6) && magic[0] == 0xFD && magic[1] == '7'
+                     && magic[2] == 'z' && magic[3] == 'X'
+                     && magic[4] == 'Z' && magic[5] == 0x00;
+    const bool isZstd = (got >= 4) && magic[0] == 0x28 && magic[1] == 0xB5
+                     && magic[2] == 0x2F && magic[3] == 0xFD;
 
     std::unique_ptr<ImageSource> s;
-    if (isGz)      s = std::make_unique<GzImageSource>();
-    else if (isXz) s = std::make_unique<XzImageSource>();
-    else           s = std::make_unique<RawImageSource>();
+    if (isGz)        s = std::make_unique<GzImageSource>();
+    else if (isXz)   s = std::make_unique<XzImageSource>();
+    else if (isZstd) s = std::make_unique<ZstdImageSource>();
+    else             s = std::make_unique<RawImageSource>();
 
     bool ok = false;
     if (auto *r = dynamic_cast<RawImageSource *>(s.get())) ok = r->open(w, err);
     else if (auto *g = dynamic_cast<GzImageSource *>(s.get())) ok = g->open(w, err);
     else if (auto *x = dynamic_cast<XzImageSource *>(s.get())) ok = x->open(w, err);
+    else if (auto *z = dynamic_cast<ZstdImageSource *>(s.get())) ok = z->open(w, err);
     return ok ? std::move(s) : nullptr;
 }
 

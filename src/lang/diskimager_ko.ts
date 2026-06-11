@@ -222,6 +222,16 @@ Are you sure you want to continue?</source>
         <translation>작업을 위하여 기다리는 중.</translation>
     </message>
     <message>
+        <location filename="../mainwindow.cpp" line="328"/>
+        <source>Disk images (*.img *.iso *.gz *.xz *.zst)</source>
+        <translation>디스크 이미지 (*.img *.iso *.gz *.xz *.zst)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="334"/>
+        <source>Compressed images (*.gz *.xz *.zst)</source>
+        <translation>압축 이미지 (*.gz *.xz *.zst)</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="571"/>
         <source>Exiting now will cancel verifying image.
 Are you sure you want to exit?</source>
@@ -258,19 +268,9 @@ Are you sure you want to cancel?</source>
         <translation>파일 오류</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="328"/>
-        <source>Disk images (*.img *.iso *.gz *.xz)</source>
-        <translation>디스크 이미지 (*.img *.iso *.gz *.xz)</translation>
-    </message>
-    <message>
         <location filename="../mainwindow.cpp" line="333"/>
         <source>Raw images (*.img *.iso)</source>
         <translation>원본 이미지 (*.img *.iso)</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="334"/>
-        <source>Compressed images (*.gz *.xz)</source>
-        <translation>압축 이미지 (*.gz *.xz)</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="448"/>
@@ -717,6 +717,26 @@ Checking of free space will be skipped.</source>
 (%3% / %4 of %5).</source>
         <translation>%2 중 %1 섹터에서 확인 실패
 (%3% / %4 / %5).</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="92"/>
+        <source>Unable to open zstd image.</source>
+        <translation>zstd 이미지를 열 수 없습니다.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="98"/>
+        <source>Failed to initialize zstd decoder.</source>
+        <translation>zstd 디코더 초기화 실패.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="121"/>
+        <source>Failed to read from zstd image.</source>
+        <translation>zstd 이미지에서 읽기 실패.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="135"/>
+        <source>zstd decode error: %1</source>
+        <translation>zstd 디코딩 오류: %1</translation>
     </message>
 </context>
 <context>

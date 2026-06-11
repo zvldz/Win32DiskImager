@@ -219,6 +219,16 @@ Etes-vous sûr de vouloir continuer?</translation>
         <translation>En attente d&apos;une tâche.</translation>
     </message>
     <message>
+        <location filename="../mainwindow.cpp" line="328"/>
+        <source>Disk images (*.img *.iso *.gz *.xz *.zst)</source>
+        <translation>Images disque (*.img *.iso *.gz *.xz *.zst)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="334"/>
+        <source>Compressed images (*.gz *.xz *.zst)</source>
+        <translation>Images compressées (*.gz *.xz *.zst)</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="571"/>
         <source>Exiting now will cancel verifying image.
 Are you sure you want to exit?</source>
@@ -255,19 +265,9 @@ Are you sure you want to cancel?</source>
         <translation>Erreur de fichier</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="328"/>
-        <source>Disk images (*.img *.iso *.gz *.xz)</source>
-        <translation>Images disque (*.img *.iso *.gz *.xz)</translation>
-    </message>
-    <message>
         <location filename="../mainwindow.cpp" line="333"/>
         <source>Raw images (*.img *.iso)</source>
         <translation>Images brutes (*.img *.iso)</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="334"/>
-        <source>Compressed images (*.gz *.xz)</source>
-        <translation>Images compressées (*.gz *.xz)</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="448"/>
@@ -714,6 +714,26 @@ La vérification de l&apos;espace libre ne sera pas effectuée.</translation>
 (%3% / %4 of %5).</source>
         <translation>Échec de la vérification au secteur %1 sur %2
 (%3% / %4 sur %5).</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="92"/>
+        <source>Unable to open zstd image.</source>
+        <translation>Impossible d'ouvrir l'image zstd.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="98"/>
+        <source>Failed to initialize zstd decoder.</source>
+        <translation>Échec de l'initialisation du décodeur zstd.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="121"/>
+        <source>Failed to read from zstd image.</source>
+        <translation>Échec de la lecture de l'image zstd.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="135"/>
+        <source>zstd decode error: %1</source>
+        <translation>Erreur de décodage zstd : %1</translation>
     </message>
 </context>
 <context>

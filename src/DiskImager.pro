@@ -59,6 +59,7 @@ HEADERS += disk.h\
            rawimagereader.h \
            gzimagereader.h \
            xzimagereader.h \
+           zstdimagereader.h \
            partitions.h \
            updatechecker.h
 
@@ -74,11 +75,12 @@ SOURCES += disk.cpp\
            rawimagereader.cpp \
            gzimagereader.cpp \
            xzimagereader.cpp \
+           zstdimagereader.cpp \
            partitions.cpp \
            updatechecker.cpp
 
-# zlib + liblzma are pulled in for on-the-fly .gz / .xz image decompression.
-LIBS += -lz -llzma
+# zlib + liblzma + libzstd: on-the-fly .gz / .xz / .zst image decompression.
+LIBS += -lz -llzma -lzstd
 
 RESOURCES += gui_icons.qrc translations.qrc
 

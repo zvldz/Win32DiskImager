@@ -140,19 +140,19 @@
         <translation>Очікування завдання.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="328"/>
-        <source>Disk images (*.img *.iso *.gz *.xz)</source>
-        <translation>Образи дисків (*.img *.iso *.gz *.xz)</translation>
-    </message>
-    <message>
         <location filename="../mainwindow.cpp" line="333"/>
         <source>Raw images (*.img *.iso)</source>
         <translation>Образи без стиснення (*.img *.iso)</translation>
     </message>
     <message>
+        <location filename="../mainwindow.cpp" line="328"/>
+        <source>Disk images (*.img *.iso *.gz *.xz *.zst)</source>
+        <translation>Образи дисків (*.img *.iso *.gz *.xz *.zst)</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="334"/>
-        <source>Compressed images (*.gz *.xz)</source>
-        <translation>Стиснені образи (*.gz *.xz)</translation>
+        <source>Compressed images (*.gz *.xz *.zst)</source>
+        <translation>Стиснені образи (*.gz *.xz *.zst)</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="448"/>
@@ -717,6 +717,26 @@ Checking of free space will be skipped.</source>
         <location filename="../xzimagereader.cpp" line="185"/>
         <source>xz decoder error (%1).</source>
         <translation>Помилка декодера xz (%1).</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="92"/>
+        <source>Unable to open zstd image.</source>
+        <translation>Не вдалося відкрити zstd-образ.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="98"/>
+        <source>Failed to initialize zstd decoder.</source>
+        <translation>Не вдалося ініціалізувати декодер zstd.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="121"/>
+        <source>Failed to read from zstd image.</source>
+        <translation>Не вдалося прочитати zstd-образ.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="135"/>
+        <source>zstd decode error: %1</source>
+        <translation>Помилка декодування zstd: %1</translation>
     </message>
 </context>
 <context>

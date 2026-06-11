@@ -140,6 +140,16 @@
         <translation>ஒரு பணி காத்திருக்கிறது.</translation>
     </message>
     <message>
+        <location filename="../mainwindow.cpp" line="328"/>
+        <source>Disk images (*.img *.iso *.gz *.xz *.zst)</source>
+        <translation>வட்டு படிமங்கள் (*.img *.iso *.gz *.xz *.zst)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="334"/>
+        <source>Compressed images (*.gz *.xz *.zst)</source>
+        <translation>அழுத்திய படிமங்கள் (*.gz *.xz *.zst)</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="551"/>
         <location filename="../mainwindow.cpp" line="561"/>
         <location filename="../mainwindow.cpp" line="571"/>
@@ -258,19 +268,9 @@ Are you sure you want to continue?</source>
         <translation>கோப்பு பிழை</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="328"/>
-        <source>Disk images (*.img *.iso *.gz *.xz)</source>
-        <translation>வட்டு படிமங்கள் (*.img *.iso *.gz *.xz)</translation>
-    </message>
-    <message>
         <location filename="../mainwindow.cpp" line="333"/>
         <source>Raw images (*.img *.iso)</source>
         <translation>மூல படிமங்கள் (*.img *.iso)</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="334"/>
-        <source>Compressed images (*.gz *.xz)</source>
-        <translation>அழுத்திய படிமங்கள் (*.gz *.xz)</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="448"/>
@@ -717,6 +717,26 @@ Checking of free space will be skipped.</source>
 (%3% / %4 of %5).</source>
         <translation>%2-இல் %1 துறையில் சரிபார்த்தல் தோல்வி
 (%3% / %4 / %5).</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="92"/>
+        <source>Unable to open zstd image.</source>
+        <translation>zstd படத்தைத் திறக்க முடியவில்லை.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="98"/>
+        <source>Failed to initialize zstd decoder.</source>
+        <translation>zstd டிகோடரைத் தொடங்க முடியவில்லை.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="121"/>
+        <source>Failed to read from zstd image.</source>
+        <translation>zstd படத்திலிருந்து படிக்க முடியவில்லை.</translation>
+    </message>
+    <message>
+        <location filename="../zstdimagereader.cpp" line="135"/>
+        <source>zstd decode error: %1</source>
+        <translation>zstd டிகோடிங் பிழை: %1</translation>
     </message>
 </context>
 <context>

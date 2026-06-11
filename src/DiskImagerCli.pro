@@ -18,6 +18,6 @@ SOURCES += cli_main.cpp \
            partitions.cpp
 RC_FILE = DiskImagerCli.rc
 
-# zlib + liblzma for .gz / .xz image decompression in cmdWrite / cmdVerify.
-# winhttp for the `check-updates` command (GitHub releases API).
-LIBS += -lz -llzma -lwinhttp
+# zlib + liblzma + libzstd for .gz / .xz / .zst image decompression in
+# cmdWrite / cmdVerify. winhttp for the `check-updates` command.
+LIBS += -lz -llzma -lzstd -lwinhttp

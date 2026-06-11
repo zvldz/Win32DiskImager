@@ -2,13 +2,16 @@
 
 ## 2026-XX-XX
 
-### Version 2.3.2
+### Version 2.4.0
+
+#### Image formats
+- **`.zst` (zstd) compression support** — write and verify directly from a zstd-compressed image. Adopted by Armbian, NixOS SD images, and Arch ARM, and increasingly common across the Linux-board world for its ~15× faster decode than `.xz` at near-identical compression. Magic-byte detected like `.gz` / `.xz`, no extension required. Progress + ETA derive from a GPT/MBR peek of the decompressed stream front (falls back to compressed-bytes pacing for raw images without a partition table). Both GUI and CLI.
 
 #### GUI
 - Read / Write / Verify buttons stay disabled while an operation is in progress. Previously editing the Image File field (or picking another history entry) re-enabled them mid-operation.
 
 #### Reliability
-- Write, Read, and standalone Verify reliably on cards Windows had recently mounted (multiple FAT layouts from OpenHD / Raspberry Pi OS / radxa images, anything with Windows-recognisable partitions). Previously such operations failed mid-write with "Access Denied" or "Device not ready" on Windows 11 25H2+, or finished but failed Verify. The fix combines exclusive disk-share access, deferred first-buffer write, and a `diskpart`-mediated settling step — same approach Etcher and the older Raspberry Pi Imager (1.9.x) use, while the current Raspberry Pi Imager mainline still has this open as upstream issue #1489.
+- Write, Read, and Verify now work reliably on cards Windows had previously mounted — multi-FAT layouts from OpenHD / Raspberry Pi OS / radxa images, or anything with Windows-recognisable partitions. These operations could previously fail with "Access Denied" or "Device not ready" mid-write, or finish but fail Verify, on Windows 11 25H2+. Cards that Windows hasn't touched (fresh radxa / bare cards without a recognised filesystem) keep the fast path.
 - **`.gz` images ≥ 4 GB now write the full image** instead of silently stopping at 2 GB / 0 bytes. The gzip trailer carries the uncompressed size mod 2^32, and we were trusting it — so a 6 GB radxa Debian image (ISIZE wraps to 2 GB) finished Write + Verify in seconds but Linux refused to boot because the rootfs tail was missing. Now `.gz` is always streamed to EOF (same approach Balena Etcher / Pi Imager take). Progress switches to compressed-bytes percentage for `.gz`; `.xz` is unaffected — its 64-bit stream index is reliable for any size.
 
 #### Read Only Allocated Partitions

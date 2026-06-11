@@ -325,13 +325,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 
     // Qt's QFileDialog is case-insensitive on Windows, so one pattern per
     // extension is enough — no need for *.img *.IMG etc.
-    const QString defaultFilter = tr("Disk images (*.img *.iso *.gz *.xz)");
+    const QString defaultFilter = tr("Disk images (*.img *.iso *.gz *.xz *.zst)");
     if (myFileType.isEmpty()) {
         myFileType = defaultFilter;
     }
     myFileTypeList << defaultFilter
                    << tr("Raw images (*.img *.iso)")
-                   << tr("Compressed images (*.gz *.xz)")
+                   << tr("Compressed images (*.gz *.xz *.zst)")
                    << "*.*";
 }
 
