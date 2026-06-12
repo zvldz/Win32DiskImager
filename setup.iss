@@ -61,28 +61,59 @@ Name: "{group}\{cm:ProgramOnTheWeb,{#MyAppName}}"; Filename: "{#MyAppURL}"
 Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-; Append {app} to the system PATH when the user opts in. The value is written
-; to the machine-wide environment so new shells pick it up; ChangesEnvironment
+; Append {app} to the system PATH when the user opts in. BuildCleanPathPlus
+; rebuilds the machine PATH dropping any prior occurrences of {app} (older
+; releases used a substring check that mis-fired on REG_EXPAND_SZ Path values
+; with unexpanded %ProgramFiles%, accreting dozens of duplicate entries
+; across reinstalls), then appends a single trailing copy. ChangesEnvironment
 ; above causes Inno Setup to broadcast WM_SETTINGCHANGE on completion.
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
-    ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; \
-    Tasks: addclitopath; Check: NeedsAddPath('{app}')
+    ValueType: expandsz; ValueName: "Path"; ValueData: "{code:BuildCleanPathPlus|{app}}"; \
+    Tasks: addclitopath
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [Code]
-function NeedsAddPath(Param: string): boolean;
+// Read the current machine PATH, drop empty segments and every case-insensitive
+// match of `Param` (with whitespace trimmed), then append a single `Param` at
+// the end. Idempotent across reinstalls.
+function BuildCleanPathPlus(Param: string): string;
 var
-  OrigPath: string;
+  OrigPath, Segment, Joined, NeedleLower: string;
+  i: Integer;
 begin
   if not RegQueryStringValue(HKEY_LOCAL_MACHINE,
     'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
     'Path', OrigPath)
   then begin
-    Result := True;
+    Result := Param;
     exit;
   end;
-  // case-insensitive substring match, surrounded by ';' to avoid false hits
-  Result := Pos(';' + Lowercase(Param) + ';', ';' + Lowercase(OrigPath) + ';') = 0;
+
+  NeedleLower := Lowercase(Trim(Param));
+  Joined := '';
+
+  // Manual split on ';' — Inno Pascal has no string.Split.
+  while Length(OrigPath) > 0 do begin
+    i := Pos(';', OrigPath);
+    if i = 0 then begin
+      Segment := OrigPath;
+      OrigPath := '';
+    end else begin
+      Segment := Copy(OrigPath, 1, i - 1);
+      OrigPath := Copy(OrigPath, i + 1, Length(OrigPath));
+    end;
+    if (Length(Trim(Segment)) > 0)
+       and (Lowercase(Trim(Segment)) <> NeedleLower)
+    then begin
+      if Length(Joined) > 0 then Joined := Joined + ';';
+      Joined := Joined + Segment;
+    end;
+  end;
+
+  if Length(Joined) > 0 then
+    Result := Joined + ';' + Param
+  else
+    Result := Param;
 end;

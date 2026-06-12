@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Version 2.4.1
+
+#### Installer
+- Installer no longer appends a duplicate `C:\Program Files\Win32DiskImager` entry to the system `PATH` on each reinstall, and cleans up duplicates left by earlier 2.x installers.
+
 ## 2026-06-12
 
 ### Version 2.4.0
