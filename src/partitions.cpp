@@ -301,6 +301,12 @@ bool buildGptBackupHeader(uint8_t *backup, const uint8_t *primary,
     // Swap MyLBA / AlternateLBA for the backup copy.
     writeLe64(backup + 24, backupHeaderLba);        // MyLBA = backup header position
     writeLe64(backup + 32, 1ULL);                    // AlternateLBA = primary at LBA 1
+    // LastUsableLBA must match the primary's normalized value — backup
+    // is built independently of normalizeGptPrimaryHeader (caller may
+    // pass an un-normalized primary), so update it here too. Per UEFI
+    // spec, primary and backup share all fields except MyLBA /
+    // AlternateLBA / CRC32.
+    writeLe64(backup + 48, maxEndingLba - 1ULL);
     // PartitionEntryLBA points to the backup entries copy at maxEndingLba.
     writeLe64(backup + 72, maxEndingLba);
     // CRC32 over header with the CRC field zeroed
