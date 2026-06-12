@@ -3,8 +3,8 @@
 The released GUI binary (`Win32DiskImager.exe`) is built with a **static**
 Qt 6 toolchain, so the components listed below are linked into the exe and
 are redistributed together with this project. The CLI binary
-(`Win32DiskImager-cli.exe`) does not link Qt, but uses zlib and liblzma for
-`.gz` / `.xz` decompression.
+(`Win32DiskImager-cli.exe`) does not link Qt, but uses zlib, liblzma and
+libzstd for `.gz` / `.xz` / `.zst` decompression.
 
 Direct dependencies used by the application:
 
@@ -13,12 +13,13 @@ Direct dependencies used by the application:
 | Qt 6         | LGPL-2.1 (see `LGPL-2.1`)           | https://www.qt.io/         |
 | zlib         | zlib license (permissive)           | https://zlib.net/          |
 | xz / liblzma | Public domain + BSD-style (parts)   | https://tukaani.org/xz/    |
+| zstd         | BSD-3-Clause (or GPL-2.0 at option) | https://github.com/facebook/zstd |
 
 Libraries brought in transitively by static Qt at link time (each under its
 own open-source license — mostly permissive, a few LGPL; see each project
 for details):
 
-libtiff, libjpeg-turbo, libpng, libwebp, libdeflate, jbigkit, lerc, zstd,
+libtiff, libjpeg-turbo, libpng, libwebp, libdeflate, jbigkit, lerc,
 bzip2, brotli, libb2, OpenSSL, PCRE2, glib2, graphite2, HarfBuzz, FreeType,
 double-conversion, md4c.
 
@@ -50,6 +51,9 @@ static Qt `bin` directory (see `compile-gui-static.bat`).
   canonical source and license text at https://zlib.net/.
 * **xz-utils** — parts by Lasse Collin and contributors, most of the code
   is public domain; see the xz-utils source tree for the full breakdown.
+* **zstd** — "Copyright (c) Meta Platforms, Inc. and affiliates"; dual-
+  licensed under BSD-3-Clause / GPL-2.0, canonical source at
+  https://github.com/facebook/zstd.
 
 ## Project provenance
 
