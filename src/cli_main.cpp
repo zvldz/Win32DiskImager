@@ -415,6 +415,7 @@ bool readExact(HANDLE handle, char *data, DWORD length)
 // and entry-array CRC32 are validated per UEFI spec.
 bool getAllocatedReadBytes(HANDLE hDisk, const DiskGeometry &geometry,
                            uint64_t &bytesToRead, std::string &reason,
+                           std::vector<uint8_t> *outProtectiveMbr = nullptr,
                            std::vector<uint8_t> *outGptPrimary = nullptr,
                            std::vector<uint8_t> *outGptEntries = nullptr,
                            uint64_t *outMaxEndingLba = nullptr)
@@ -496,8 +497,11 @@ bool getAllocatedReadBytes(HANDLE hDisk, const DiskGeometry &geometry,
         if (bytesToRead > geometry.totalBytes) {
             bytesToRead = geometry.totalBytes;
         }
-        // Hand the GPT bytes back to the caller so it can build a
-        // backup GPT at the truncated tail (D-2 normalisation).
+        // Hand the protective MBR + GPT bytes back to the caller so it
+        // can build a backup GPT at the truncated tail and patch the
+        // MBR's 0xEE size (D-2 normalisation). sector0 was already read
+        // at the top of this function.
+        if (outProtectiveMbr) *outProtectiveMbr = std::move(sector0);
         if (outGptPrimary) *outGptPrimary = std::move(hdr);
         if (outGptEntries) {
             const size_t entriesBytesValid = static_cast<size_t>(entriesBytes);
@@ -2186,7 +2190,9 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
     uint64_t bytesToRead = geometry.totalBytes;
     // GPT-normalisation state. Stays empty unless allocated-only succeeded
     // with a GPT (not MBR) — populated by getAllocatedReadBytes and used
-    // after the read loop to append a self-consistent backup GPT.
+    // after the read loop to append a self-consistent backup GPT and
+    // patch the protective MBR's 0xEE entry size.
+    std::vector<uint8_t> gptProtectiveMbr;
     std::vector<uint8_t> gptPrimaryHeader;
     std::vector<uint8_t> gptEntries;
     uint64_t gptMaxEndingLba = 0;
@@ -2194,8 +2200,8 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
         uint64_t allocatedBytes = 0;
         std::string reason;
         if (getAllocatedReadBytes(hDisk, geometry, allocatedBytes, reason,
-                                  &gptPrimaryHeader, &gptEntries,
-                                  &gptMaxEndingLba)) {
+                                  &gptProtectiveMbr, &gptPrimaryHeader,
+                                  &gptEntries, &gptMaxEndingLba)) {
             bytesToRead = allocatedBytes;
         } else if (!reason.empty()) {
             // Recognised but allocated-only can't be computed — tell
@@ -2333,6 +2339,26 @@ int cmdRead(const std::string &imagePath, const std::string &device, uint64_t re
                 }
             }
             _aligned_free(bufP);
+        }
+
+        // 4) Patch the protective MBR at LBA 0.
+        if (!gptProtectiveMbr.empty()) {
+            if (char *bufM = static_cast<char *>(
+                    _aligned_malloc((size_t)sectorSize, (size_t)sectorSize))) {
+                std::memset(bufM, 0, (size_t)sectorSize);
+                std::memcpy(bufM, gptProtectiveMbr.data(), gptProtectiveMbr.size());
+                const uint64_t imageSizeSectors =
+                    gptMaxEndingLba + (uint64_t)entrySectors + 1ULL;
+                if (normalizeProtectiveMbr(reinterpret_cast<uint8_t *>(bufM),
+                                           imageSizeSectors)) {
+                    LARGE_INTEGER off = {};
+                    if (!SetFilePointerEx(hImage, off, nullptr, FILE_BEGIN)
+                            || !writeAll(hImage, bufM, static_cast<DWORD>(sectorSize))) {
+                        diagLog("Read: protective-MBR patch write FAILED");
+                    }
+                }
+                _aligned_free(bufM);
+            }
         }
         diagLog("Read: GPT normalise done");
     }

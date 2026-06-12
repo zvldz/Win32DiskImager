@@ -1325,9 +1325,12 @@ void MainWindow::on_bRead_clicked()
         const unsigned long long chunkSectors = sectorsize ? std::max<unsigned long long>(1ULL, CHUNK_BYTES / sectorsize) : 1ULL;
         // GPT normalisation state. Stays empty unless we successfully
         // detected a GPT in the allocated-only branch below; populated
-        // there with the primary header sector + entries bytes +
-        // maxEndingLba so we can append a self-consistent backup GPT
-        // to the truncated image after the main read loop completes.
+        // there with the protective MBR sector + primary header sector
+        // + entries bytes + maxEndingLba so we can append a self-
+        // consistent backup GPT to the truncated image after the main
+        // read loop completes (and update the protective MBR's
+        // 0xEE-entry size field to match the new image extent).
+        std::vector<uint8_t> gptProtectiveMbr;
         std::vector<uint8_t> gptPrimaryHeader;
         std::vector<uint8_t> gptEntries;
         uint64_t gptMaxEndingLba = 0;
@@ -1383,11 +1386,20 @@ void MainWindow::on_bRead_clicked()
                             maxEndingLba);
                         if (gptRes == PartitionScanResult::Ok) {
                             numsectors = maxEndingLba;
-                            // Capture GPT primary header + entries bytes so the
-                            // post-loop normaliser can build a backup GPT at the
-                            // truncated tail. Re-read sector 1 because we freed
-                            // its buffer earlier; sectorData currently holds the
-                            // entries we just validated.
+                            // Capture protective MBR + GPT primary header +
+                            // entries bytes so the post-loop normaliser can
+                            // build a backup GPT at the truncated tail and
+                            // patch the MBR's 0xEE entry size. Re-read sector 0
+                            // and sector 1 because we freed both earlier;
+                            // sectorData currently holds the entries we just
+                            // validated.
+                            char *mbrSec = readSectorDataFromHandle(hRawDisk, 0ul, 1ul, sectorsize);
+                            if (mbrSec) {
+                                gptProtectiveMbr.assign(
+                                    reinterpret_cast<const uint8_t *>(mbrSec),
+                                    reinterpret_cast<const uint8_t *>(mbrSec) + (size_t)sectorsize);
+                                _aligned_free(mbrSec);
+                            }
                             char *hdrSec = readSectorDataFromHandle(hRawDisk, 1ul, 1ul, sectorsize);
                             if (hdrSec) {
                                 gptPrimaryHeader.assign(
@@ -1537,6 +1549,25 @@ void MainWindow::on_bRead_clicked()
                     }
                 }
                 _aligned_free(bufP);
+            }
+
+            // 4) Patch the protective MBR at LBA 0 — update the 0xEE entry's
+            //    SizeInLBA field to match the new image extent. Otherwise
+            //    gdisk / parted complain about "oversized 0xEE partition".
+            if (!gptProtectiveMbr.empty()) {
+                if (char *bufM = (char *)_aligned_malloc((size_t)sectorsize, (size_t)sectorsize)) {
+                    std::memset(bufM, 0, (size_t)sectorsize);
+                    std::memcpy(bufM, gptProtectiveMbr.data(), gptProtectiveMbr.size());
+                    const uint64_t imageSizeSectors =
+                        gptMaxEndingLba + (uint64_t)entrySectors + 1ULL;
+                    if (normalizeProtectiveMbr(reinterpret_cast<uint8_t *>(bufM),
+                                               imageSizeSectors)) {
+                        if (!writeSectorDataToHandle(hFile, bufM, 0ULL, 1, sectorsize)) {
+                            diagLog("Read: protective-MBR patch write FAILED");
+                        }
+                    }
+                    _aligned_free(bufM);
+                }
             }
             diagLog("Read: GPT normalise done");
         }

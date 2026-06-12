@@ -141,4 +141,18 @@ bool buildGptBackupHeader(uint8_t *backup, const uint8_t *primary,
                           uint64_t maxEndingLba,
                           uint32_t entrySectors);
 
+// Update the protective MBR's 0xEE partition entry size field to match
+// the new truncated image extent. Without this, tools that read the
+// legacy MBR (gdisk's "protective MBR's 0xEE partition is oversized"
+// warning, etc.) see the original disk's sector count.
+//
+// `sector0` is the 512-byte MBR sector. `imageSizeSectors` is the new
+// total sector count of the image. Only the SizeInLBA field of the
+// first 0xEE-type entry (slots 0-3) is changed; everything else
+// (boot code, other entries, signature) is left untouched.
+//
+// Returns false if the MBR signature is missing or no 0xEE entry was
+// found. On false the buffer is left untouched.
+bool normalizeProtectiveMbr(uint8_t *sector0, uint64_t imageSizeSectors);
+
 #endif // PARTITIONS_H
