@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-XX-XX
+## 2026-06-12
 
 ### Version 2.4.0
 
