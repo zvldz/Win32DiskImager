@@ -152,15 +152,35 @@ void releaseVolumeLocks(QList<HANDLE> &volumes);
 // kernel time to release the disk after the prep IOCTLs on
 // Win11 25H2+. Worst-case wait ≈ 32 s.
 //
-// Share mode is FILE_SHARE_READ | FILE_SHARE_WRITE always — matches
-// RPi Imager (OpenInternal at file_operations_windows.cpp:740) and
-// allows other readers (Explorer probes, antivirus) to coexist
-// without blocking the open.
+// Share mode is tried exclusive first (FILE_SHARE_READ only, the
+// OpenHD-ImageWriter pattern) so no other process can open the disk
+// for writing while we own it. Only on ERROR_SHARING_VIOLATION does
+// it relax to FILE_SHARE_READ | FILE_SHARE_WRITE — that fallback is
+// logged as a mountmgr race risk, since a permissive share lets
+// Explorer probes and antivirus write alongside us.
 //
 // Returns INVALID_HANDLE_VALUE on permanent failure. No UI dialog —
 // caller surfaces the error in the context-appropriate way
 // (Write vs chained Verify vs Read).
 HANDLE openPhysicalDiskForWrite(int diskNumber);
+
+// Whole-disk FSCTL_LOCK_VOLUME on an open \\.\PhysicalDriveN handle,
+// with 8 x geometric backoff from 100 ms. This is the only thing that
+// stops mountmgr from building volume objects for the partitions we
+// write: the handle's share mode does not, because volumes are
+// mounted through the volume stack rather than through our handle.
+//
+// Matters most at the very end of Write, when the delayed first
+// buffer commits a valid partition table — without the lock Windows
+// mounts the fresh partitions right there, and a chained Verify then
+// reads a disk that Explorer / indexer / antivirus are already
+// touching. The lock is inherited by the chained Verify and released
+// implicitly when the caller closes the handle.
+//
+// Best-effort: some Windows builds reject the IOCTL on physical-disk
+// handles (ERROR_INVALID_FUNCTION). Returns true if the lock was
+// taken; the caller proceeds either way.
+bool lockWholeDisk(HANDLE hDisk);
 
 // Enumerates \\.\PhysicalDrive0..31, filters to writable removable / USB /
 // SD / MMC targets (system SATA / NVMe disks rejected), and maps each disk

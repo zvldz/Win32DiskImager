@@ -651,6 +651,50 @@ bool lockVolumeBackoff(HANDLE handle, DWORD *outLastErr)
     return false;
 }
 
+// CLI mirror of disk.cpp's lockWholeDisk. Whole-disk FSCTL_LOCK_VOLUME
+// on an open \\.\PhysicalDriveN handle. The handle's share mode alone
+// does not keep Windows out: mountmgr builds volume objects through
+// the volume stack, not through our handle. Without this lock the
+// partitions become mountable the moment the delayed first buffer
+// commits a valid partition table at the end of Write, and a chained
+// verify then reads a disk Windows has already started touching.
+//
+// Shorter backoff than lockVolumeBackoff (5 attempts from 100 ms): the
+// prep pipeline has already settled the disk, so a lock that isn't
+// available almost immediately won't come free by waiting. Best-effort
+// — released implicitly when the caller closes the handle.
+bool lockWholeDisk(HANDLE hDisk)
+{
+    if (hDisk == INVALID_HANDLE_VALUE) return false;
+
+    DWORD junk = 0;
+    DWORD lastErr = 0;
+    int delayMs = 100;
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        if (DeviceIoControl(hDisk, FSCTL_LOCK_VOLUME,
+                            NULL, 0, NULL, 0, &junk, NULL)) {
+            std::ostringstream os;
+            os << "lockWholeDisk OK (attempt " << attempt << ")";
+            diagLog(os.str());
+            return true;
+        }
+        lastErr = GetLastError();
+        // ERROR_INVALID_FUNCTION: this Windows build doesn't honour
+        // LOCK_VOLUME on physical-disk handles. Retrying can't help.
+        if (lastErr == ERROR_INVALID_FUNCTION) {
+            diagLog("lockWholeDisk: not supported on this handle (err=1), continuing unlocked");
+            return false;
+        }
+        if (attempt < 4) Sleep(delayMs);
+        delayMs *= 2;
+    }
+
+    std::ostringstream os;
+    os << "lockWholeDisk FAIL err=" << lastErr << " after 5 attempts, continuing unlocked";
+    diagLog(os.str());
+    return false;
+}
+
 // Releases lock + closes every handle in `volumes` and clears it. Idempotent
 // on an already-empty list.
 void closeAllVolumes(std::vector<HANDLE> &volumes)
@@ -817,6 +861,12 @@ bool prepareDiskForRawWrite(DWORD diskNumber,
                      "and try again." << std::endl;
         return false;
     }
+
+    // Lock the whole disk so mountmgr can't mount the partitions once
+    // the delayed first buffer restores a valid partition table at the
+    // end of the write. The lock rides along into a chained verify and
+    // is released when cleanupDiskHandles closes hDisk.
+    lockWholeDisk(hDisk);
 
     if (!getDiskGeometry(hDisk, geometry)) {
         printWinError(L"Failed to get disk geometry.", GetLastError());
@@ -1890,12 +1940,17 @@ int cmdList()
     return 0;
 }
 
-// Carries the still-OPEN disk handle + per-volume lock handles from
-// cmdWrite into a chained cmdVerify so the FSCTL_LOCK_VOLUME stays
-// held continuously across the transition. Etcher and RPi Imager
-// both reuse the write handle for the verify read pass — closing and
-// reopening lets Windows' mountmgr grab the disk and fastfat.sys
-// attach to the FAT partition we just wrote, racing the verify reads.
+// Carries the still-OPEN disk handle from cmdWrite into a chained
+// cmdVerify so its whole-disk FSCTL_LOCK_VOLUME stays held across the
+// transition. Etcher and RPi Imager both reuse the write handle for
+// the verify read pass — closing and reopening drops the lock, and
+// mountmgr then mounts the partition table the first buffer just
+// committed, with fastfat.sys attaching to the FAT partition we wrote
+// and racing the verify reads.
+//
+// `volumes` stays empty on the Write path (letters are stripped rather
+// than locked); it exists for the Read / standalone-Verify pipeline,
+// which holds per-volume locks instead.
 struct ChainHandoff {
     std::vector<HANDLE> volumes;
     HANDLE hDisk = INVALID_HANDLE_VALUE;
@@ -2114,11 +2169,12 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
 
     FlushFileBuffers(hDisk);
     if (rc == 0 && keepOut) {
-        // Hand the still-OPEN, still-LOCKED hDisk + volumes to the
-        // chained verify. Keeping the handle alive means the whole-
-        // disk FSCTL_LOCK_VOLUME stays held across the transition,
-        // preventing mountmgr from grabbing the disk between Write
-        // and Verify (Etcher / RPi Imager pattern).
+        // Hand the still-OPEN, still-LOCKED hDisk to the chained
+        // verify (`volumes` is empty here — see ChainHandoff). Keeping
+        // the handle alive means the whole-disk FSCTL_LOCK_VOLUME taken
+        // in prepareDiskForRawWrite stays held across the transition,
+        // so mountmgr can't mount the partition table the first buffer
+        // just committed (Etcher / RPi Imager pattern).
         keepOut->volumes = std::move(volumes);
         keepOut->hDisk = hDisk;
         hDisk = INVALID_HANDLE_VALUE;   // ownership transferred
@@ -2743,9 +2799,9 @@ int main(int argc, char *argv[])
         const auto totalStart = std::chrono::steady_clock::now();
         ChainHandoff handoff;
         // When auto-verify is scheduled, ask cmdWrite to hand the still-
-        // OPEN disk handle plus locked volumes straight to cmdVerify —
-        // the FSCTL_LOCK_VOLUME on hDisk stays held continuously so
-        // mountmgr / fastfat.sys never gets a foothold in the gap.
+        // OPEN disk handle straight to cmdVerify — the whole-disk
+        // FSCTL_LOCK_VOLUME stays held continuously so mountmgr /
+        // fastfat.sys never gets a foothold in the gap.
         const int wrc = cmdWrite(opt.image, opt.device,
                                  opt.noVerify ? nullptr : &handoff);
         if (wrc != 0 || opt.noVerify) return wrc;

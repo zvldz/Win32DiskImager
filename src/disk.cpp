@@ -617,6 +617,40 @@ HANDLE openPhysicalDiskForWrite(int diskNumber)
     return INVALID_HANDLE_VALUE;
 }
 
+bool lockWholeDisk(HANDLE hDisk)
+{
+    if (hDisk == INVALID_HANDLE_VALUE) return false;
+
+    // Shorter backoff than lockVolumeBackoff (5 attempts from 100 ms,
+    // ~1.5 s worst case): by the time we get here the prep pipeline has
+    // already stripped letters and settled the disk, so a lock that
+    // isn't available almost immediately won't become available by
+    // waiting — and this cost lands on top of an already slow prep.
+    DWORD junk = 0;
+    DWORD lastErr = 0;
+    int delayMs = 100;
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        if (DeviceIoControl(hDisk, FSCTL_LOCK_VOLUME,
+                            NULL, 0, NULL, 0, &junk, NULL)) {
+            diagLog(QString("lockWholeDisk OK (attempt %1)").arg(attempt));
+            return true;
+        }
+        lastErr = GetLastError();
+        // ERROR_INVALID_FUNCTION: this Windows build doesn't honour
+        // LOCK_VOLUME on physical-disk handles. Retrying can't help.
+        if (lastErr == ERROR_INVALID_FUNCTION) {
+            diagLog("lockWholeDisk: not supported on this handle (err=1), continuing unlocked");
+            return false;
+        }
+        if (attempt < 4) Sleep(delayMs);
+        delayMs *= 2;
+    }
+
+    diagLog(QString("lockWholeDisk FAIL err=%1 after 5 attempts, continuing unlocked")
+                .arg(lastErr));
+    return false;
+}
+
 // Sector-aligned buffer: FILE_FLAG_NO_BUFFERING on the device/file handle
 // requires both the buffer address and transfer size to be a multiple of the
 // sector size. Freeing must go through _aligned_free (see callers).

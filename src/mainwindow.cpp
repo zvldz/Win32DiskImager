@@ -826,6 +826,18 @@ void MainWindow::on_bWrite_clicked()
             }
             diagLog("Write: hRawDisk opened R/W");
 
+            // 4) Lock the whole disk. The exclusive share mode from step 3
+            //    only stops other processes opening \\.\PhysicalDriveN —
+            //    it does not stop mountmgr, which builds volume objects
+            //    through the volume stack. Without this lock Windows
+            //    mounts the partitions the moment the delayed first
+            //    buffer commits a valid partition table at the end of the
+            //    write, and a chained Verify then reads a disk that
+            //    Explorer / the indexer / antivirus have already started
+            //    touching. Best-effort — released implicitly on
+            //    CloseHandle(hRawDisk).
+            lockWholeDisk(hRawDisk);
+
             hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->currentText().utf16()), GENERIC_READ);
             if (hFile == INVALID_HANDLE_VALUE)
             {
@@ -1161,23 +1173,28 @@ void MainWindow::on_bWrite_clicked()
             }
 
             // If auto-verify is about to run, hand the still-OPEN handle
-            // (whole-disk FSCTL_LOCK_VOLUME still held) plus the locked
-            // per-volume handles straight over to Verify. Closing-and-
-            // reopening would give Windows' mountmgr a window to grab
-            // the disk and let fastfat.sys attach to the FAT partition
-            // we just wrote. Both Etcher (FD sharing in source-
-            // destination/file.ts) and RPi Imager (single QFile through
-            // write + _verify) keep the handle alive across this
-            // transition for that exact reason.
+            // straight over to Verify — the whole-disk FSCTL_LOCK_VOLUME
+            // taken in step 4 stays held with it. This matters right
+            // here: the first buffer committed above made the partition
+            // table valid again, so closing-and-reopening would give
+            // mountmgr a window to mount the partitions and let
+            // fastfat.sys attach to the FAT one we just wrote. Both
+            // Etcher (FD sharing in source-destination/file.ts) and RPi
+            // Imager (single QFile through write + _verify) keep the
+            // handle alive across this transition for that exact reason.
+            //
+            // m_volumes is empty on this path — the Write pipeline
+            // strips letters instead of holding per-volume locks, so the
+            // whole-disk lock is the only thing protecting Verify.
             diagLog(QString("Write: main loop done status=%1 writeError=%2")
                         .arg(status).arg(writeError));
             const bool chainingVerify = (status != STATUS_CANCELED)
                                         && cbVerifyAfterWrite->isChecked();
             diagLog(QString("Write: chainingVerify=%1").arg(chainingVerify));
             if (chainingVerify) {
-                // hRawDisk + m_volumes stay live; Verify sees them and
-                // reuses both, skipping re-open and re-acquire.
-                diagLog("Write: handing live hRawDisk + m_volumes to chained Verify");
+                // hRawDisk stays live and locked; Verify sees it and
+                // reuses it, skipping re-open and re-acquire.
+                diagLog("Write: handing live locked hRawDisk to chained Verify");
             } else {
                 // Standalone Write success — eject so the user can pull
                 // the card immediately. Under the new pipeline letters
@@ -1656,12 +1673,14 @@ void MainWindow::on_bVerify_clicked()
                 diagLog("Verify: hRawDisk opened R/W");
                 lockVolumesForRawAccess(td, m_volumes);
             } else {
-                // Chained from Write: inherit the still-locked hRawDisk
-                // and m_volumes. Skip the re-open + re-acquire — closing
-                // the handle here would let Windows briefly own the disk
-                // and fastfat.sys would attach to the FAT partition we
-                // just wrote, racing our verify reads.
-                diagLog("Verify: inherited hRawDisk + m_volumes from Write (still locked)");
+                // Chained from Write: inherit hRawDisk with its whole-disk
+                // FSCTL_LOCK_VOLUME still held. Skip the re-open +
+                // re-acquire — closing the handle here would drop the lock
+                // and let Windows own the disk, with fastfat.sys attaching
+                // to the FAT partition we just wrote and racing our verify
+                // reads. m_volumes is empty on this path (Write strips
+                // letters rather than holding per-volume locks).
+                diagLog("Verify: inherited locked hRawDisk from Write");
             }
             hFile = getHandleOnFile(reinterpret_cast<LPCWSTR>(leFile->currentText().utf16()), GENERIC_READ);
             if (hFile == INVALID_HANDLE_VALUE)

@@ -4,6 +4,9 @@
 
 ### Version 2.4.1
 
+#### Reliability
+- The target disk now stays locked for the whole Write → Verify sequence. Windows used to mount the freshly written partitions the moment Write finished committing the partition table — visible as the card popping up in Explorer while Verify was still running — which let the indexer, antivirus, or a filesystem dirty-bit update write to the card mid-verify and produce a spurious verification failure. The whole-disk lock is now taken when the write handle is opened and held until the operation ends. Both GUI and CLI.
+
 #### Installer
 - Installer no longer appends a duplicate `C:\Program Files\Win32DiskImager` entry to the system `PATH` on each reinstall, and cleans up duplicates left by earlier 2.x installers.
 
