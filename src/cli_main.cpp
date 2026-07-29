@@ -1951,9 +1951,27 @@ int cmdList()
 // `volumes` stays empty on the Write path (letters are stripped rather
 // than locked); it exists for the Read / standalone-Verify pipeline,
 // which holds per-volume locks instead.
+// Also carries the image's first chunk, which cmdWrite deliberately
+// leaves unwritten when a verify follows: with no valid partition table
+// on the card, Windows has nothing to mount and can't write to it while
+// cmdVerify reads it back. cmdVerify compares this buffer against the
+// image in memory, then commits and re-reads it once the rest passes.
+// Same ordering as RPi Imager (_verify before _writeComplete writes
+// _firstBlock). Owned by the struct after handoff — _aligned_free'd by
+// releaseHeldChunk().
 struct ChainHandoff {
     std::vector<HANDLE> volumes;
     HANDLE hDisk = INVALID_HANDLE_VALUE;
+    char  *heldFirstChunk = nullptr;
+    size_t heldFirstChunkLen = 0;
+
+    void releaseHeldChunk() {
+        if (heldFirstChunk) {
+            _aligned_free(heldFirstChunk);
+            heldFirstChunk = nullptr;
+        }
+        heldFirstChunkLen = 0;
+    }
 };
 
 // If keepOut is non-null and the write succeeds, ownership of the
@@ -1965,7 +1983,11 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
 {
     diagLog("=== WRITE START === file=" + imagePath + " device=" + device);
     KeepAwake keepAwake;  // suppress idle sleep for the whole operation
-    if (keepOut) { keepOut->volumes.clear(); keepOut->hDisk = INVALID_HANDLE_VALUE; }
+    if (keepOut) {
+        keepOut->volumes.clear();
+        keepOut->hDisk = INVALID_HANDLE_VALUE;
+        keepOut->releaseHeldChunk();
+    }
     std::string srcErr;
     std::unique_ptr<ImageSource> src = openImageSource(imagePath, &srcErr);
     if (!src) {
@@ -2143,10 +2165,28 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
     queue.requestAbort();
     decoderThread.join();
 
-    // Commit the held first chunk to LBA 0 (delayFirstBuffer). Skipped
-    // on error/cancel — card is left without partition table, requires
-    // re-flash. Same trade-off as Etcher/OpenHD.
-    if (rc == 0 && firstChunkBuf) {
+    // The held first chunk goes one of two ways.
+    //
+    // A verify follows (keepOut): hand it over unwritten, so the card
+    // keeps an invalid partition table for the whole verify pass and
+    // Windows can't mount — and write to — it while we read it back.
+    // cmdVerify commits it at the end.
+    //
+    // Standalone write: commit it now, then close the handle right
+    // after, leaving no race window.
+    //
+    // Both skipped on error/cancel — card is left without a partition
+    // table and needs a re-flash, the same trade-off Etcher and RPi
+    // Imager make.
+    if (rc == 0 && firstChunkBuf && keepOut) {
+        keepOut->heldFirstChunk    = firstChunkBuf;
+        keepOut->heldFirstChunkLen = firstChunkBufLen;
+        firstChunkBuf = nullptr;   // ownership moved to the handoff
+        std::ostringstream os;
+        os << "Write: holding first chunk for chained verify (size="
+           << keepOut->heldFirstChunkLen << ") — partition table stays invalid";
+        diagLog(os.str());
+    } else if (rc == 0 && firstChunkBuf) {
         LARGE_INTEGER zero = {};
         if (!SetFilePointerEx(hDisk, zero, nullptr, FILE_BEGIN)) {
             printWinError(L"Failed to seek to LBA 0 for first-chunk commit.",
@@ -2585,6 +2625,64 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
             rc = 1;
             break;
         }
+        // Chained verify, first chunk: the disk doesn't hold it yet —
+        // cmdWrite handed it over unwritten so the partition table stays
+        // invalid for this whole pass. Compare the image against the held
+        // buffer and seek past the range on the device. Mirrors RPi
+        // Imager's _verify, which folds _firstBlock into the hash and
+        // seeks past it instead of reading it back.
+        if (inherited && inherited->heldFirstChunk && processed == 0) {
+            if (c->length == inherited->heldFirstChunkLen) {
+                if (memcmp(c->data, inherited->heldFirstChunk, c->length) != 0) {
+                    std::cerr << "\nImage file changed between write and verify."
+                              << std::endl;
+                    rc = 1;
+                    break;
+                }
+                LARGE_INTEGER skip;
+                skip.QuadPart = (LONGLONG)c->length;
+                if (!SetFilePointerEx(hDisk, skip, nullptr, FILE_BEGIN)) {
+                    printWinError(L"Failed to seek past the held first chunk.",
+                                  GetLastError());
+                    rc = 1;
+                    break;
+                }
+                diagLog("Verify: held first chunk matches the image (compared in memory)");
+                processed += c->length;
+                progress.update(processed);
+                continue;
+            }
+            // The decoder split the stream differently this pass, so the
+            // held buffer and this chunk don't line up. Rather than
+            // realign, commit it now and verify the ordinary way —
+            // correct, just without auto-mount protection for the rest
+            // of the run.
+            {
+                std::ostringstream os;
+                os << "Verify: held chunk size " << inherited->heldFirstChunkLen
+                   << " != verify chunk " << c->length
+                   << ", committing early and verifying from disk";
+                diagLog(os.str());
+            }
+            LARGE_INTEGER zero = {};
+            if (!SetFilePointerEx(hDisk, zero, nullptr, FILE_BEGIN)
+                || !writeAll(hDisk, inherited->heldFirstChunk,
+                             (DWORD)inherited->heldFirstChunkLen)) {
+                printWinError(L"Failed to commit partition table before verification.",
+                              GetLastError());
+                rc = 1;
+                break;
+            }
+            FlushFileBuffers(hDisk);
+            inherited->releaseHeldChunk();
+            if (!SetFilePointerEx(hDisk, zero, nullptr, FILE_BEGIN)) {
+                printWinError(L"Failed to rewind after committing the first chunk.",
+                              GetLastError());
+                rc = 1;
+                break;
+            }
+        }
+
         if (!readExact(hDisk, diskBuf.data(), (DWORD)c->length)) {
             printWinError(L"Failed while reading from physical disk.", GetLastError());
             rc = 1;
@@ -2643,6 +2741,46 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
     }
     queue.requestAbort();
     decoderThread.join();
+
+    // Everything else matched — only now does the partition table go
+    // down, and we read it straight back to confirm it landed. The card
+    // becomes mountable at this point, but the handle closes moments
+    // later, so Windows has no meaningful window to interfere. Left
+    // unwritten when the verify failed: a card that didn't verify must
+    // not be left bootable.
+    if (rc == 0 && inherited && inherited->heldFirstChunk) {
+        const DWORD heldLen = (DWORD)inherited->heldFirstChunkLen;
+        LARGE_INTEGER zero = {};
+        {
+            std::ostringstream os;
+            os << "Verify: committing held first chunk at LBA 0 (size=" << heldLen << ")";
+            diagLog(os.str());
+        }
+        if (!SetFilePointerEx(hDisk, zero, nullptr, FILE_BEGIN)
+            || !writeAll(hDisk, inherited->heldFirstChunk, heldLen)) {
+            printWinError(L"The image verified correctly, but writing the partition "
+                          L"table at the end failed. The card is not bootable.",
+                          GetLastError());
+            rc = 1;
+        } else {
+            FlushFileBuffers(hDisk);
+            if (!SetFilePointerEx(hDisk, zero, nullptr, FILE_BEGIN)
+                || heldLen > diskBuf.size()
+                || !readExact(hDisk, diskBuf.data(), heldLen)) {
+                printWinError(L"Failed to read back the partition table after writing it.",
+                              GetLastError());
+                rc = 1;
+            } else if (memcmp(diskBuf.data(), inherited->heldFirstChunk, heldLen) != 0) {
+                std::cerr << "\nVerify failed at byte 0 (partition table read-back mismatch)."
+                          << std::endl;
+                diagLog("Verify: first chunk read-back MISMATCH");
+                rc = 1;
+            } else {
+                diagLog("Verify: first chunk committed and read back OK");
+            }
+        }
+    }
+    if (inherited) inherited->releaseHeldChunk();
 
     // Eject only when this Verify was chained from a Write (auto-verify
     // path). Standalone user-initiated Verify must NOT eject — the user

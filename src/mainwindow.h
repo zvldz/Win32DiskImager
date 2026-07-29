@@ -121,6 +121,20 @@ private:
         // into an auto-verify. Verify's completion dialog uses it to report
         // Write + Verify + Total time instead of just Verify's own elapsed.
         qint64 m_writeElapsedMs = 0;
+        // First chunk of the image, held back by Write and carried into a
+        // chained Verify instead of being committed to LBA 0 straight away.
+        // While it is unwritten the disk has no valid partition table, so
+        // Windows has nothing to mount and can't touch the card mid-verify
+        // (the pattern RPi Imager uses in _writeComplete/_verify). Verify
+        // compares it against the image from memory, then commits and
+        // re-reads it once everything else has passed. Allocated with
+        // _aligned_malloc — release only via releaseHeldFirstChunk().
+        char *m_heldFirstChunk = nullptr;
+        size_t m_heldFirstChunkLen = 0;
+        unsigned long long m_heldFirstChunkSectors = 0;
+        // Frees m_heldFirstChunk and resets the size fields. Idempotent —
+        // safe on the standalone-Verify path where nothing was ever held.
+        void releaseHeldFirstChunk();
         // Set up in the constructor; lives for the whole window lifetime
         // and emits update{Available,NotAvailable,Failed}.
         class UpdateChecker *m_updateChecker = nullptr;

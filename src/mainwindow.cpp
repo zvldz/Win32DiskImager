@@ -337,9 +337,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                    << "*.*";
 }
 
+void MainWindow::releaseHeldFirstChunk()
+{
+    if (m_heldFirstChunk) {
+        _aligned_free(m_heldFirstChunk);
+        m_heldFirstChunk = nullptr;
+    }
+    m_heldFirstChunkLen = 0;
+    m_heldFirstChunkSectors = 0;
+}
+
 MainWindow::~MainWindow()
 {
     saveSettings();
+    releaseHeldFirstChunk();
     releaseVolumeLocks(m_volumes);
     if (hRawDisk != INVALID_HANDLE_VALUE)
     {
@@ -527,6 +538,12 @@ void MainWindow::cleanupHandlesAndUI()
                 .arg(hRawDisk == INVALID_HANDLE_VALUE ? "INVALID" : "VALID")
                 .arg(hFile == INVALID_HANDLE_VALUE ? "INVALID" : "VALID")
                 .arg(m_volumes.size()).arg(status));
+    // A held first chunk reaching here means Write or the chained Verify
+    // bailed out before it could be committed, so the card is left
+    // without a partition table and needs a re-flash. Same trade-off
+    // RPi Imager makes: a card that failed verification must not be
+    // left bootable.
+    releaseHeldFirstChunk();
     // releaseVolumeLocks unlocks + closes any per-letter handles the
     // Read / standalone-Verify path opened. For Write m_volumes is
     // always empty (stripLettersAndPrepDisk closes handles internally).
@@ -1134,23 +1151,45 @@ void MainWindow::on_bWrite_clicked()
             queue.requestAbort();
             decoderThread.join();
 
-            // Commit the held first chunk: seek to LBA 0 and write the
-            // buffered MBR/GPT. From this point Windows finally sees a
-            // valid partition table — but we close the handle right
-            // after, so no race window. Skipped on error/cancel paths
-            // (card is left without a partition table, requiring a
-            // re-flash — same trade-off as Etcher/OpenHD make).
+            // What happens to the held first chunk depends on whether a
+            // Verify follows.
+            //
+            // Chained Verify: hand it over unwritten. The disk keeps an
+            // invalid partition table for the whole verify pass, so
+            // Windows has nothing to mount and can't write to the card
+            // while we read it back — Verify commits and re-reads it at
+            // the end. This is RPi Imager's ordering (_verify runs before
+            // _writeComplete writes _firstBlock).
+            //
+            // Standalone Write: commit it now, then close the handle
+            // right after, leaving no race window.
+            //
+            // Both skipped on error/cancel — the card is left without a
+            // partition table and needs a re-flash, the same trade-off
+            // Etcher and RPi Imager make.
+            const bool chainingVerify = (!writeError)
+                                        && (status != STATUS_CANCELED)
+                                        && cbVerifyAfterWrite->isChecked();
             if (!writeError && status != STATUS_CANCELED && firstChunkBuf) {
-                diagLog(QString("Write: committing held first chunk at offset 0 (sectors=%1)")
-                            .arg(firstChunkSectors));
-                if (!writeSectorDataToHandle(hRawDisk, firstChunkBuf, 0,
-                                             firstChunkSectors, sectorsize)) {
-                    writeError = true;
-                    writeErrMsg = tr("Failed to commit partition table at end of write.");
-                    diagLog("Write: first chunk commit FAILED");
+                if (chainingVerify) {
+                    m_heldFirstChunk        = firstChunkBuf;
+                    m_heldFirstChunkLen     = firstChunkBufLen;
+                    m_heldFirstChunkSectors = firstChunkSectors;
+                    firstChunkBuf = nullptr;  // ownership moved to the member
+                    diagLog(QString("Write: holding first chunk for chained Verify (sectors=%1) — partition table stays invalid")
+                                .arg(m_heldFirstChunkSectors));
                 } else {
-                    FlushFileBuffers(hRawDisk);
-                    diagLog("Write: first chunk committed OK + flushed");
+                    diagLog(QString("Write: committing held first chunk at offset 0 (sectors=%1)")
+                                .arg(firstChunkSectors));
+                    if (!writeSectorDataToHandle(hRawDisk, firstChunkBuf, 0,
+                                                 firstChunkSectors, sectorsize)) {
+                        writeError = true;
+                        writeErrMsg = tr("Failed to commit partition table at end of write.");
+                        diagLog("Write: first chunk commit FAILED");
+                    } else {
+                        FlushFileBuffers(hRawDisk);
+                        diagLog("Write: first chunk committed OK + flushed");
+                    }
                 }
             }
             if (firstChunkBuf) {
@@ -1188,8 +1227,6 @@ void MainWindow::on_bWrite_clicked()
             // whole-disk lock is the only thing protecting Verify.
             diagLog(QString("Write: main loop done status=%1 writeError=%2")
                         .arg(status).arg(writeError));
-            const bool chainingVerify = (status != STATUS_CANCELED)
-                                        && cbVerifyAfterWrite->isChecked();
             diagLog(QString("Write: chainingVerify=%1").arg(chainingVerify));
             if (chainingVerify) {
                 // hRawDisk stays live and locked; Verify sees it and
@@ -1842,6 +1879,51 @@ void MainWindow::on_bVerify_clicked()
                 if (c->eof) break;
 
                 const unsigned long long chunk = c->length / sectorsize;
+
+                // Chained Verify, first chunk: the disk doesn't hold it
+                // yet — Write handed it over unwritten so the partition
+                // table stays invalid for this whole pass. Compare the
+                // image against the held buffer and skip the device read.
+                // RPi Imager does the same in _verify (folds _firstBlock
+                // into the hash, seeks past it on the device).
+                if (m_heldFirstChunk && i == 0)
+                {
+                    if (c->length == m_heldFirstChunkLen)
+                    {
+                        if (memcmp(c->data, m_heldFirstChunk, c->length) != 0)
+                        {
+                            // The image file changed under us between
+                            // Write and Verify — nothing on the card is
+                            // trustworthy at this point.
+                            diagLog("Verify: held first chunk does not match the image, aborting");
+                            QMessageBox::critical(this, tr("Verify Failure"),
+                                verifyFailMessage(0, numsectors, sectorsize));
+                            passfail = false;
+                            break;
+                        }
+                        diagLog("Verify: held first chunk matches the image (compared in memory)");
+                        i += chunk;
+                        continue;
+                    }
+                    // Decoder split the stream differently this pass, so
+                    // the held buffer and this chunk don't line up.
+                    // Rather than realign, commit the chunk now and fall
+                    // through to the ordinary device-read path — correct,
+                    // just without the auto-mount protection for the rest
+                    // of the run.
+                    diagLog(QString("Verify: held chunk size %1 != verify chunk %2, committing early and verifying from disk")
+                                .arg(m_heldFirstChunkLen).arg(c->length));
+                    if (!writeSectorDataToHandle(hRawDisk, m_heldFirstChunk, 0,
+                                                 m_heldFirstChunkSectors, sectorsize))
+                    {
+                        verifyErrMsg = tr("Failed to commit partition table before verification.");
+                        verifyError = true;
+                        break;
+                    }
+                    FlushFileBuffers(hRawDisk);
+                    releaseHeldFirstChunk();
+                }
+
                 sectorData2 = readSectorDataFromHandle(hRawDisk, i, chunk, sectorsize);
                 if (sectorData2 == NULL)
                 {
@@ -1951,6 +2033,51 @@ void MainWindow::on_bVerify_clicked()
                 cleanupHandlesAndUI();
                 return;
             }
+            // Everything else matched — only now does the partition table
+            // go down, and we read it straight back to confirm it landed.
+            // The card becomes mountable at this point, but the handle
+            // closes moments later, so Windows has no meaningful window
+            // to interfere. (RPi Imager writes _firstBlock here too, but
+            // never re-reads it; the read-back costs one chunk and tells
+            // us the most important sectors on the card are actually
+            // correct.) Left unwritten on cancel or on a failed compare —
+            // a card that didn't verify must not be left bootable.
+            if (passfail && status != STATUS_CANCELED && m_heldFirstChunk)
+            {
+                diagLog(QString("Verify: committing held first chunk at offset 0 (sectors=%1)")
+                            .arg(m_heldFirstChunkSectors));
+                if (!writeSectorDataToHandle(hRawDisk, m_heldFirstChunk, 0,
+                                             m_heldFirstChunkSectors, sectorsize))
+                {
+                    diagLog("Verify: first chunk commit FAILED");
+                    QMessageBox::critical(this, tr("Verify Failure"),
+                        tr("The image verified correctly, but writing the partition "
+                           "table at the end failed. The card is not bootable — "
+                           "please write the image again."));
+                    passfail = false;
+                }
+                else
+                {
+                    FlushFileBuffers(hRawDisk);
+                    char *readback = readSectorDataFromHandle(hRawDisk, 0,
+                                                              m_heldFirstChunkSectors, sectorsize);
+                    if (!readback
+                        || memcmp(readback, m_heldFirstChunk, m_heldFirstChunkLen) != 0)
+                    {
+                        diagLog("Verify: first chunk read-back MISMATCH");
+                        QMessageBox::critical(this, tr("Verify Failure"),
+                                              verifyFailMessage(0, numsectors, sectorsize));
+                        passfail = false;
+                    }
+                    else
+                    {
+                        diagLog("Verify: first chunk committed and read back OK");
+                    }
+                    if (readback) _aligned_free(readback);
+                }
+            }
+            releaseHeldFirstChunk();
+
             // Eject only when this Verify was chained from a successful
             // Write — m_writeElapsedMs > 0 is the marker. Standalone
             // user-initiated Verify must NOT eject; the user may want to
