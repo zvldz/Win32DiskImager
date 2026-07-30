@@ -1299,6 +1299,15 @@ void MainWindow::on_bWrite_clicked()
     }
     status = STATUS_IDLE;
     elapsed_timer->stop();
+    // Refresh the buttons once more now that status is actually IDLE. The
+    // call earlier in this handler ran while the operation was still
+    // marked busy, so the guard at the top of setReadWriteButtonState()
+    // disabled everything and returned. Normally a later editTextChanged
+    // or WM_DEVICECHANGE re-enables them, but if every such event already
+    // arrived while a modal dialog was up — swapping the card while the
+    // failure box is open — nothing would fire afterwards and Read /
+    // Write / Verify would stay greyed out for good.
+    setReadWriteButtonState();
 }
 
 void MainWindow::on_bRead_clicked()
@@ -1649,6 +1658,15 @@ void MainWindow::on_bRead_clicked()
     }
     status = STATUS_IDLE;
     elapsed_timer->stop();
+    // Refresh the buttons once more now that status is actually IDLE. The
+    // call earlier in this handler ran while the operation was still
+    // marked busy, so the guard at the top of setReadWriteButtonState()
+    // disabled everything and returned. Normally a later editTextChanged
+    // or WM_DEVICECHANGE re-enables them, but if every such event already
+    // arrived while a modal dialog was up — swapping the card while the
+    // failure box is open — nothing would fire afterwards and Read /
+    // Write / Verify would stay greyed out for good.
+    setReadWriteButtonState();
 }
 
 // Verify image with device
@@ -2163,6 +2181,15 @@ void MainWindow::on_bVerify_clicked()
     }
     status = STATUS_IDLE;
     elapsed_timer->stop();
+    // Refresh the buttons once more now that status is actually IDLE. The
+    // call earlier in this handler ran while the operation was still
+    // marked busy, so the guard at the top of setReadWriteButtonState()
+    // disabled everything and returned. Normally a later editTextChanged
+    // or WM_DEVICECHANGE re-enables them, but if every such event already
+    // arrived while a modal dialog was up — swapping the card while the
+    // failure box is open — nothing would fire afterwards and Read /
+    // Write / Verify would stay greyed out for good.
+    setReadWriteButtonState();
 }
 
 // Rebuild cboxDevice from enumerateTargetDisks(). Source of truth is the

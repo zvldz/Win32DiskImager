@@ -8,6 +8,9 @@
 - **Windows can no longer mount the card while Verify is reading it.** The partition table used to be committed at the end of Write, so during the auto-verify pass the freshly written partitions became mountable — the card would pop up in Explorer, and the indexer, antivirus, or a plain filesystem dirty-bit update could write to it mid-verify and cause a spurious verification failure. It was a race: whether Windows' removable-media poll landed inside the verify window varied from run to run, which is exactly what made it hard to pin down. Now the image's first chunk is held in memory through the entire verify pass — the disk carries no valid partition table, so there is nothing for Windows to mount — and is written and read back only after everything else has matched. This is the ordering Raspberry Pi Imager uses. A card that fails verification is deliberately left without a partition table, so a bad write can't be mistaken for a bootable one. Both GUI and CLI.
 - The target disk is also locked as a whole (`FSCTL_LOCK_VOLUME` on `\\.\PhysicalDriveN`) from the moment the write handle is opened until the operation ends, blocking other processes from opening the raw device. Both GUI and CLI.
 
+#### GUI
+- Read / Write / Verify no longer stay greyed out after an operation finishes. The buttons were refreshed a moment before the app marked itself idle, so the refresh disabled them and left them that way; normally the next keystroke in the Image File field or the next card insertion fixed it, but if the card was swapped while a result dialog was still open, no further event arrived and the buttons stayed dead until restart.
+
 #### Installer
 - Installer no longer appends a duplicate `C:\Program Files\Win32DiskImager` entry to the system `PATH` on each reinstall, and cleans up duplicates left by earlier 2.x installers.
 
