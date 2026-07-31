@@ -530,8 +530,9 @@ void releaseVolumeLocks(QList<HANDLE> &volumes)
 //
 // Returns INVALID_HANDLE_VALUE on permanent failure. No UI dialog —
 // caller surfaces the error in operation-appropriate way.
-HANDLE openPhysicalDiskForWrite(int diskNumber)
+HANDLE openPhysicalDiskForWrite(int diskNumber, DWORD *outErr)
 {
+    if (outErr) *outErr = 0;
     const QString devicename =
         QStringLiteral("\\\\.\\PhysicalDrive%1").arg(diskNumber);
     LPCWSTR namePtr = reinterpret_cast<LPCWSTR>(devicename.utf16());
@@ -597,12 +598,33 @@ HANDLE openPhysicalDiskForWrite(int diskNumber)
         // Transient errors that the kernel may clear within seconds.
         // SHARING_VIOLATION here means even permissive share failed —
         // that's an actual conflict worth waiting on.
+        //
+        // FILE_NOT_FOUND / DEV_NOT_EXIST are different: \\.\PhysicalDriveN
+        // isn't there at all. The device is enumerated into the combo as
+        // soon as IOCTL_STORAGE_CHECK_VERIFY reports media, which happens
+        // before the card's controller has finished initialising — and a
+        // reader whose USB port is waking from selective suspend looks the
+        // same. Starting a write inside that window fails instantly today.
+        // Both cases clear within a few seconds, so retry — but on a
+        // shorter leash than the other codes, because these are also what
+        // we get when the user simply pulled the card, and that deserves a
+        // prompt error rather than a half-minute stall.
+        const bool deviceMissing = (lastErr == ERROR_FILE_NOT_FOUND
+                                 || lastErr == ERROR_DEV_NOT_EXIST);
         const bool transient = (lastErr == ERROR_ACCESS_DENIED
                              || lastErr == ERROR_SHARING_VIOLATION
-                             || lastErr == ERROR_NOT_READY);
+                             || lastErr == ERROR_NOT_READY
+                             || deviceMissing);
         if (!transient) {
             diagLog(QString("openPhysicalDiskForWrite FAIL non-transient err=%1 attempt=%2")
                         .arg(lastErr).arg(attempt));
+            if (outErr) *outErr = lastErr;
+            return INVALID_HANDLE_VALUE;
+        }
+        if (deviceMissing && attempt >= 5) {
+            diagLog(QString("openPhysicalDiskForWrite FAIL device still absent err=%1 after %2 attempts")
+                        .arg(lastErr).arg(attempt + 1));
+            if (outErr) *outErr = lastErr;
             return INVALID_HANDLE_VALUE;
         }
 
@@ -614,6 +636,7 @@ HANDLE openPhysicalDiskForWrite(int diskNumber)
 
     diagLog(QString("openPhysicalDiskForWrite FAIL after 8 retries err=%1")
                 .arg(lastErr));
+    if (outErr) *outErr = lastErr;
     return INVALID_HANDLE_VALUE;
 }
 
@@ -640,6 +663,16 @@ bool lockWholeDisk(HANDLE hDisk)
         // LOCK_VOLUME on physical-disk handles. Retrying can't help.
         if (lastErr == ERROR_INVALID_FUNCTION) {
             diagLog("lockWholeDisk: not supported on this handle (err=1), continuing unlocked");
+            return false;
+        }
+        // ERROR_ACCESS_DENIED means someone else holds the disk. In practice
+        // this only shows up after openPhysicalDiskForWrite had to fall back
+        // to a permissive share — the same contention that denied us
+        // exclusive access denies us the lock, and waiting doesn't clear it.
+        // One retry covers a momentary race; beyond that we'd just stall the
+        // start of every write for nothing.
+        if (lastErr == ERROR_ACCESS_DENIED && attempt >= 1) {
+            diagLog("lockWholeDisk: denied (err=5) — disk is held elsewhere, continuing unlocked");
             return false;
         }
         if (attempt < 4) Sleep(delayMs);

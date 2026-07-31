@@ -161,8 +161,12 @@ void releaseVolumeLocks(QList<HANDLE> &volumes);
 //
 // Returns INVALID_HANDLE_VALUE on permanent failure. No UI dialog —
 // caller surfaces the error in the context-appropriate way
-// (Write vs chained Verify vs Read).
-HANDLE openPhysicalDiskForWrite(int diskNumber);
+// (Write vs chained Verify vs Read). `outErr`, when given, receives the
+// last Win32 error so the caller can tell "device vanished"
+// (FILE_NOT_FOUND / DEV_NOT_EXIST — card pulled, still initialising, or
+// reader waking from USB suspend) from "device busy", which need
+// different advice.
+HANDLE openPhysicalDiskForWrite(int diskNumber, DWORD *outErr = nullptr);
 
 // Whole-disk FSCTL_LOCK_VOLUME on an open \\.\PhysicalDriveN handle,
 // with 8 x geometric backoff from 100 ms. This is the only thing that

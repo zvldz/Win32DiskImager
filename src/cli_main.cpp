@@ -685,6 +685,13 @@ bool lockWholeDisk(HANDLE hDisk)
             diagLog("lockWholeDisk: not supported on this handle (err=1), continuing unlocked");
             return false;
         }
+        // ERROR_ACCESS_DENIED means the disk is held elsewhere — in practice
+        // only after the open fell back to a permissive share. The same
+        // contention denies the lock, and waiting doesn't clear it.
+        if (lastErr == ERROR_ACCESS_DENIED && attempt >= 1) {
+            diagLog("lockWholeDisk: denied (err=5) — disk is held elsewhere, continuing unlocked");
+            return false;
+        }
         if (attempt < 4) Sleep(delayMs);
         delayMs *= 2;
     }
@@ -830,7 +837,7 @@ bool prepareDiskForRead(DWORD diskNumber,
 // Forward declarations for the Write-side helpers defined below.
 bool stripLettersAndPrepDisk(DWORD diskNumber);
 bool runDiskpartClean(DWORD diskNumber);
-HANDLE openPhysicalDiskForWrite(DWORD diskNumber);
+HANDLE openPhysicalDiskForWrite(DWORD diskNumber, DWORD *outErr = nullptr);
 
 // Write open path: strip letters + clean partition table on
 // disposable handles, then open the main write handle FRESH with
@@ -854,11 +861,21 @@ bool prepareDiskForRawWrite(DWORD diskNumber,
         runDiskpartClean(diskNumber);
     }
 
-    hDisk = openPhysicalDiskForWrite(diskNumber);
+    DWORD openErr = 0;
+    hDisk = openPhysicalDiskForWrite(diskNumber, &openErr);
     if (hDisk == INVALID_HANDLE_VALUE) {
-        std::cerr << "Could not open the target device for writing." << std::endl;
-        std::cerr << "Make sure no other application is using the card "
-                     "and try again." << std::endl;
+        // A missing device needs different advice than a busy one: the card
+        // was pulled, or it is still coming up after insertion / after the
+        // reader's USB port woke from suspend.
+        if (openErr == ERROR_FILE_NOT_FOUND || openErr == ERROR_DEV_NOT_EXIST) {
+            std::cerr << "The target device is no longer available." << std::endl;
+            std::cerr << "The card may have been removed, or it is still starting up. "
+                         "Re-insert it, wait a moment, and try again." << std::endl;
+        } else {
+            std::cerr << "Could not open the target device for writing." << std::endl;
+            std::cerr << "Make sure no other application is using the card "
+                         "and try again." << std::endl;
+        }
         return false;
     }
 
@@ -1156,8 +1173,9 @@ bool runDiskpartClean(DWORD diskNumber)
 // CreateFileW is inlined here rather than going through the
 // `openPhysicalDisk` helper because that helper hard-codes permissive
 // share mode; we want exclusive share as the primary path.
-HANDLE openPhysicalDiskForWrite(DWORD diskNumber)
+HANDLE openPhysicalDiskForWrite(DWORD diskNumber, DWORD *outErr)
 {
+    if (outErr) *outErr = 0;
     const std::wstring path = toPhysicalDrivePath(diskNumber);
     LPCWSTR namePtr = path.c_str();
     const DWORD exclusiveShare  = FILE_SHARE_READ;
@@ -1228,14 +1246,31 @@ HANDLE openPhysicalDiskForWrite(DWORD diskNumber)
             }
         }
 
+        // FILE_NOT_FOUND / DEV_NOT_EXIST mean \\.\PhysicalDriveN isn't there
+        // at all: a just-inserted card whose controller is still coming up,
+        // or a reader waking from USB selective suspend. Both clear within
+        // seconds, so retry — but on a shorter leash than the other codes,
+        // since the same errors appear when the card was simply pulled.
+        const bool deviceMissing = (lastErr == ERROR_FILE_NOT_FOUND
+                                 || lastErr == ERROR_DEV_NOT_EXIST);
         const bool transient = (lastErr == ERROR_ACCESS_DENIED
                              || lastErr == ERROR_SHARING_VIOLATION
-                             || lastErr == ERROR_NOT_READY);
+                             || lastErr == ERROR_NOT_READY
+                             || deviceMissing);
         if (!transient) {
             std::ostringstream os;
             os << "openPhysicalDiskForWrite FAIL non-transient err=" << lastErr
                << " attempt=" << attempt;
             diagLog(os.str());
+            if (outErr) *outErr = lastErr;
+            return INVALID_HANDLE_VALUE;
+        }
+        if (deviceMissing && attempt >= 5) {
+            std::ostringstream os;
+            os << "openPhysicalDiskForWrite FAIL device still absent err=" << lastErr
+               << " after " << (attempt + 1) << " attempts";
+            diagLog(os.str());
+            if (outErr) *outErr = lastErr;
             return INVALID_HANDLE_VALUE;
         }
 
@@ -1250,6 +1285,7 @@ HANDLE openPhysicalDiskForWrite(DWORD diskNumber)
     std::ostringstream os;
     os << "openPhysicalDiskForWrite FAIL after 8 retries err=" << lastErr;
     diagLog(os.str());
+    if (outErr) *outErr = lastErr;
     return INVALID_HANDLE_VALUE;
 }
 

@@ -830,14 +830,25 @@ void MainWindow::on_bWrite_clicked()
             //    appears once data has landed; falls back to buffered
             //    I/O if the device refuses direct flags. Retries 8 ×
             //    geometric backoff from 250 ms on transient errors.
-            hRawDisk = openPhysicalDiskForWrite(deviceID);
+            DWORD openErr = 0;
+            hRawDisk = openPhysicalDiskForWrite(deviceID, &openErr);
             if (hRawDisk == INVALID_HANDLE_VALUE)
             {
-                diagLog("Write: openPhysicalDiskForWrite FAIL");
-                QMessageBox::critical(this, tr("Device Error"),
-                    tr("Could not open the target device for writing.\n\n"
-                       "Make sure no other application is using the card "
-                       "(File Explorer, antivirus scan, backup software) and try again."));
+                diagLog(QString("Write: openPhysicalDiskForWrite FAIL err=%1").arg(openErr));
+                // A missing device needs different advice than a busy one:
+                // the card was pulled, or it is still coming up after being
+                // inserted / after the reader's USB port woke from suspend.
+                if (openErr == ERROR_FILE_NOT_FOUND || openErr == ERROR_DEV_NOT_EXIST) {
+                    QMessageBox::critical(this, tr("Device Error"),
+                        tr("The target device is no longer available.\n\n"
+                           "The card may have been removed, or it is still starting up. "
+                           "Re-insert it, wait a moment for it to appear, and try again."));
+                } else {
+                    QMessageBox::critical(this, tr("Device Error"),
+                        tr("Could not open the target device for writing.\n\n"
+                           "Make sure no other application is using the card "
+                           "(File Explorer, antivirus scan, backup software) and try again."));
+                }
                 cleanupHandlesAndUI();
                 return;
             }
