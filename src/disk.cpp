@@ -1122,21 +1122,82 @@ bool writeSinglePartitionLayout(int diskNumber, quint64 sizeBytes, bool exFat, Q
     return true;
 }
 
-// After the layout lands, Windows needs a moment to build the volume and
-// hand it a drive letter. Polls the enumerator rather than guessing a
-// fixed delay.
-QString waitForVolumeLetter(DWORD diskNumber, int timeoutMs)
+// Finds the volume sitting on the given physical disk and returns its
+// \\?\Volume{GUID}\ path.
+//
+// Deliberately not keyed on a drive letter: a freshly created partition
+// only gets one if automount is enabled and Windows gets round to it, and
+// a letter is just one of a volume's names anyway. FormatEx accepts the
+// GUID path directly, which is how SD Card Formatter and rufus manage to
+// format cards that never appear in Explorer.
+QString findVolumeOnDisk(DWORD diskNumber, int timeoutMs)
 {
     QElapsedTimer timer;
     timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        for (const TargetDisk &d : enumerateTargetDisks()) {
-            if (d.diskNumber == diskNumber && !d.letters.isEmpty())
-                return d.letters.first();
+    for (;;) {
+        wchar_t volName[MAX_PATH] = {};
+        HANDLE find = FindFirstVolumeW(volName, MAX_PATH);
+        if (find != INVALID_HANDLE_VALUE) {
+            do {
+                QString full = QString::fromWCharArray(volName);
+                // CreateFile wants the path without its trailing backslash.
+                QString devPath = full;
+                if (devPath.endsWith(QLatin1Char('\\'))) devPath.chop(1);
+
+                HANDLE hv = CreateFileW(reinterpret_cast<LPCWSTR>(devPath.utf16()),
+                                        0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                        NULL, OPEN_EXISTING, 0, NULL);
+                if (hv == INVALID_HANDLE_VALUE) continue;
+
+                BYTE buf[sizeof(VOLUME_DISK_EXTENTS) + 8 * sizeof(DISK_EXTENT)] = {};
+                DWORD ret = 0;
+                const bool ok = DeviceIoControl(hv, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+                                                NULL, 0, buf, sizeof(buf), &ret, NULL);
+                if (ok) {
+                    VOLUME_DISK_EXTENTS *ext = reinterpret_cast<VOLUME_DISK_EXTENTS *>(buf);
+                    for (DWORD i = 0; i < ext->NumberOfDiskExtents; ++i) {
+                        if (ext->Extents[i].DiskNumber == diskNumber) {
+                            CloseHandle(hv);
+                            FindVolumeClose(find);
+                            return full;
+                        }
+                    }
+                }
+                CloseHandle(hv);
+            } while (FindNextVolumeW(find, volName, MAX_PATH));
+            FindVolumeClose(find);
         }
-        Sleep(400);
+        if (timer.elapsed() >= timeoutMs) return QString();
+        Sleep(300);
     }
-    return QString();
+}
+
+// Gives the volume a drive letter if it has no mount point yet. With
+// automount disabled a perfectly good freshly formatted card stays
+// invisible in Explorer, which looks like the format silently failed.
+// Best-effort: the format already succeeded by this point.
+void ensureDriveLetter(const QString &volumePath)
+{
+    wchar_t names[512] = {};
+    DWORD len = 0;
+    if (GetVolumePathNamesForVolumeNameW(reinterpret_cast<LPCWSTR>(volumePath.utf16()),
+                                         names, 512, &len) && names[0] != L'\0') {
+        diagLog(QString("format: volume already mounted at %1")
+                    .arg(QString::fromWCharArray(names)));
+        return;
+    }
+
+    const DWORD used = GetLogicalDrives();
+    for (char c = 'D'; c <= 'Z'; ++c) {
+        if (used & (1u << (c - 'A'))) continue;
+        const QString mount = QStringLiteral("%1:\\").arg(QLatin1Char(c));
+        if (SetVolumeMountPointW(reinterpret_cast<LPCWSTR>(mount.utf16()),
+                                 reinterpret_cast<LPCWSTR>(volumePath.utf16()))) {
+            diagLog(QString("format: assigned drive letter %1").arg(mount));
+            return;
+        }
+    }
+    diagLog("format: could not assign a drive letter (none free?)");
 }
 
 }  // namespace
@@ -1166,15 +1227,15 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
 
     notifyShellDriveAdded();
 
-    const QString letter = waitForVolumeLetter(td.diskNumber, 20000);
-    if (letter.isEmpty()) {
-        diagLog("format: no drive letter appeared within 20s");
+    const QString volume = findVolumeOnDisk(td.diskNumber, 20000);
+    if (volume.isEmpty()) {
+        diagLog("format: no volume surfaced on the disk within 20s");
         if (errOut) *errOut = QObject::tr("The partition was created, but Windows did not "
-                                          "assign it a drive letter. Re-insert the card and "
-                                          "format it from Explorer.");
+                                          "surface a volume for it. Re-insert the card and "
+                                          "try again.");
         return false;
     }
-    diagLog(QString("format: new volume is %1, formatting as %2").arg(letter).arg(fs));
+    diagLog(QString("format: volume %1, formatting as %2").arg(volume, fs));
 
     HMODULE fmifs = LoadLibraryW(L"fmifs.dll");
     if (!fmifs) {
@@ -1192,7 +1253,8 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
         return false;
     }
 
-    QString root = letter;
+    // FormatEx wants a trailing backslash on the volume path.
+    QString root = volume;
     if (!root.endsWith(QLatin1Char('\\'))) root += QLatin1Char('\\');
 
     g_formatFinished = false;
@@ -1212,12 +1274,13 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
 
     if (!g_formatFinished || !g_formatSucceeded) {
         diagLog(QString("format: FormatEx reported failure (finished=%1)").arg(g_formatFinished));
-        if (errOut) *errOut = QObject::tr("Formatting %1 as %2 failed.").arg(letter, fs);
+        if (errOut) *errOut = QObject::tr("Formatting the device as %1 failed.").arg(fs);
         return false;
     }
 
+    ensureDriveLetter(volume);
     notifyShellDriveAdded();
-    diagLog(QString("=== FORMAT END === %1 formatted as %2").arg(letter, fs));
+    diagLog(QString("=== FORMAT END === %1 formatted as %2").arg(volume, fs));
     return true;
 }
 
