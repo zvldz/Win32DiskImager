@@ -1012,15 +1012,21 @@ BOOLEAN WINAPI formatExCallback(int packetType, ULONG, void *packetData)
 // otherwise stale entries survive.
 bool writeSinglePartitionLayout(int diskNumber, quint64 sizeBytes, bool exFat, QString *errOut)
 {
-    const QString devicename =
-        QStringLiteral("\\\\.\\PhysicalDrive%1").arg(diskNumber);
-    HANDLE h = CreateFileW(reinterpret_cast<LPCWSTR>(devicename.utf16()),
-                           GENERIC_READ | GENERIC_WRITE,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE,
-                           NULL, OPEN_EXISTING, 0, NULL);
+    // Go through openPhysicalDiskForWrite rather than opening directly: the
+    // preparation step above dismounts volumes and strips letters, and the
+    // device briefly disappears from the namespace while Windows settles.
+    // A plain CreateFileW lands in that window and fails with "file not
+    // found"; that helper already retries around it.
+    DWORD openErr = 0;
+    HANDLE h = openPhysicalDiskForWrite(diskNumber, &openErr);
     if (h == INVALID_HANDLE_VALUE) {
-        if (errOut) *errOut = QObject::tr("Could not open the device (error %1).")
-                                  .arg(GetLastError());
+        diagLog(QString("format: could not open disk err=%1").arg(openErr));
+        if (errOut) {
+            *errOut = (openErr == ERROR_FILE_NOT_FOUND || openErr == ERROR_DEV_NOT_EXIST)
+                ? QObject::tr("The device disappeared while preparing it. "
+                              "Re-insert the card and try again.")
+                : QObject::tr("Could not open the device (error %1).").arg(openErr);
+        }
         return false;
     }
 
@@ -1175,7 +1181,11 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
         if (errOut) *errOut = QObject::tr("Could not load fmifs.dll, which performs the format.");
         return false;
     }
-    FmIfsFormatEx formatEx = (FmIfsFormatEx)GetProcAddress(fmifs, "FormatEx");
+    // Double cast through void*: GetProcAddress returns a data-style
+    // pointer, and going straight to a function type trips
+    // -Wcast-function-type.
+    FmIfsFormatEx formatEx = reinterpret_cast<FmIfsFormatEx>(
+        reinterpret_cast<void *>(GetProcAddress(fmifs, "FormatEx")));
     if (!formatEx) {
         FreeLibrary(fmifs);
         if (errOut) *errOut = QObject::tr("fmifs.dll does not expose FormatEx on this system.");
