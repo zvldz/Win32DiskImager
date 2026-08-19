@@ -12,6 +12,9 @@
 #### GUI
 - Read / Write / Verify no longer stay greyed out after an operation finishes. The buttons were refreshed a moment before the app marked itself idle, so the refresh disabled them and left them that way; normally the next keystroke in the Image File field or the next card insertion fixed it, but if the card was swapped while a result dialog was still open, no further event arrived and the buttons stayed dead until restart.
 
+#### Icons
+- The application, installer and window icons now carry the full range of sizes Windows asks for (16 through 256). Previously only a single 32x32 image shipped, so on a high-DPI display there was nothing to draw in Alt-Tab, large-icon views or the taskbar, and the icon appeared tiny. The artwork is unchanged — it is now rendered from a vector tracing of the original, kept in the repository alongside the untouched 32x32 original.
+
 #### Installer
 - Installer no longer appends a duplicate `C:\Program Files\Win32DiskImager` entry to the system `PATH` on each reinstall, and cleans up duplicates left by earlier 2.x installers.
 
