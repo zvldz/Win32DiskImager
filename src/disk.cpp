@@ -1220,19 +1220,22 @@ QString findVolumeOnDisk(DWORD diskNumber, quint64 expectedOffset,
     }
 }
 
-// Gives the volume a drive letter if it has no mount point yet. With
-// automount disabled a perfectly good freshly formatted card stays
-// invisible in Explorer, which looks like the format silently failed.
-// Best-effort: the format already succeeded by this point.
-void ensureDriveLetter(const QString &volumePath)
+// Returns the volume's mount point ("X:\\"), assigning a free drive letter
+// first if it has none.
+//
+// This is not cosmetic: FormatEx rejects a \?\Volume{GUID}\ path with
+// ERROR_INVALID_PARAMETER and only works on a mounted root. A partition
+// that Windows has not auto-mounted therefore cannot be formatted until we
+// give it a letter ourselves.
+QString ensureDriveLetter(const QString &volumePath)
 {
     wchar_t names[512] = {};
     DWORD len = 0;
     if (GetVolumePathNamesForVolumeNameW(reinterpret_cast<LPCWSTR>(volumePath.utf16()),
-                                         names, 512, &len) && names[0] != L'\0') {
-        diagLog(QString("format: volume already mounted at %1")
-                    .arg(QString::fromWCharArray(names)));
-        return;
+                                         names, 512, &len) && names[0]) {
+        const QString existing = QString::fromWCharArray(names);
+        diagLog(QString("format: volume already mounted at %1").arg(existing));
+        return existing;
     }
 
     const DWORD used = GetLogicalDrives();
@@ -1242,10 +1245,11 @@ void ensureDriveLetter(const QString &volumePath)
         if (SetVolumeMountPointW(reinterpret_cast<LPCWSTR>(mount.utf16()),
                                  reinterpret_cast<LPCWSTR>(volumePath.utf16()))) {
             diagLog(QString("format: assigned drive letter %1").arg(mount));
-            return;
+            return mount;
         }
     }
-    diagLog("format: could not assign a drive letter (none free?)");
+    diagLog("format: no free drive letter to assign");
+    return QString();
 }
 
 }  // namespace
@@ -1287,7 +1291,15 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
                                           "try again.");
         return false;
     }
-    diagLog(QString("format: volume %1, formatting as %2").arg(volume, fs));
+    // FormatEx needs a mounted root; the GUID path alone gets rejected.
+    const QString mount = ensureDriveLetter(volume);
+    if (mount.isEmpty()) {
+        if (errOut) *errOut = QObject::tr("The partition was created, but no drive letter "
+                                          "was free to mount it for formatting.");
+        return false;
+    }
+    diagLog(QString("format: volume %1 mounted at %2, formatting as %3")
+                .arg(volume, mount, fs));
 
     HMODULE fmifs = LoadLibraryW(L"fmifs.dll");
     if (!fmifs) {
@@ -1305,8 +1317,8 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
         return false;
     }
 
-    // FormatEx wants a trailing backslash on the volume path.
-    QString root = volume;
+    // FormatEx wants a trailing backslash on the root path.
+    QString root = mount;
     if (!root.endsWith(QLatin1Char('\\'))) root += QLatin1Char('\\');
 
     g_formatFinished = false;
@@ -1336,9 +1348,8 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
         return false;
     }
 
-    ensureDriveLetter(volume);
     notifyShellDriveAdded();
-    diagLog(QString("=== FORMAT END === %1 formatted as %2").arg(volume, fs));
+    diagLog(QString("=== FORMAT END === %1 formatted as %2").arg(mount, fs));
     return true;
 }
 
