@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2026-08-19
 
 ### Version 2.4.1
 
