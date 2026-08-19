@@ -116,21 +116,49 @@
     </message>
     <message>
         <location filename="../mainwindow.ui" line="387"/>
-        <source>Verify the image file with the selected drive</source>
-        <translation>Перевірити файл образу з вибраним пристроєм</translation>
+        <source>Verify the image file against the selected device</source>
+        <translation>Звірити образ із вибраним пристроєм</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="390"/>
-        <source>Verify Only</source>
-        <translation>Лише перевірка</translation>
+        <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
+        <translation>Порівняти «Файл образу» з «Пристроєм» без запису</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="403"/>
+        <location filename="../mainwindow.ui" line="393"/>
+        <source>Verify</source>
+        <translation>Перевірка</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="406"/>
+        <source>Erase the device and format it as a single FAT32 or exFAT partition</source>
+        <translation>Стерти пристрій і відформатувати як один розділ FAT32 або exFAT</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="409"/>
+        <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
+        <translation>Стерти «Пристрій» і відформатувати як один розділ (FAT32, понад 32 ГБ — exFAT)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="412"/>
+        <source>Format</source>
+        <translation>Форматувати</translation>
+    </message>
+    <message>
+        <source>Verify the image file with the selected drive</source>
+        <translation type="vanished">Перевірити файл образу з вибраним пристроєм</translation>
+    </message>
+    <message>
+        <source>Verify Only</source>
+        <translation type="vanished">Лише перевірка</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="425"/>
         <source>Exit Win32 Disk Imager</source>
         <translation>Вийти з Win32 Disk Imager</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="406"/>
+        <location filename="../mainwindow.ui" line="428"/>
         <source>Exit</source>
         <translation>Вийти</translation>
     </message>
@@ -304,7 +332,7 @@ Are you sure you want to continue?</source>
 The card may have been removed, or it is still starting up. Re-insert it, wait a moment for it to appear, and try again.</source>
         <translation>Цільовий пристрій більше недоступний.
 
-Картку могли вийняти, або вона ще запускається. Вставте її знову, зачекайте, доки вона з'явиться, і повторіть спробу.</translation>
+Картку могли вийняти, або вона ще запускається. Вставте її знову, зачекайте, доки вона з&apos;явиться, і повторіть спробу.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="848"/>

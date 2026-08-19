@@ -186,6 +186,33 @@ HANDLE openPhysicalDiskForWrite(int diskNumber, DWORD *outErr = nullptr);
 // taken; the caller proceeds either way.
 bool lockWholeDisk(HANDLE hDisk);
 
+// Wipes the target disk and lays down a single full-size partition, then
+// formats it. Used by the Format button to bring a card written with a
+// Linux image back to something Windows and cameras accept.
+//
+// What it does, in order:
+//   1) strips drive letters and dismounts every volume on the disk
+//   2) writes a fresh MBR with one partition spanning the whole device,
+//      aligned to 1 MiB - GPT layouts are replaced and extra partitions
+//      disappear, so a multi-partition Pi card collapses back to one
+//   3) waits for Windows to surface the new volume and assign a letter
+//   4) formats that volume through FormatEx (fmifs.dll), quick format
+//
+// Filesystem follows the SD Association's sizing: FAT32 at 32 GB and
+// below, exFAT above it. That also sidesteps FormatEx refusing to build
+// FAT32 volumes larger than 32 GB, which is why rufus carries its own
+// formatter - we deliberately do not.
+//
+// `label` is the volume label and may be empty. Returns false on failure
+// with a human-readable reason in `errOut`. Runs for seconds, so the
+// caller should show a busy state.
+bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOut);
+
+// Filesystem formatTargetDisk would choose for a device this size -
+// "FAT32" or "exFAT". Exposed so the confirmation dialog can tell the
+// user what they are about to get.
+QString formatFsForSize(quint64 sizeBytes);
+
 // Enumerates \\.\PhysicalDrive0..31, filters to writable removable / USB /
 // SD / MMC targets (system SATA / NVMe disks rejected), and maps each disk
 // to its mounted drive letters via IOCTL_STORAGE_GET_DEVICE_NUMBER. Empty

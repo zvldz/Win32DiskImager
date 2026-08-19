@@ -116,21 +116,49 @@
     </message>
     <message>
         <location filename="../mainwindow.ui" line="387"/>
-        <source>Verify the image file with the selected drive</source>
-        <translation>선택된 드라이브의 이미지 파일 검증하기</translation>
+        <source>Verify the image file against the selected device</source>
+        <translation>선택한 장치와 이미지를 대조합니다</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="390"/>
-        <source>Verify Only</source>
-        <translation>검증만</translation>
+        <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
+        <translation>기록하지 않고 '이미지 파일'과 '장치'를 비교합니다</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="403"/>
+        <location filename="../mainwindow.ui" line="393"/>
+        <source>Verify</source>
+        <translation>검사</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="406"/>
+        <source>Erase the device and format it as a single FAT32 or exFAT partition</source>
+        <translation>장치를 지우고 단일 FAT32 또는 exFAT 파티션으로 포맷합니다</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="409"/>
+        <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
+        <translation>'장치'를 지우고 하나의 파티션으로 포맷합니다 (32GB 초과 시 exFAT)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="412"/>
+        <source>Format</source>
+        <translation>포맷</translation>
+    </message>
+    <message>
+        <source>Verify the image file with the selected drive</source>
+        <translation type="vanished">선택된 드라이브의 이미지 파일 검증하기</translation>
+    </message>
+    <message>
+        <source>Verify Only</source>
+        <translation type="vanished">검증만</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="425"/>
         <source>Exit Win32 Disk Imager</source>
         <translation>Win32 디스크 이미저 종료</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="406"/>
+        <location filename="../mainwindow.ui" line="428"/>
         <source>Exit</source>
         <translation>종료</translation>
     </message>

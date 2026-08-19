@@ -24,6 +24,8 @@
 #include <QtWidgets>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QElapsedTimer>
+#include <QRandomGenerator>
 #include <QFile>
 #include <QMap>
 #include <QProcess>
@@ -31,6 +33,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 #include <malloc.h>          // _aligned_malloc / _aligned_free
 #include <windows.h>
 #include <winioctl.h>
@@ -967,6 +970,247 @@ static QMap<DWORD, QStringList> buildDiskLetterMap()
     }
     return map;
 }
+
+// ---------------------------------------------------------------------
+// Format support
+// ---------------------------------------------------------------------
+//
+// FormatEx lives in fmifs.dll. It is undocumented but stable — the same
+// entry point the Windows format command and rufus both drive. It reports
+// its outcome through a callback rather than a return value, so the
+// result is carried out through the small state block below.
+
+namespace {
+
+// Subset of FMIFS_PACKET_TYPE we care about; the rest are progress and
+// diagnostic packets we ignore.
+enum { FmIfsPercentCompleted = 0, FmIfsFinished = 11 };
+
+typedef BOOLEAN (WINAPI *FmIfsCallback)(int packetType, ULONG packetLength, void *packetData);
+typedef VOID (WINAPI *FmIfsFormatEx)(PWSTR driveRoot, DWORD mediaFlag, PWSTR format,
+                                     PWSTR label, BOOLEAN quickFormat, ULONG clusterSize,
+                                     FmIfsCallback callback);
+
+bool g_formatFinished = false;
+bool g_formatSucceeded = false;
+
+BOOLEAN WINAPI formatExCallback(int packetType, ULONG, void *packetData)
+{
+    if (packetType == FmIfsFinished) {
+        g_formatFinished = true;
+        g_formatSucceeded = packetData && *static_cast<BOOLEAN *>(packetData);
+    }
+    return TRUE;
+}
+
+// Lays a fresh MBR with exactly one partition covering the device.
+// Replaces whatever was there — a GPT layout, several Linux partitions,
+// anything — because the layout is written wholesale rather than edited.
+//
+// MBR always carries four slots; the three unused ones are submitted
+// zeroed with RewritePartition set so the kernel clears them too,
+// otherwise stale entries survive.
+bool writeSinglePartitionLayout(int diskNumber, quint64 sizeBytes, bool exFat, QString *errOut)
+{
+    const QString devicename =
+        QStringLiteral("\\\\.\\PhysicalDrive%1").arg(diskNumber);
+    HANDLE h = CreateFileW(reinterpret_cast<LPCWSTR>(devicename.utf16()),
+                           GENERIC_READ | GENERIC_WRITE,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        if (errOut) *errOut = QObject::tr("Could not open the device (error %1).")
+                                  .arg(GetLastError());
+        return false;
+    }
+
+    DWORD junk = 0;
+
+    // Zero the first and last megabyte before laying down the new table.
+    // Rewriting the layout replaces the MBR, but a disk that previously
+    // held GPT also carries a backup header in its final sectors — left
+    // there, gdisk and parted later report the disk as having a damaged
+    // GPT. Windows itself ignores the stale copy, which is exactly why it
+    // is easy to miss. rufus wipes both ends for the same reason.
+    {
+        const DWORD wipeBytes = 1024 * 1024;
+        void *zeros = _aligned_malloc(wipeBytes, 4096);
+        if (zeros) {
+            memset(zeros, 0, wipeBytes);
+            LARGE_INTEGER pos = {};
+            DWORD written = 0;
+            SetFilePointerEx(h, pos, NULL, FILE_BEGIN);
+            WriteFile(h, zeros, wipeBytes, &written, NULL);
+            // Tail: back off one megabyte from the end, rounded down to a
+            // sector boundary so the write stays aligned.
+            if (sizeBytes > wipeBytes * 2ULL) {
+                pos.QuadPart = (LONGLONG)((sizeBytes - wipeBytes) & ~4095ULL);
+                if (SetFilePointerEx(h, pos, NULL, FILE_BEGIN)) {
+                    written = 0;
+                    WriteFile(h, zeros, wipeBytes, &written, NULL);
+                }
+            }
+            FlushFileBuffers(h);
+            _aligned_free(zeros);
+            diagLog("format: zeroed first and last 1 MiB (clears any stale GPT)");
+        }
+    }
+
+    // Start from a clean MBR. The signature is what Windows uses to tell
+    // disks apart; a fixed one would collide across cards.
+    CREATE_DISK cd = {};
+    cd.PartitionStyle = PARTITION_STYLE_MBR;
+    cd.Mbr.Signature = (DWORD)QRandomGenerator::global()->generate();
+    if (!DeviceIoControl(h, IOCTL_DISK_CREATE_DISK, &cd, sizeof(cd), NULL, 0, &junk, NULL)) {
+        diagLog(QString("format: IOCTL_DISK_CREATE_DISK failed err=%1").arg(GetLastError()));
+    }
+    DeviceIoControl(h, IOCTL_DISK_UPDATE_PROPERTIES, NULL, 0, NULL, 0, &junk, NULL);
+
+    // 1 MiB alignment: what Windows and every card formatter use, and what
+    // keeps erase blocks aligned on flash media.
+    const quint64 alignment = 1024ULL * 1024ULL;
+    if (sizeBytes <= alignment) {
+        CloseHandle(h);
+        if (errOut) *errOut = QObject::tr("The device is too small to format.");
+        return false;
+    }
+    const quint64 partitionLength = sizeBytes - alignment;
+
+    BYTE buffer[sizeof(DRIVE_LAYOUT_INFORMATION_EX) + 3 * sizeof(PARTITION_INFORMATION_EX)] = {};
+    DRIVE_LAYOUT_INFORMATION_EX *layout = reinterpret_cast<DRIVE_LAYOUT_INFORMATION_EX *>(buffer);
+    layout->PartitionStyle = PARTITION_STYLE_MBR;
+    layout->PartitionCount = 4;
+    layout->Mbr.Signature = cd.Mbr.Signature;
+
+    PARTITION_INFORMATION_EX &p0 = layout->PartitionEntry[0];
+    p0.PartitionStyle = PARTITION_STYLE_MBR;
+    p0.StartingOffset.QuadPart = (LONGLONG)alignment;
+    p0.PartitionLength.QuadPart = (LONGLONG)partitionLength;
+    p0.PartitionNumber = 1;
+    p0.RewritePartition = TRUE;
+    // 0x0C = FAT32 LBA, 0x07 = IFS (what exFAT and NTFS both use).
+    p0.Mbr.PartitionType = exFat ? 0x07 : 0x0C;
+    p0.Mbr.BootIndicator = FALSE;
+    p0.Mbr.RecognizedPartition = TRUE;
+    p0.Mbr.HiddenSectors = (DWORD)(alignment / 512);
+
+    for (int i = 1; i < 4; ++i) {
+        layout->PartitionEntry[i].PartitionStyle = PARTITION_STYLE_MBR;
+        layout->PartitionEntry[i].RewritePartition = TRUE;
+    }
+
+    const bool ok = DeviceIoControl(h, IOCTL_DISK_SET_DRIVE_LAYOUT_EX,
+                                    buffer, sizeof(buffer), NULL, 0, &junk, NULL);
+    if (!ok) {
+        const DWORD err = GetLastError();
+        CloseHandle(h);
+        diagLog(QString("format: SET_DRIVE_LAYOUT_EX failed err=%1").arg(err));
+        if (errOut) *errOut = QObject::tr("Could not write the partition table (error %1).").arg(err);
+        return false;
+    }
+
+    DeviceIoControl(h, IOCTL_DISK_UPDATE_PROPERTIES, NULL, 0, NULL, 0, &junk, NULL);
+    CloseHandle(h);
+    diagLog(QString("format: wrote single %1 partition, %2 bytes")
+                .arg(exFat ? "exFAT" : "FAT32").arg(partitionLength));
+    return true;
+}
+
+// After the layout lands, Windows needs a moment to build the volume and
+// hand it a drive letter. Polls the enumerator rather than guessing a
+// fixed delay.
+QString waitForVolumeLetter(DWORD diskNumber, int timeoutMs)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < timeoutMs) {
+        for (const TargetDisk &d : enumerateTargetDisks()) {
+            if (d.diskNumber == diskNumber && !d.letters.isEmpty())
+                return d.letters.first();
+        }
+        Sleep(400);
+    }
+    return QString();
+}
+
+}  // namespace
+
+QString formatFsForSize(quint64 sizeBytes)
+{
+    // The SD Association draws the line at 32 GB: SDHC is FAT32, SDXC is
+    // exFAT. It also happens to be where FormatEx stops making FAT32.
+    const quint64 fat32Limit = 32ULL * 1024ULL * 1024ULL * 1024ULL;
+    return sizeBytes > fat32Limit ? QStringLiteral("exFAT") : QStringLiteral("FAT32");
+}
+
+bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOut)
+{
+    diagLog(QString("=== FORMAT START === disk=%1 size=%2 letters=[%3]")
+                .arg(td.diskNumber).arg(td.sizeBytes).arg(td.letters.join(",")));
+
+    const QString fs = formatFsForSize(td.sizeBytes);
+    const bool exFat = (fs == QStringLiteral("exFAT"));
+
+    // Same preparation the write path uses: letters gone, volumes
+    // dismounted, so nothing holds the disk while we rewrite its layout.
+    stripLettersAndPrepDisk(td);
+
+    if (!writeSinglePartitionLayout((int)td.diskNumber, td.sizeBytes, exFat, errOut))
+        return false;
+
+    notifyShellDriveAdded();
+
+    const QString letter = waitForVolumeLetter(td.diskNumber, 20000);
+    if (letter.isEmpty()) {
+        diagLog("format: no drive letter appeared within 20s");
+        if (errOut) *errOut = QObject::tr("The partition was created, but Windows did not "
+                                          "assign it a drive letter. Re-insert the card and "
+                                          "format it from Explorer.");
+        return false;
+    }
+    diagLog(QString("format: new volume is %1, formatting as %2").arg(letter).arg(fs));
+
+    HMODULE fmifs = LoadLibraryW(L"fmifs.dll");
+    if (!fmifs) {
+        if (errOut) *errOut = QObject::tr("Could not load fmifs.dll, which performs the format.");
+        return false;
+    }
+    FmIfsFormatEx formatEx = (FmIfsFormatEx)GetProcAddress(fmifs, "FormatEx");
+    if (!formatEx) {
+        FreeLibrary(fmifs);
+        if (errOut) *errOut = QObject::tr("fmifs.dll does not expose FormatEx on this system.");
+        return false;
+    }
+
+    QString root = letter;
+    if (!root.endsWith(QLatin1Char('\\'))) root += QLatin1Char('\\');
+
+    g_formatFinished = false;
+    g_formatSucceeded = false;
+
+    std::vector<wchar_t> rootBuf(root.size() + 1, 0);
+    root.toWCharArray(rootBuf.data());
+    std::vector<wchar_t> fsBuf(fs.size() + 1, 0);
+    fs.toWCharArray(fsBuf.data());
+    std::vector<wchar_t> labelBuf(label.size() + 1, 0);
+    if (!label.isEmpty()) label.toWCharArray(labelBuf.data());
+
+    // clusterSize 0 lets FormatEx pick the default for the volume size.
+    formatEx(rootBuf.data(), 0 /* FMIFS_HARDDISK */, fsBuf.data(),
+             labelBuf.data(), TRUE /* quick */, 0, formatExCallback);
+    FreeLibrary(fmifs);
+
+    if (!g_formatFinished || !g_formatSucceeded) {
+        diagLog(QString("format: FormatEx reported failure (finished=%1)").arg(g_formatFinished));
+        if (errOut) *errOut = QObject::tr("Formatting %1 as %2 failed.").arg(letter, fs);
+        return false;
+    }
+
+    notifyShellDriveAdded();
+    diagLog(QString("=== FORMAT END === %1 formatted as %2").arg(letter, fs));
+    return true;
+}
+
 
 QList<TargetDisk> enumerateTargetDisks()
 {

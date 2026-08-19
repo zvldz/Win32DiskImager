@@ -112,25 +112,53 @@
     <message>
         <location filename="../mainwindow.ui" line="380"/>
         <source>Write</source>
-        <translation>寫入資料到「裝置」中</translation>
+        <translation>寫入</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="387"/>
-        <source>Verify the image file with the selected drive</source>
-        <translation>驗證選定磁碟的映像檔</translation>
+        <source>Verify the image file against the selected device</source>
+        <translation>將映像檔與所選裝置進行驗證</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="390"/>
-        <source>Verify Only</source>
-        <translation>僅驗證</translation>
+        <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
+        <translation>比較「映像檔」與「裝置」，不寫入</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="403"/>
+        <location filename="../mainwindow.ui" line="393"/>
+        <source>Verify</source>
+        <translation>驗證</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="406"/>
+        <source>Erase the device and format it as a single FAT32 or exFAT partition</source>
+        <translation>清除裝置並格式化為單一 FAT32 或 exFAT 分割區</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="409"/>
+        <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
+        <translation>清除「裝置」並格式化為一個分割區（超過 32 GB 使用 exFAT）</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="412"/>
+        <source>Format</source>
+        <translation>格式化</translation>
+    </message>
+    <message>
+        <source>Verify the image file with the selected drive</source>
+        <translation type="vanished">驗證選定磁碟的映像檔</translation>
+    </message>
+    <message>
+        <source>Verify Only</source>
+        <translation type="vanished">僅驗證</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="425"/>
         <source>Exit Win32 Disk Imager</source>
         <translation>離開 Win32 磁蝶映像檔工具</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="406"/>
+        <location filename="../mainwindow.ui" line="428"/>
         <source>Exit</source>
         <translation>離開</translation>
     </message>

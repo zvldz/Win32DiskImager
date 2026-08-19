@@ -117,21 +117,49 @@
     </message>
     <message>
         <location filename="../mainwindow.ui" line="387"/>
-        <source>Verify the image file with the selected drive</source>
-        <translation>Sprawdź plik obrazu z wybranym napędem</translation>
+        <source>Verify the image file against the selected device</source>
+        <translation>Porównaj obraz z wybranym urządzeniem</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="390"/>
-        <source>Verify Only</source>
-        <translation>Tylko sprawdź</translation>
+        <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
+        <translation>Porównaj 'Plik obrazu' z 'Urządzeniem' bez zapisu</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="403"/>
+        <location filename="../mainwindow.ui" line="393"/>
+        <source>Verify</source>
+        <translation>Sprawdź</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="406"/>
+        <source>Erase the device and format it as a single FAT32 or exFAT partition</source>
+        <translation>Wymaż urządzenie i sformatuj je jako jedną partycję FAT32 lub exFAT</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="409"/>
+        <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
+        <translation>Wymaż 'Urządzenie' i sformatuj jako jedną partycję (FAT32, powyżej 32 GB exFAT)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="412"/>
+        <source>Format</source>
+        <translation>Formatuj</translation>
+    </message>
+    <message>
+        <source>Verify the image file with the selected drive</source>
+        <translation type="vanished">Sprawdź plik obrazu z wybranym napędem</translation>
+    </message>
+    <message>
+        <source>Verify Only</source>
+        <translation type="vanished">Tylko sprawdź</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="425"/>
         <source>Exit Win32 Disk Imager</source>
         <translation>Wyjdź z Win32 Disk Imager</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="406"/>
+        <location filename="../mainwindow.ui" line="428"/>
         <source>Exit</source>
         <translation>Wyjdź</translation>
     </message>

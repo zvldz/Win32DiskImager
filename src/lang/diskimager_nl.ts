@@ -116,21 +116,49 @@
     </message>
     <message>
         <location filename="../mainwindow.ui" line="387"/>
-        <source>Verify the image file with the selected drive</source>
-        <translation>Controleer het image met de geselecteerde schijf</translation>
+        <source>Verify the image file against the selected device</source>
+        <translation>Het image vergelijken met het geselecteerde apparaat</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="390"/>
-        <source>Verify Only</source>
-        <translation>Alleen controleren</translation>
+        <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
+        <translation>'Imagebestand' met 'Apparaat' vergelijken zonder te schrijven</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="403"/>
+        <location filename="../mainwindow.ui" line="393"/>
+        <source>Verify</source>
+        <translation>Controleren</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="406"/>
+        <source>Erase the device and format it as a single FAT32 or exFAT partition</source>
+        <translation>Het apparaat wissen en als één FAT32- of exFAT-partitie formatteren</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="409"/>
+        <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
+        <translation>'Apparaat' wissen en als één partitie formatteren (FAT32, boven 32 GB exFAT)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="412"/>
+        <source>Format</source>
+        <translation>Formatteren</translation>
+    </message>
+    <message>
+        <source>Verify the image file with the selected drive</source>
+        <translation type="vanished">Controleer het image met de geselecteerde schijf</translation>
+    </message>
+    <message>
+        <source>Verify Only</source>
+        <translation type="vanished">Alleen controleren</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="425"/>
         <source>Exit Win32 Disk Imager</source>
         <translation>Sluit win32 Disk Imager af</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="406"/>
+        <location filename="../mainwindow.ui" line="428"/>
         <source>Exit</source>
         <translation>Afsluiten</translation>
     </message>

@@ -116,21 +116,49 @@
     </message>
     <message>
         <location filename="../mainwindow.ui" line="387"/>
-        <source>Verify the image file with the selected drive</source>
-        <translation>Vérifier le fichier image avec le lecteur sélectionné</translation>
+        <source>Verify the image file against the selected device</source>
+        <translation>Vérifier l'image par rapport au périphérique sélectionné</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="390"/>
-        <source>Verify Only</source>
-        <translation>Vérifier uniquement</translation>
+        <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
+        <translation>Comparer « Fichier image » et « Périphérique » sans écrire</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="403"/>
+        <location filename="../mainwindow.ui" line="393"/>
+        <source>Verify</source>
+        <translation>Vérifier</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="406"/>
+        <source>Erase the device and format it as a single FAT32 or exFAT partition</source>
+        <translation>Effacer le périphérique et le formater en une seule partition FAT32 ou exFAT</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="409"/>
+        <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
+        <translation>Effacer « Périphérique » et le formater en une partition (FAT32, exFAT au-delà de 32 Go)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="412"/>
+        <source>Format</source>
+        <translation>Formater</translation>
+    </message>
+    <message>
+        <source>Verify the image file with the selected drive</source>
+        <translation type="vanished">Vérifier le fichier image avec le lecteur sélectionné</translation>
+    </message>
+    <message>
+        <source>Verify Only</source>
+        <translation type="vanished">Vérifier uniquement</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="425"/>
         <source>Exit Win32 Disk Imager</source>
         <translation>Fermer Win32 Disk Imager</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="406"/>
+        <location filename="../mainwindow.ui" line="428"/>
         <source>Exit</source>
         <translation>Fermer</translation>
     </message>
@@ -314,9 +342,9 @@ Are you sure you want to cancel?</source>
         <source>The target device is no longer available.
 
 The card may have been removed, or it is still starting up. Re-insert it, wait a moment for it to appear, and try again.</source>
-        <translation>Le périphérique cible n'est plus disponible.
+        <translation>Le périphérique cible n&apos;est plus disponible.
 
-La carte a peut-être été retirée, ou elle est encore en cours de démarrage. Réinsérez-la, attendez un instant qu'elle apparaisse, puis réessayez.</translation>
+La carte a peut-être été retirée, ou elle est encore en cours de démarrage. Réinsérez-la, attendez un instant qu&apos;elle apparaisse, puis réessayez.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="848"/>
@@ -494,12 +522,12 @@ Assurez-vous qu&apos;aucune autre application n&apos;utilise la carte (Explorate
     <message>
         <location filename="../mainwindow.cpp" line="1948"/>
         <source>Failed to commit partition table before verification.</source>
-        <translation>Échec de l'écriture de la table de partition avant la vérification.</translation>
+        <translation>Échec de l&apos;écriture de la table de partition avant la vérification.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="2083"/>
         <source>The image verified correctly, but writing the partition table at the end failed. The card is not bootable — please write the image again.</source>
-        <translation>L'image a été vérifiée correctement, mais l'écriture de la table de partition à la fin a échoué. La carte n'est pas amorçable — veuillez réécrire l'image.</translation>
+        <translation>L&apos;image a été vérifiée correctement, mais l&apos;écriture de la table de partition à la fin a échoué. La carte n&apos;est pas amorçable — veuillez réécrire l&apos;image.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="2157"/>

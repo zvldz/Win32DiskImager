@@ -116,21 +116,49 @@
     </message>
     <message>
         <location filename="../mainwindow.ui" line="387"/>
-        <source>Verify the image file with the selected drive</source>
-        <translation>தேர்ந்தெடுக்கப்பட்ட இயக்ககத்துடன் படக் கோப்பை சரிபார்</translation>
+        <source>Verify the image file against the selected device</source>
+        <translation>தேர்ந்தெடுத்த சாதனத்துடன் படிமத்தைச் சரிபார்க்கும்</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="390"/>
-        <source>Verify Only</source>
-        <translation>சரிபார்ப்பு மட்டும்</translation>
+        <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
+        <translation>எழுதாமல் 'படிமக் கோப்பை' 'சாதனத்துடன்' ஒப்பிடும்</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="403"/>
+        <location filename="../mainwindow.ui" line="393"/>
+        <source>Verify</source>
+        <translation>சரிபார்ப்பு</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="406"/>
+        <source>Erase the device and format it as a single FAT32 or exFAT partition</source>
+        <translation>சாதனத்தை அழித்து ஒரே FAT32 அல்லது exFAT பகிர்வாக வடிவூட்டும்</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="409"/>
+        <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
+        <translation>'சாதனத்தை' அழித்து ஒரே பகிர்வாக வடிவூட்டும் (32 GB மேல் exFAT)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="412"/>
+        <source>Format</source>
+        <translation>வடிவூட்டு</translation>
+    </message>
+    <message>
+        <source>Verify the image file with the selected drive</source>
+        <translation type="vanished">தேர்ந்தெடுக்கப்பட்ட இயக்ககத்துடன் படக் கோப்பை சரிபார்</translation>
+    </message>
+    <message>
+        <source>Verify Only</source>
+        <translation type="vanished">சரிபார்ப்பு மட்டும்</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="425"/>
         <source>Exit Win32 Disk Imager</source>
         <translation>வெளியேறு</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="406"/>
+        <location filename="../mainwindow.ui" line="428"/>
         <source>Exit</source>
         <translation>வெளியேறு</translation>
     </message>

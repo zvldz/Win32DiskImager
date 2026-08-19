@@ -19,7 +19,37 @@
         <translation>Copia</translation>
     </message>
     <message>
+        <location filename="../mainwindow.ui" line="387"/>
+        <source>Verify the image file against the selected device</source>
+        <translation>Verifica l'immagine rispetto al dispositivo selezionato</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="390"/>
+        <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
+        <translation>Confronta 'File immagine' con 'Dispositivo' senza scrivere</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="393"/>
+        <source>Verify</source>
+        <translation>Verifica</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.ui" line="406"/>
+        <source>Erase the device and format it as a single FAT32 or exFAT partition</source>
+        <translation>Cancella il dispositivo e formattalo come un'unica partizione FAT32 o exFAT</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="409"/>
+        <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
+        <translation>Cancella 'Dispositivo' e formattalo come una partizione (FAT32, exFAT oltre 32 GB)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="412"/>
+        <source>Format</source>
+        <translation>Formatta</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="428"/>
         <source>Exit</source>
         <translation>Esci</translation>
     </message>
@@ -214,7 +244,7 @@ Sei sicuro di voler annullare?</translation>
 </translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="403"/>
+        <location filename="../mainwindow.ui" line="425"/>
         <source>Exit Win32 Disk Imager</source>
         <translation>Esci da Win32 Disk Imager</translation>
     </message>
@@ -373,14 +403,12 @@ Sei sicuro di voler uscire?</translation>
         <translation>Verifica dopo la scrittura</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="387"/>
         <source>Verify the image file with the selected drive</source>
-        <translation>Verifica il file immagine con l&apos;unità selezionata</translation>
+        <translation type="vanished">Verifica il file immagine con l&apos;unità selezionata</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="390"/>
         <source>Verify Only</source>
-        <translation>Solo verifica</translation>
+        <translation type="vanished">Solo verifica</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="590"/>
@@ -503,7 +531,7 @@ La scheda potrebbe essere stata rimossa oppure è ancora in fase di avvio. Reins
     <message>
         <location filename="../mainwindow.cpp" line="2083"/>
         <source>The image verified correctly, but writing the partition table at the end failed. The card is not bootable — please write the image again.</source>
-        <translation>L'immagine è stata verificata correttamente, ma la scrittura della tabella delle partizioni alla fine non è riuscita. La scheda non è avviabile — riscrivi l'immagine.</translation>
+        <translation>L&apos;immagine è stata verificata correttamente, ma la scrittura della tabella delle partizioni alla fine non è riuscita. La scheda non è avviabile — riscrivi l&apos;immagine.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="2157"/>

@@ -519,6 +519,7 @@ void MainWindow::setReadWriteButtonState()
         bRead->setEnabled(false);
         bWrite->setEnabled(false);
         bVerify->setEnabled(false);
+        bFormat->setEnabled(false);
         return;
     }
 
@@ -530,6 +531,8 @@ void MainWindow::setReadWriteButtonState()
     bRead->setEnabled(deviceSelected && fileSelected && (fi.exists() ? fi.isWritable() : true));
     bWrite->setEnabled(deviceSelected && fileSelected && fi.isReadable());
     bVerify->setEnabled(deviceSelected && fileSelected && fi.isReadable());
+    // Format only needs a device — it never touches the image file.
+    bFormat->setEnabled(deviceSelected);
 }
 
 void MainWindow::cleanupHandlesAndUI()
@@ -2202,6 +2205,59 @@ void MainWindow::on_bVerify_clicked()
     // Write / Verify would stay greyed out for good.
     setReadWriteButtonState();
 }
+
+// Brings a card written with a Linux image back to something Windows and
+// cameras accept: one full-size partition on a fresh MBR, formatted
+// FAT32 (or exFAT above 32 GB — see formatFsForSize). Destructive and
+// not cancellable, so it is gated behind an explicit confirmation naming
+// the exact device.
+void MainWindow::on_bFormat_clicked()
+{
+    KeepAwake keepAwake;  // suppress idle sleep until this scope exits
+
+    const int row = cboxDevice->currentIndex();
+    if (row < 0 || row >= m_targetDisks.size()) return;
+    const TargetDisk td = m_targetDisks[row];
+
+    const QString fs = formatFsForSize(td.sizeBytes);
+    if (QMessageBox::warning(this, tr("Confirm Format"),
+            tr("Everything on %1 will be erased and replaced with a single "
+               "%2 partition.\n\nAll data on the device will be lost. Continue?")
+              .arg(buildDeviceLabel(td), fs),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) {
+        return;
+    }
+
+    // Reuse the busy state the other operations use so Read / Write /
+    // Verify / Format all stay disabled while this runs. Cancel stays off:
+    // interrupting between the layout write and the format would leave the
+    // card with a partition table but no filesystem.
+    status = STATUS_WRITING;
+    bCancel->setEnabled(false);
+    setReadWriteButtonState();
+    statusbar->showMessage(tr("Formatting..."));
+    QCoreApplication::processEvents();
+
+    QString err;
+    const bool ok = formatTargetDisk(td, QString(), &err);
+
+    status = STATUS_IDLE;
+    // The layout changed underneath the combo — rebuild it before the
+    // buttons are re-enabled so the selection matches reality.
+    getLogicalDrives();
+    setReadWriteButtonState();
+    progressbar->reset();
+    statusbar->showMessage(tr("Done."));
+
+    if (ok) {
+        showComplete(this, tr("Complete"),
+                     tr("Format Successful.<br><br>The device is now a single "
+                        "%1 partition.").arg(fs));
+    } else {
+        QMessageBox::critical(this, tr("Format Error"), err);
+    }
+}
+
 
 // Rebuild cboxDevice from enumerateTargetDisks(). Source of truth is the
 // physical-disk enumerator, not the per-letter probe — that way bare disks

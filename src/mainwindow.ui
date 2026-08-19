@@ -384,10 +384,32 @@
       <item>
        <widget class="QPushButton" name="bVerify">
         <property name="toolTip">
-         <string>Verify the image file with the selected drive</string>
+         <string>Verify the image file against the selected device</string>
+        </property>
+        <property name="statusTip">
+         <string>Compare 'Image File' against 'Device' without writing</string>
         </property>
         <property name="text">
-         <string>Verify Only</string>
+         <string>Verify</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="bFormat">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="toolTip">
+         <string>Erase the device and format it as a single FAT32 or exFAT partition</string>
+        </property>
+        <property name="statusTip">
+         <string>Erase 'Device' and format it as one partition (FAT32, or exFAT above 32 GB)</string>
+        </property>
+        <property name="text">
+         <string>Format</string>
         </property>
        </widget>
       </item>

@@ -63,6 +63,7 @@ class MainWindow : public QMainWindow, public Ui::MainWindow
         void on_bWrite_clicked();
         void on_bRead_clicked();
         void on_bVerify_clicked();
+        void on_bFormat_clicked();
         void onImageFileEditingFinished();
         void on_bHashCopy_clicked();
 private slots:
