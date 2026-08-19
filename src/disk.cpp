@@ -982,9 +982,31 @@ static QMap<DWORD, QStringList> buildDiskLetterMap()
 
 namespace {
 
-// Subset of FMIFS_PACKET_TYPE we care about; the rest are progress and
-// diagnostic packets we ignore.
-enum { FmIfsPercentCompleted = 0, FmIfsFinished = 11 };
+// FMIFS_PACKET_TYPE. Most are diagnostics FormatEx emits on its way to
+// FmIfsFinished; logging them turns "format failed" into an actual reason.
+enum {
+    FmIfsPercentCompleted = 0, FmIfsFormatReport = 1, FmIfsInsertDisk = 2,
+    FmIfsIncompatibleFileSystem = 3, FmIfsFormattingDestination = 4,
+    FmIfsIncompatibleMedia = 5, FmIfsAccessDenied = 6,
+    FmIfsMediaWriteProtected = 7, FmIfsCantLock = 8, FmIfsCantQuickFormat = 9,
+    FmIfsIoError = 10, FmIfsFinished = 11, FmIfsBadLabel = 12,
+};
+
+const char *fmIfsPacketName(int t)
+{
+    switch (t) {
+    case FmIfsIncompatibleFileSystem: return "incompatible filesystem";
+    case FmIfsIncompatibleMedia:      return "incompatible media";
+    case FmIfsAccessDenied:           return "access denied";
+    case FmIfsMediaWriteProtected:    return "media write protected";
+    case FmIfsCantLock:               return "cannot lock the volume";
+    case FmIfsCantQuickFormat:        return "cannot quick format";
+    case FmIfsIoError:                return "I/O error";
+    case FmIfsBadLabel:               return "bad volume label";
+    case FmIfsInsertDisk:             return "insert disk";
+    default:                          return nullptr;
+    }
+}
 
 typedef BOOLEAN (WINAPI *FmIfsCallback)(int packetType, ULONG packetLength, void *packetData);
 typedef VOID (WINAPI *FmIfsFormatEx)(PWSTR driveRoot, DWORD mediaFlag, PWSTR format,
@@ -993,12 +1015,18 @@ typedef VOID (WINAPI *FmIfsFormatEx)(PWSTR driveRoot, DWORD mediaFlag, PWSTR for
 
 bool g_formatFinished = false;
 bool g_formatSucceeded = false;
+QString g_formatReason;
 
 BOOLEAN WINAPI formatExCallback(int packetType, ULONG, void *packetData)
 {
     if (packetType == FmIfsFinished) {
         g_formatFinished = true;
         g_formatSucceeded = packetData && *static_cast<BOOLEAN *>(packetData);
+        return TRUE;
+    }
+    if (const char *why = fmIfsPacketName(packetType)) {
+        diagLog(QString("format: FormatEx says: %1").arg(QLatin1String(why)));
+        g_formatReason = QString::fromLatin1(why);
     }
     return TRUE;
 }
@@ -1130,7 +1158,13 @@ bool writeSinglePartitionLayout(int diskNumber, quint64 sizeBytes, bool exFat, Q
 // a letter is just one of a volume's names anyway. FormatEx accepts the
 // GUID path directly, which is how SD Card Formatter and rufus manage to
 // format cards that never appear in Explorer.
-QString findVolumeOnDisk(DWORD diskNumber, int timeoutMs)
+//
+// The extent must match the partition we just wrote. Right after the
+// layout lands the kernel still lists the *previous* volume on this disk,
+// and formatting that one fails - it no longer describes anything real.
+// Matching on offset and length waits out that window.
+QString findVolumeOnDisk(DWORD diskNumber, quint64 expectedOffset,
+                        quint64 expectedLength, int timeoutMs)
 {
     QElapsedTimer timer;
     timer.start();
@@ -1156,11 +1190,25 @@ QString findVolumeOnDisk(DWORD diskNumber, int timeoutMs)
                 if (ok) {
                     VOLUME_DISK_EXTENTS *ext = reinterpret_cast<VOLUME_DISK_EXTENTS *>(buf);
                     for (DWORD i = 0; i < ext->NumberOfDiskExtents; ++i) {
-                        if (ext->Extents[i].DiskNumber == diskNumber) {
+                        const DISK_EXTENT &e = ext->Extents[i];
+                        if (e.DiskNumber != diskNumber) continue;
+                        const quint64 off = (quint64)e.StartingOffset.QuadPart;
+                        const quint64 len = (quint64)e.ExtentLength.QuadPart;
+                        // Allow a little slack: Windows rounds the extent
+                        // down to whole clusters on some devices.
+                        const quint64 slack = 1024ULL * 1024ULL;
+                        const bool sameStart = (off == expectedOffset);
+                        const bool sameSize  = (len + slack >= expectedLength)
+                                            && (len <= expectedLength + slack);
+                        if (sameStart && sameSize) {
                             CloseHandle(hv);
                             FindVolumeClose(find);
                             return full;
                         }
+                        diagLog(QString("format: skipping stale volume on disk %1 "
+                                        "(offset=%2 len=%3, want offset=%4 len=%5)")
+                                    .arg(diskNumber).arg(off).arg(len)
+                                    .arg(expectedOffset).arg(expectedLength));
                     }
                 }
                 CloseHandle(hv);
@@ -1227,7 +1275,11 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
 
     notifyShellDriveAdded();
 
-    const QString volume = findVolumeOnDisk(td.diskNumber, 20000);
+    // Same geometry writeSinglePartitionLayout used, so the volume we pick
+    // up is the one it created and not the disk's previous volume.
+    const quint64 partOffset = 1024ULL * 1024ULL;
+    const quint64 partLength = td.sizeBytes - partOffset;
+    const QString volume = findVolumeOnDisk(td.diskNumber, partOffset, partLength, 20000);
     if (volume.isEmpty()) {
         diagLog("format: no volume surfaced on the disk within 20s");
         if (errOut) *errOut = QObject::tr("The partition was created, but Windows did not "
@@ -1259,6 +1311,7 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
 
     g_formatFinished = false;
     g_formatSucceeded = false;
+    g_formatReason.clear();
 
     std::vector<wchar_t> rootBuf(root.size() + 1, 0);
     root.toWCharArray(rootBuf.data());
@@ -1273,8 +1326,13 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
     FreeLibrary(fmifs);
 
     if (!g_formatFinished || !g_formatSucceeded) {
-        diagLog(QString("format: FormatEx reported failure (finished=%1)").arg(g_formatFinished));
-        if (errOut) *errOut = QObject::tr("Formatting the device as %1 failed.").arg(fs);
+        diagLog(QString("format: FormatEx reported failure (finished=%1, reason=%2)")
+                    .arg(g_formatFinished).arg(g_formatReason.isEmpty() ? "unknown" : g_formatReason));
+        if (errOut) {
+            *errOut = g_formatReason.isEmpty()
+                ? QObject::tr("Formatting the device as %1 failed.").arg(fs)
+                : QObject::tr("Formatting the device as %1 failed: %2.").arg(fs, g_formatReason);
+        }
         return false;
     }
 
