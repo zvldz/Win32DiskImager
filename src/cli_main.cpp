@@ -77,6 +77,8 @@ struct CliOptions {
     bool bytesSet = false;
     bool allocatedOnly = false;
     bool noVerify = false;     // `write` runs verify afterwards by default
+    std::string label;         // `format` volume label, may be empty
+    bool assumeYes = false;    // `format` skips the typed confirmation
 };
 
 std::wstring widen(const std::string &s)
@@ -130,6 +132,7 @@ void printUsage()
     std::cout << "  Win32DiskImager-cli.exe write  --device <N|E:> --image C:\\path\\image.img[.gz|.xz|.zst] [--no-verify]\n";
     std::cout << "  Win32DiskImager-cli.exe read   --device <N|E:> --image C:\\path\\backup.img [--bytes N] [--allocated-only]\n";
     std::cout << "  Win32DiskImager-cli.exe verify --device <N|E:> --image C:\\path\\image.img[.gz|.xz|.zst]\n";
+    std::cout << "  Win32DiskImager-cli.exe format --device <N|E:> [--label NAME] [--yes]\n";
     std::cout << "  Win32DiskImager-cli.exe check-updates\n";
     std::cout << "\n";
     std::cout << "--device accepts a physical disk number (canonical, e.g. 1) or a drive\n";
@@ -141,6 +144,8 @@ void printUsage()
     std::cout << "Format is detected by magic bytes, not file extension.\n";
     std::cout << "\n";
     std::cout << "`write` runs a verify pass afterwards by default; pass --no-verify to skip it.\n";
+    std::cout << "`format` erases the device and lays down a single partition: FAT32 up to\n";
+    std::cout << "32 GB, exFAT above that. It asks for confirmation unless --yes is given.\n";
     std::cout << "`check-updates` queries the GitHub releases API and prints the latest tag.\n";
 }
 
@@ -2845,6 +2850,404 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
     return rc;
 }
 
+
+// ---------------------------------------------------------------------
+// Format
+// ---------------------------------------------------------------------
+//
+// CLI mirror of disk.cpp's format path. Same reason the other disk
+// helpers are duplicated here: the CLI links without Qt, so the GUI
+// implementation (QString, QObject::tr) cannot be shared directly. The
+// sequence and the reasoning behind each step are identical — see the
+// disk.h documentation block.
+
+// FMIFS_PACKET_TYPE. Most arrive as diagnostics on the way to
+// FmIfsFinished; logging them turns "format failed" into a real reason.
+enum {
+    FmIfsPercentCompleted = 0, FmIfsFormatReport = 1, FmIfsInsertDisk = 2,
+    FmIfsIncompatibleFileSystem = 3, FmIfsFormattingDestination = 4,
+    FmIfsIncompatibleMedia = 5, FmIfsAccessDenied = 6,
+    FmIfsMediaWriteProtected = 7, FmIfsCantLock = 8, FmIfsCantQuickFormat = 9,
+    FmIfsIoError = 10, FmIfsFinished = 11, FmIfsBadLabel = 12,
+};
+enum { FmMediaRemovable = 11 };
+
+typedef BOOLEAN (WINAPI *FmIfsCallback)(int packetType, ULONG packetLength, void *packetData);
+typedef VOID (WINAPI *FmIfsFormatEx)(PWSTR driveRoot, DWORD mediaFlag, PWSTR format,
+                                     PWSTR label, BOOLEAN quickFormat, ULONG clusterSize,
+                                     FmIfsCallback callback);
+
+static bool g_formatFinished = false;
+static bool g_formatSucceeded = false;
+static std::string g_formatReason;
+
+static const char *fmIfsPacketName(int t)
+{
+    switch (t) {
+    case FmIfsIncompatibleFileSystem: return "incompatible filesystem";
+    case FmIfsIncompatibleMedia:      return "incompatible media";
+    case FmIfsAccessDenied:           return "access denied";
+    case FmIfsMediaWriteProtected:    return "media write protected";
+    case FmIfsCantLock:               return "cannot lock the volume";
+    case FmIfsCantQuickFormat:        return "cannot quick format";
+    case FmIfsIoError:                return "I/O error";
+    case FmIfsBadLabel:               return "bad volume label";
+    case FmIfsInsertDisk:             return "insert disk";
+    default:                          return nullptr;
+    }
+}
+
+static BOOLEAN WINAPI formatExCallback(int packetType, ULONG, void *packetData)
+{
+    if (packetType == FmIfsFinished) {
+        g_formatFinished = true;
+        g_formatSucceeded = packetData && *static_cast<BOOLEAN *>(packetData);
+        return TRUE;
+    }
+    if (packetType == FmIfsPercentCompleted) {
+        const ULONG pct = packetData ? *static_cast<ULONG *>(packetData) : 0;
+        std::cout << "\rFormatting: " << pct << "%" << std::flush;
+        return TRUE;
+    }
+    if (const char *why = fmIfsPacketName(packetType)) {
+        std::ostringstream os;
+        os << "format: FormatEx says: " << why;
+        diagLog(os.str());
+        g_formatReason = why;
+    }
+    return TRUE;
+}
+
+// Filesystem chosen for a device of this size. The SD Association draws
+// the line at 32 GB (SDHC is FAT32, SDXC is exFAT), which is also where
+// FormatEx stops producing FAT32.
+const wchar_t *formatFsForSize(uint64_t sizeBytes)
+{
+    const uint64_t fat32Limit = 32ULL * 1024ULL * 1024ULL * 1024ULL;
+    return sizeBytes > fat32Limit ? L"exFAT" : L"FAT32";
+}
+
+// Wipes the layout and writes one partition spanning the device. The
+// table is replaced wholesale, so GPT disks and multi-partition Linux
+// cards both collapse to a single partition.
+static bool writeSinglePartitionLayout(DWORD diskNumber, uint64_t sizeBytes, bool exFat)
+{
+    DWORD openErr = 0;
+    HANDLE h = openPhysicalDiskForWrite(diskNumber, &openErr);
+    if (h == INVALID_HANDLE_VALUE) {
+        if (openErr == ERROR_FILE_NOT_FOUND || openErr == ERROR_DEV_NOT_EXIST) {
+            std::cerr << "The device disappeared while preparing it. "
+                         "Re-insert the card and try again." << std::endl;
+        } else {
+            printWinError(L"Could not open the device for formatting.", openErr);
+        }
+        return false;
+    }
+
+    DWORD junk = 0;
+
+    // Zero the first and last megabyte: rewriting the table replaces the
+    // MBR, but a disk that held GPT also keeps a backup header in its
+    // final sectors, and gdisk / parted later report a damaged GPT.
+    {
+        const DWORD wipeBytes = 1024 * 1024;
+        void *zeros = _aligned_malloc(wipeBytes, 4096);
+        if (zeros) {
+            memset(zeros, 0, wipeBytes);
+            LARGE_INTEGER pos = {};
+            DWORD written = 0;
+            SetFilePointerEx(h, pos, nullptr, FILE_BEGIN);
+            WriteFile(h, zeros, wipeBytes, &written, nullptr);
+            if (sizeBytes > (uint64_t)wipeBytes * 2) {
+                pos.QuadPart = (LONGLONG)((sizeBytes - wipeBytes) & ~4095ULL);
+                if (SetFilePointerEx(h, pos, nullptr, FILE_BEGIN)) {
+                    written = 0;
+                    WriteFile(h, zeros, wipeBytes, &written, nullptr);
+                }
+            }
+            FlushFileBuffers(h);
+            _aligned_free(zeros);
+            diagLog("format: zeroed first and last 1 MiB (clears any stale GPT)");
+        }
+    }
+
+    CREATE_DISK cd = {};
+    cd.PartitionStyle = PARTITION_STYLE_MBR;
+    cd.Mbr.Signature = GetTickCount();
+    if (!DeviceIoControl(h, IOCTL_DISK_CREATE_DISK, &cd, sizeof(cd), nullptr, 0, &junk, nullptr)) {
+        std::ostringstream os;
+        os << "format: IOCTL_DISK_CREATE_DISK failed err=" << GetLastError();
+        diagLog(os.str());
+    }
+    DeviceIoControl(h, IOCTL_DISK_UPDATE_PROPERTIES, nullptr, 0, nullptr, 0, &junk, nullptr);
+
+    const uint64_t alignment = 1024ULL * 1024ULL;
+    if (sizeBytes <= alignment) {
+        CloseHandle(h);
+        std::cerr << "The device is too small to format." << std::endl;
+        return false;
+    }
+
+    BYTE buffer[sizeof(DRIVE_LAYOUT_INFORMATION_EX) + 3 * sizeof(PARTITION_INFORMATION_EX)] = {};
+    DRIVE_LAYOUT_INFORMATION_EX *layout = reinterpret_cast<DRIVE_LAYOUT_INFORMATION_EX *>(buffer);
+    layout->PartitionStyle = PARTITION_STYLE_MBR;
+    layout->PartitionCount = 4;
+    layout->Mbr.Signature = cd.Mbr.Signature;
+
+    PARTITION_INFORMATION_EX &p0 = layout->PartitionEntry[0];
+    p0.PartitionStyle = PARTITION_STYLE_MBR;
+    p0.StartingOffset.QuadPart = (LONGLONG)alignment;
+    p0.PartitionLength.QuadPart = (LONGLONG)(sizeBytes - alignment);
+    p0.PartitionNumber = 1;
+    p0.RewritePartition = TRUE;
+    // 0x0C = FAT32 LBA, 0x07 = IFS (exFAT and NTFS both use it).
+    p0.Mbr.PartitionType = exFat ? 0x07 : 0x0C;
+    p0.Mbr.BootIndicator = FALSE;
+    p0.Mbr.RecognizedPartition = TRUE;
+    p0.Mbr.HiddenSectors = (DWORD)(alignment / 512);
+    for (int i = 1; i < 4; ++i) {
+        layout->PartitionEntry[i].PartitionStyle = PARTITION_STYLE_MBR;
+        layout->PartitionEntry[i].RewritePartition = TRUE;
+    }
+
+    const BOOL ok = DeviceIoControl(h, IOCTL_DISK_SET_DRIVE_LAYOUT_EX,
+                                    buffer, sizeof(buffer), nullptr, 0, &junk, nullptr);
+    if (!ok) {
+        const DWORD err = GetLastError();
+        CloseHandle(h);
+        printWinError(L"Could not write the partition table.", err);
+        return false;
+    }
+    DeviceIoControl(h, IOCTL_DISK_UPDATE_PROPERTIES, nullptr, 0, nullptr, 0, &junk, nullptr);
+    CloseHandle(h);
+
+    std::ostringstream os;
+    os << "format: wrote single " << (exFat ? "exFAT" : "FAT32")
+       << " partition, " << (sizeBytes - alignment) << " bytes";
+    diagLog(os.str());
+    return true;
+}
+
+// Finds the volume that lives on the disk, by extent rather than by
+// drive letter — a fresh partition only gets a letter if automount is on.
+static std::wstring findVolumeOnDisk(DWORD diskNumber, uint64_t expectedOffset,
+                                     uint64_t expectedLength, int timeoutMs)
+{
+    const DWORD start = GetTickCount();
+    for (;;) {
+        wchar_t name[MAX_PATH] = {};
+        HANDLE find = FindFirstVolumeW(name, MAX_PATH);
+        if (find != INVALID_HANDLE_VALUE) {
+            do {
+                std::wstring full = name;
+                std::wstring dev = full;
+                if (!dev.empty() && dev.back() == L'\\') dev.pop_back();
+                HANDLE hv = CreateFileW(dev.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                        nullptr, OPEN_EXISTING, 0, nullptr);
+                if (hv == INVALID_HANDLE_VALUE) continue;
+                BYTE b[sizeof(VOLUME_DISK_EXTENTS) + 8 * sizeof(DISK_EXTENT)] = {};
+                DWORD ret = 0;
+                if (DeviceIoControl(hv, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+                                    nullptr, 0, b, sizeof(b), &ret, nullptr)) {
+                    VOLUME_DISK_EXTENTS *ex = reinterpret_cast<VOLUME_DISK_EXTENTS *>(b);
+                    for (DWORD i = 0; i < ex->NumberOfDiskExtents; ++i) {
+                        const DISK_EXTENT &e = ex->Extents[i];
+                        if (e.DiskNumber != diskNumber) continue;
+                        const uint64_t off = (uint64_t)e.StartingOffset.QuadPart;
+                        const uint64_t len = (uint64_t)e.ExtentLength.QuadPart;
+                        const uint64_t slack = 1024ULL * 1024ULL;
+                        if (off == expectedOffset
+                            && len + slack >= expectedLength
+                            && len <= expectedLength + slack) {
+                            CloseHandle(hv);
+                            FindVolumeClose(find);
+                            return full;
+                        }
+                    }
+                }
+                CloseHandle(hv);
+            } while (FindNextVolumeW(find, name, MAX_PATH));
+            FindVolumeClose(find);
+        }
+        if ((int)(GetTickCount() - start) >= timeoutMs) return std::wstring();
+        Sleep(300);
+    }
+}
+
+// FormatEx only formats a mounted root: a volume GUID path is rejected
+// with ERROR_INVALID_PARAMETER, so a partition Windows has not
+// auto-mounted has to be given a drive letter first.
+static std::wstring ensureDriveLetter(const std::wstring &volumePath)
+{
+    wchar_t names[512] = {};
+    DWORD len = 0;
+    if (GetVolumePathNamesForVolumeNameW(volumePath.c_str(), names, 512, &len) && names[0]) {
+        return std::wstring(names);
+    }
+    const DWORD used = GetLogicalDrives();
+    for (wchar_t c = L'D'; c <= L'Z'; ++c) {
+        if (used & (1u << (c - L'A'))) continue;
+        wchar_t mount[4] = { c, L':', L'\\', 0 };
+        if (SetVolumeMountPointW(mount, volumePath.c_str())) {
+            std::ostringstream os;
+            os << "format: assigned drive letter " << (char)c << ":";
+            diagLog(os.str());
+            return std::wstring(mount);
+        }
+    }
+    return std::wstring();
+}
+
+// Takes the volume back from Windows: once a partition has a letter the
+// system mounts it, and Explorer or the indexer can hold it, which makes
+// FormatEx report "cannot lock the volume" intermittently.
+static void dismountForFormat(const std::wstring &mountPoint)
+{
+    std::wstring dev = mountPoint;
+    while (!dev.empty() && dev.back() == L'\\') dev.pop_back();
+    const std::wstring path = L"\\\\.\\" + dev;
+
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           nullptr, OPEN_EXISTING, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return;
+
+    DWORD junk = 0;
+    bool locked = false;
+    int delayMs = 100;
+    for (int attempt = 0; attempt < 8 && !locked; ++attempt) {
+        locked = DeviceIoControl(h, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &junk, nullptr) != 0;
+        if (!locked) { Sleep(delayMs); delayMs *= 2; }
+    }
+    const BOOL dis = DeviceIoControl(h, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0, &junk, nullptr);
+    std::ostringstream os;
+    os << "format: lock " << (locked ? "OK" : "failed")
+       << ", dismount " << (dis ? "OK" : "failed");
+    diagLog(os.str());
+    // Release before FormatEx: it opens the volume itself.
+    DeviceIoControl(h, FSCTL_UNLOCK_VOLUME, nullptr, 0, nullptr, 0, &junk, nullptr);
+    CloseHandle(h);
+}
+
+int cmdFormat(const std::string &device, const std::string &label, bool assumeYes)
+{
+    DWORD diskNumber = 0;
+    if (!parseDevice(device, diskNumber)) return 1;
+
+    DiskGeometry geometry;
+    {
+        // Read-only probe just for the size; the write handle comes later.
+        const std::wstring probePath = toPhysicalDrivePath(diskNumber);
+        HANDLE probe = CreateFileW(probePath.c_str(), GENERIC_READ,
+                                   FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                   nullptr, OPEN_EXISTING, 0, nullptr);
+        if (probe == INVALID_HANDLE_VALUE) {
+            printWinError(L"Could not open the device.", GetLastError());
+            return 1;
+        }
+        const bool ok = getDiskGeometry(probe, geometry);
+        CloseHandle(probe);
+        if (!ok) {
+            printWinError(L"Failed to get disk geometry.", GetLastError());
+            return 1;
+        }
+    }
+
+    const wchar_t *fs = formatFsForSize(geometry.totalBytes);
+    const bool exFat = (wcscmp(fs, L"exFAT") == 0);
+    std::cout << "Device: disk " << diskNumber << " ("
+              << formatDeviceSize(geometry.totalBytes) << ")\n"
+              << "Filesystem: " << (exFat ? "exFAT" : "FAT32") << std::endl;
+
+    if (!assumeYes) {
+        std::cout << "Everything on this device will be erased and replaced with a single "
+                  << (exFat ? "exFAT" : "FAT32")
+                  << " partition.\nAll data will be lost. Type YES to continue: ";
+        std::string answer;
+        std::getline(std::cin, answer);
+        if (answer != "YES") {
+            std::cout << "Aborted." << std::endl;
+            return 1;
+        }
+    }
+
+    diagLog("=== FORMAT START === (cli)");
+
+    // Same preparation the write path uses: letters gone, volumes
+    // dismounted, so nothing holds the disk while the layout is rewritten.
+    stripLettersAndPrepDisk(diskNumber);
+
+    if (!writeSinglePartitionLayout(diskNumber, geometry.totalBytes, exFat)) return 1;
+    notifyShellDriveAdded();
+
+    const uint64_t partOffset = 1024ULL * 1024ULL;
+    const uint64_t partLength = geometry.totalBytes - partOffset;
+    const std::wstring volume = findVolumeOnDisk(diskNumber, partOffset, partLength, 20000);
+    if (volume.empty()) {
+        std::cerr << "The partition was created, but Windows did not surface a volume for it."
+                  << std::endl;
+        return 1;
+    }
+
+    const std::wstring mount = ensureDriveLetter(volume);
+    if (mount.empty()) {
+        std::cerr << "The partition was created, but no drive letter was free to mount it."
+                  << std::endl;
+        return 1;
+    }
+    std::wcout << L"Mounted at " << mount << std::endl;
+
+    dismountForFormat(mount);
+
+    HMODULE fmifs = LoadLibraryW(L"fmifs.dll");
+    if (!fmifs) {
+        std::cerr << "Could not load fmifs.dll, which performs the format." << std::endl;
+        return 1;
+    }
+    FmIfsFormatEx formatEx = reinterpret_cast<FmIfsFormatEx>(
+        reinterpret_cast<void *>(GetProcAddress(fmifs, "FormatEx")));
+    if (!formatEx) {
+        FreeLibrary(fmifs);
+        std::cerr << "fmifs.dll does not expose FormatEx on this system." << std::endl;
+        return 1;
+    }
+
+    std::wstring root = mount;
+    if (root.empty() || root.back() != L'\\') root += L'\\';
+    std::wstring fsBuf(fs);
+    std::wstring labelBuf = widen(label);
+
+    g_formatFinished = g_formatSucceeded = false;
+    g_formatReason.clear();
+    formatEx(&root[0], FmMediaRemovable, &fsBuf[0], &labelBuf[0], TRUE, 0, formatExCallback);
+
+    // One retry when the volume was busy — something can grab it between
+    // the dismount and FormatEx opening it.
+    if (g_formatFinished && !g_formatSucceeded && g_formatReason == "cannot lock the volume") {
+        diagLog("format: volume was busy, dismounting again and retrying once");
+        Sleep(700);
+        dismountForFormat(mount);
+        g_formatFinished = g_formatSucceeded = false;
+        g_formatReason.clear();
+        formatEx(&root[0], FmMediaRemovable, &fsBuf[0], &labelBuf[0], TRUE, 0, formatExCallback);
+    }
+    FreeLibrary(fmifs);
+
+    std::cout << std::endl;
+    if (!g_formatFinished || !g_formatSucceeded) {
+        std::cerr << "Formatting failed";
+        if (!g_formatReason.empty()) std::cerr << ": " << g_formatReason;
+        std::cerr << "." << std::endl;
+        return 1;
+    }
+
+    notifyShellDriveAdded();
+    diagLog("=== FORMAT END === (cli)");
+    std::wcout << L"Format successful. The device is now a single " << fs
+               << L" partition at " << mount << std::endl;
+    return 0;
+}
+
 bool parseArgs(int argc, char *argv[], CliOptions &opt)
 {
     for (int i = 1; i < argc; ++i) {
@@ -2858,6 +3261,18 @@ bool parseArgs(int argc, char *argv[], CliOptions &opt)
             return false;
         }
 
+        if (a == "--label") {
+            if (i + 1 >= argc) {
+                std::cerr << "Missing value for " << a << std::endl;
+                return false;
+            }
+            opt.label = argv[++i];
+            continue;
+        }
+        if (a == "--yes" || a == "-y") {
+            opt.assumeYes = true;
+            continue;
+        }
         if (a == "--device" || a == "-d") {
             if (i + 1 >= argc) {
                 std::cerr << "Missing value for " << a << std::endl;
@@ -2991,6 +3406,9 @@ int main(int argc, char *argv[])
     if (opt.command == "read") {
         const uint64_t bytes = opt.bytesSet ? opt.bytes : 0;
         return cmdRead(opt.image, opt.device, bytes, opt.allocatedOnly);
+    }
+    if (opt.command == "format") {
+        return cmdFormat(opt.device, opt.label, opt.assumeYes);
     }
     if (opt.command == "verify") {
         return cmdVerify(opt.image, opt.device);

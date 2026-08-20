@@ -7,6 +7,9 @@
 #### Features
 - **Format button** — brings a card written with a Linux image back to a layout Windows and cameras accept. It rewrites the partition table wholesale, so a GPT disk or one carrying several Linux partitions ends up with a single partition spanning the device; the first and last megabyte are zeroed beforehand, so no stale backup GPT is left behind for `gdisk` or `parted` to complain about later. Filesystem follows the SD Association's sizing — FAT32 up to 32 GB, exFAT above it. The operation names the device and the filesystem in a confirmation dialog first, and cannot be cancelled midway: stopping between writing the table and formatting would leave the card without a filesystem.
 
+#### CLI
+- New `format` command, matching the GUI button: `Win32DiskImager-cli.exe format --device 1 [--label NAME] [--yes]`. It asks for a typed confirmation before erasing anything unless `--yes` is passed.
+
 #### GUI
 - The `Verify Only` button is now just `Verify`, and its hint appears in the status bar like the buttons beside it instead of floating next to the cursor. In Traditional Chinese the `Write` button carried a whole sentence rather than a label, which stretched the button row.
 
