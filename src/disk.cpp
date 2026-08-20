@@ -1220,6 +1220,59 @@ QString findVolumeOnDisk(DWORD diskNumber, quint64 expectedOffset,
     }
 }
 
+
+// Takes the volume away from Windows so FormatEx can have it.
+//
+// The moment a partition gets a drive letter, the system mounts it and
+// Explorer, the search indexer or antivirus may open it. FormatEx then
+// fails with "cannot lock the volume" — intermittently, depending on who
+// got there first. Locking and dismounting forces those handles shut;
+// FormatEx mounts the volume again itself as it works.
+//
+// Best-effort with a short backoff: a card nobody has touched locks on
+// the first try, and if the lock never comes we let FormatEx try anyway
+// rather than refusing to format at all.
+bool dismountForFormat(const QString &mountPoint)
+{
+    QString dev = mountPoint;
+    while (dev.endsWith(QLatin1Char('\'))) dev.chop(1);
+    const QString path = QStringLiteral("\\.\%1").arg(dev);
+
+    HANDLE h = CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()),
+                           GENERIC_READ | GENERIC_WRITE,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        diagLog(QString("format: dismount open %1 failed err=%2").arg(path).arg(GetLastError()));
+        return false;
+    }
+
+    DWORD junk = 0;
+    bool locked = false;
+    int delayMs = 100;
+    for (int attempt = 0; attempt < 8 && !locked; ++attempt) {
+        locked = DeviceIoControl(h, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &junk, NULL) != 0;
+        if (!locked) {
+            Sleep(delayMs);
+            delayMs *= 2;
+        }
+    }
+    if (!locked) {
+        diagLog(QString("format: could not lock %1, formatting anyway").arg(mountPoint));
+    }
+
+    const bool dismounted =
+        DeviceIoControl(h, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0, &junk, NULL) != 0;
+    diagLog(QString("format: dismount %1 %2").arg(mountPoint,
+                                                  dismounted ? "OK" : "failed"));
+
+    // Release before FormatEx: it opens the volume itself and would be
+    // locked out by our own handle.
+    DeviceIoControl(h, FSCTL_UNLOCK_VOLUME, NULL, 0, NULL, 0, &junk, NULL);
+    CloseHandle(h);
+    return dismounted;
+}
+
 // Returns the volume's mount point ("X:\\"), assigning a free drive letter
 // first if it has none.
 //
@@ -1301,6 +1354,10 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
     diagLog(QString("format: volume %1 mounted at %2, formatting as %3")
                 .arg(volume, mount, fs));
 
+    // Windows mounts the fresh partition as soon as it has a letter; take
+    // it back before handing it to FormatEx.
+    dismountForFormat(mount);
+
     HMODULE fmifs = LoadLibraryW(L"fmifs.dll");
     if (!fmifs) {
         if (errOut) *errOut = QObject::tr("Could not load fmifs.dll, which performs the format.");
@@ -1333,8 +1390,25 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
     if (!label.isEmpty()) label.toWCharArray(labelBuf.data());
 
     // clusterSize 0 lets FormatEx pick the default for the volume size.
-    formatEx(rootBuf.data(), 0 /* FMIFS_HARDDISK */, fsBuf.data(),
+    // FMIFS media flag 11 is "removable", which is what a card reader is;
+    // the value is passed straight through to the filesystem driver.
+    formatEx(rootBuf.data(), 11 /* FmMediaRemovable */, fsBuf.data(),
              labelBuf.data(), TRUE /* quick */, 0, formatExCallback);
+
+    // One retry when the volume was busy: something grabbed it between our
+    // dismount and FormatEx opening it, which happens on cards Windows was
+    // already using. A second dismount usually settles it.
+    if (g_formatFinished && !g_formatSucceeded
+        && g_formatReason == QStringLiteral("cannot lock the volume")) {
+        diagLog("format: volume was busy, dismounting again and retrying once");
+        Sleep(700);
+        dismountForFormat(mount);
+        g_formatFinished = false;
+        g_formatSucceeded = false;
+        g_formatReason.clear();
+        formatEx(rootBuf.data(), 11 /* FmMediaRemovable */, fsBuf.data(),
+                 labelBuf.data(), TRUE /* quick */, 0, formatExCallback);
+    }
     FreeLibrary(fmifs);
 
     if (!g_formatFinished || !g_formatSucceeded) {
