@@ -90,7 +90,7 @@
     </message>
     <message>
         <location filename="../mainwindow.ui" line="345"/>
-        <location filename="../mainwindow.cpp" line="2306"/>
+        <location filename="../mainwindow.cpp" line="2362"/>
         <source>Cancel</source>
         <translation>Annuleren</translation>
     </message>
@@ -122,7 +122,7 @@
     <message>
         <location filename="../mainwindow.ui" line="390"/>
         <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
-        <translation>'Imagebestand' met 'Apparaat' vergelijken zonder te schrijven</translation>
+        <translation>&apos;Imagebestand&apos; met &apos;Apparaat&apos; vergelijken zonder te schrijven</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="393"/>
@@ -137,7 +137,7 @@
     <message>
         <location filename="../mainwindow.ui" line="409"/>
         <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
-        <translation>'Apparaat' wissen en als één partitie formatteren (FAT32, boven 32 GB exFAT)</translation>
+        <translation>&apos;Apparaat&apos; wissen en als één partitie formatteren (FAT32, boven 32 GB exFAT)</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="412"/>
@@ -163,67 +163,67 @@
         <translation>Afsluiten</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="570"/>
-        <location filename="../mainwindow.cpp" line="580"/>
-        <location filename="../mainwindow.cpp" line="590"/>
+        <location filename="../mainwindow.cpp" line="573"/>
+        <location filename="../mainwindow.cpp" line="583"/>
+        <location filename="../mainwindow.cpp" line="593"/>
         <source>Exit?</source>
         <translation>Afsluiten?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="570"/>
+        <location filename="../mainwindow.cpp" line="573"/>
         <source>Exiting now will result in a corrupt image file.
 Are you sure you want to exit?</source>
         <translation>Nu afsluiten resulteert in een corrup image bestand. Weet u zeker dat u wilt afsluiten?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="580"/>
+        <location filename="../mainwindow.cpp" line="583"/>
         <source>Exiting now will result in a corrupt disk.
 Are you sure you want to exit?</source>
         <translation>Nu alsluiten resulteert in een corrupte disk. Weet u zeker dat u wilt afsluiten?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="616"/>
+        <location filename="../mainwindow.cpp" line="619"/>
         <source>Select a disk image</source>
         <translation>Kies een image bestand</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="673"/>
+        <location filename="../mainwindow.cpp" line="676"/>
         <source>Generating...</source>
         <translation>Genereren...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="715"/>
-        <location filename="../mainwindow.cpp" line="724"/>
+        <location filename="../mainwindow.cpp" line="718"/>
+        <location filename="../mainwindow.cpp" line="727"/>
         <source>Cancel?</source>
         <translation>Afbreken?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="715"/>
+        <location filename="../mainwindow.cpp" line="718"/>
         <source>Canceling now will result in a corrupt destination.
 Are you sure you want to cancel?</source>
         <translation>Nu afbreken resulteert in een corrupt doel. Weet u zeker dat u wilt afbreken?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="754"/>
-        <location filename="../mainwindow.cpp" line="1344"/>
-        <location filename="../mainwindow.cpp" line="1521"/>
+        <location filename="../mainwindow.cpp" line="757"/>
+        <location filename="../mainwindow.cpp" line="1347"/>
+        <location filename="../mainwindow.cpp" line="1524"/>
         <source>Write Error</source>
         <translation>Schrijffout</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="755"/>
-        <location filename="../mainwindow.cpp" line="1345"/>
-        <location filename="../mainwindow.cpp" line="1702"/>
+        <location filename="../mainwindow.cpp" line="758"/>
+        <location filename="../mainwindow.cpp" line="1348"/>
+        <location filename="../mainwindow.cpp" line="1705"/>
         <source>Image file cannot be located on the target device.</source>
         <translation>Image bestand kan niet gevonden worden op het doel apparaat.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="767"/>
+        <location filename="../mainwindow.cpp" line="770"/>
         <source>Confirm overwrite</source>
         <translation>Overschrijven bevestigen</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="767"/>
+        <location filename="../mainwindow.cpp" line="770"/>
         <source>Writing to a physical device can corrupt the device.
 (Target Device: %1 &quot;%2&quot;)
 Are you sure you want to continue?</source>
@@ -232,12 +232,12 @@ Are you sure you want to continue?</source>
 Weet u zeker dat u door wilt gaan?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1658"/>
+        <location filename="../mainwindow.cpp" line="1661"/>
         <source>Read Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
         <translation>Lezen geslaagd.&lt;br&gt;&lt;br&gt;&lt;b&gt;Tijd:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2180"/>
+        <location filename="../mainwindow.cpp" line="2183"/>
         <source>Verify Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
         <translation>Verificatie geslaagd.&lt;br&gt;&lt;br&gt;&lt;b&gt;Tijd:&lt;/b&gt; %1</translation>
     </message>
@@ -257,38 +257,38 @@ Weet u zeker dat u door wilt gaan?</translation>
         <translation>Gecomprimeerde afbeeldingen (*.gz *.xz *.zst)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="590"/>
+        <location filename="../mainwindow.cpp" line="593"/>
         <source>Exiting now will cancel verifying image.
 Are you sure you want to exit?</source>
         <translation>Nu afsluiten breekt het controleren van het image af.
 Weet u zeker dat u wilt afsluiten?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="724"/>
+        <location filename="../mainwindow.cpp" line="727"/>
         <source>Cancel Verify.
 Are you sure you want to cancel?</source>
         <translation>Controleren afbreken.
 Weet u zeker dat u wilt fabreken?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="940"/>
+        <location filename="../mainwindow.cpp" line="943"/>
         <source>Not enough available space!</source>
         <translation>Noet genoeg beschikbare ruimte!</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="684"/>
-        <location filename="../mainwindow.cpp" line="892"/>
-        <location filename="../mainwindow.cpp" line="1220"/>
-        <location filename="../mainwindow.cpp" line="1268"/>
-        <location filename="../mainwindow.cpp" line="1273"/>
-        <location filename="../mainwindow.cpp" line="1278"/>
-        <location filename="../mainwindow.cpp" line="1305"/>
-        <location filename="../mainwindow.cpp" line="1782"/>
-        <location filename="../mainwindow.cpp" line="2061"/>
-        <location filename="../mainwindow.cpp" line="2131"/>
-        <location filename="../mainwindow.cpp" line="2136"/>
-        <location filename="../mainwindow.cpp" line="2141"/>
-        <location filename="../mainwindow.cpp" line="2187"/>
+        <location filename="../mainwindow.cpp" line="687"/>
+        <location filename="../mainwindow.cpp" line="895"/>
+        <location filename="../mainwindow.cpp" line="1223"/>
+        <location filename="../mainwindow.cpp" line="1271"/>
+        <location filename="../mainwindow.cpp" line="1276"/>
+        <location filename="../mainwindow.cpp" line="1281"/>
+        <location filename="../mainwindow.cpp" line="1308"/>
+        <location filename="../mainwindow.cpp" line="1785"/>
+        <location filename="../mainwindow.cpp" line="2064"/>
+        <location filename="../mainwindow.cpp" line="2134"/>
+        <location filename="../mainwindow.cpp" line="2139"/>
+        <location filename="../mainwindow.cpp" line="2144"/>
+        <location filename="../mainwindow.cpp" line="2190"/>
         <source>File Error</source>
         <translation>Bestandsfout</translation>
     </message>
@@ -312,33 +312,33 @@ Weet u zeker dat u wilt fabreken?</translation>
 %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="684"/>
+        <location filename="../mainwindow.cpp" line="687"/>
         <source>Unable to open file for hashing.</source>
         <translation>Kan bestand niet openen voor hash-berekening.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="784"/>
+        <location filename="../mainwindow.cpp" line="787"/>
         <source>Preparing disk...</source>
         <translation>Disk wordt voorbereid…</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="820"/>
+        <location filename="../mainwindow.cpp" line="823"/>
         <source>Settling disk (this can take 10-20 seconds)...</source>
         <translation>Disk stabiliseren (kan 10–20 seconden duren)…</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="824"/>
+        <location filename="../mainwindow.cpp" line="827"/>
         <source>Opening disk...</source>
         <translation>Disk openen…</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="842"/>
-        <location filename="../mainwindow.cpp" line="847"/>
+        <location filename="../mainwindow.cpp" line="845"/>
+        <location filename="../mainwindow.cpp" line="850"/>
         <source>Device Error</source>
         <translation>Apparaat fout</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="843"/>
+        <location filename="../mainwindow.cpp" line="846"/>
         <source>The target device is no longer available.
 
 The card may have been removed, or it is still starting up. Re-insert it, wait a moment for it to appear, and try again.</source>
@@ -347,7 +347,7 @@ The card may have been removed, or it is still starting up. Re-insert it, wait a
 De kaart is mogelijk verwijderd, of wordt nog opgestart. Plaats de kaart opnieuw, wacht even tot deze verschijnt en probeer het opnieuw.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="848"/>
+        <location filename="../mainwindow.cpp" line="851"/>
         <source>Could not open the target device for writing.
 
 Make sure no other application is using the card (File Explorer, antivirus scan, backup software) and try again.</source>
@@ -356,255 +356,286 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
 Zorg ervoor dat geen andere applicatie de kaart gebruikt (Verkenner, antivirusscan, back-upsoftware) en probeer het opnieuw.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="893"/>
-        <location filename="../mainwindow.cpp" line="1783"/>
+        <location filename="../mainwindow.cpp" line="896"/>
+        <location filename="../mainwindow.cpp" line="1786"/>
         <source>The selected image file is empty.</source>
         <translation>Het geselecteerde afbeeldingsbestand is leeg.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="964"/>
+        <location filename="../mainwindow.cpp" line="967"/>
         <source>Writing...</source>
         <translation>Schrijven...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1078"/>
+        <location filename="../mainwindow.cpp" line="1081"/>
         <source>Failed to allocate buffer for delayed first chunk.</source>
         <translation>Buffer voor uitgesteld eerste blok kon niet worden toegewezen.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1096"/>
+        <location filename="../mainwindow.cpp" line="1099"/>
         <source>Writing: %1 MB/s</source>
         <translation>Schrijven: %1 MB/s</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1198"/>
+        <location filename="../mainwindow.cpp" line="1201"/>
         <source>Failed to commit partition table at end of write.</source>
         <translation>Partitietabel kon niet worden vastgelegd aan het einde van het schrijven.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1268"/>
-        <location filename="../mainwindow.cpp" line="2131"/>
+        <location filename="../mainwindow.cpp" line="1271"/>
+        <location filename="../mainwindow.cpp" line="2134"/>
         <source>The selected file does not exist.</source>
         <translation>Het gekozen bestand bestaat niet.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1273"/>
-        <location filename="../mainwindow.cpp" line="2136"/>
+        <location filename="../mainwindow.cpp" line="1276"/>
+        <location filename="../mainwindow.cpp" line="2139"/>
         <source>You do not have permision to read the selected file.</source>
         <translation>U heeft geen leestoegang tot het gekozen bestand.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1278"/>
-        <location filename="../mainwindow.cpp" line="2141"/>
+        <location filename="../mainwindow.cpp" line="1281"/>
+        <location filename="../mainwindow.cpp" line="2144"/>
         <source>The specified file contains no data.</source>
         <translation>Het gekozen bestand bevat geen data.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1282"/>
-        <location filename="../mainwindow.cpp" line="1652"/>
-        <location filename="../mainwindow.cpp" line="2145"/>
+        <location filename="../mainwindow.cpp" line="1285"/>
+        <location filename="../mainwindow.cpp" line="1655"/>
+        <location filename="../mainwindow.cpp" line="2148"/>
+        <location filename="../mainwindow.cpp" line="2250"/>
         <source>Done.</source>
         <translation>Voltooid.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1297"/>
-        <location filename="../mainwindow.cpp" line="1654"/>
+        <location filename="../mainwindow.cpp" line="1300"/>
         <location filename="../mainwindow.cpp" line="1657"/>
-        <location filename="../mainwindow.cpp" line="2182"/>
+        <location filename="../mainwindow.cpp" line="1660"/>
+        <location filename="../mainwindow.cpp" line="2185"/>
+        <location filename="../mainwindow.cpp" line="2253"/>
         <source>Complete</source>
         <translation>Afgerond</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1298"/>
+        <location filename="../mainwindow.cpp" line="1301"/>
         <source>Write Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1&lt;br&gt;&lt;br&gt;&lt;i&gt;Card can be safely removed.&lt;/i&gt;</source>
         <translation>Schrijven gelukt.&lt;br&gt;&lt;br&gt;&lt;b&gt;Tijdsduur:&lt;/b&gt; %1&lt;br&gt;&lt;br&gt;&lt;i&gt;Kaart kan veilig worden verwijderd.&lt;/i&gt;</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1305"/>
-        <location filename="../mainwindow.cpp" line="2187"/>
+        <location filename="../mainwindow.cpp" line="1308"/>
+        <location filename="../mainwindow.cpp" line="2190"/>
         <source>Please specify an image file to use.</source>
         <translation>Specificeer alstublieft een image bestand om te gebruiken.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1352"/>
+        <location filename="../mainwindow.cpp" line="1355"/>
         <source>Confirm Overwrite</source>
         <translation>Bevestig overschrijven</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1352"/>
+        <location filename="../mainwindow.cpp" line="1355"/>
         <source>Are you sure you want to overwrite the specified file?</source>
         <translation>Weet u zeker dat u dit bestand wilt overschrijven?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1440"/>
+        <location filename="../mainwindow.cpp" line="1443"/>
         <source>GPT header is invalid or unreadable. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>GPT-header is ongeldig of onleesbaar. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1442"/>
+        <location filename="../mainwindow.cpp" line="1445"/>
         <source>No valid MBR or GPT on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>Geen geldige MBR of GPT op dit apparaat. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1452"/>
+        <location filename="../mainwindow.cpp" line="1455"/>
         <source>Could not read GPT partition entries. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>Kon GPT-partitievermeldingen niet lezen. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1490"/>
+        <location filename="../mainwindow.cpp" line="1493"/>
         <source>GPT has no allocated partitions. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>GPT heeft geen toegewezen partities. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1494"/>
+        <location filename="../mainwindow.cpp" line="1497"/>
         <source>GPT partition entries invalid or corrupt. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>GPT-partitievermeldingen zijn ongeldig of beschadigd. &apos;Read Only Allocated Partitions&apos; valt terug op een volledige diskread.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1502"/>
+        <location filename="../mainwindow.cpp" line="1505"/>
         <source>Allocated-only fallback</source>
         <translation>Terugval naar enkel toegewezen partities</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1521"/>
+        <location filename="../mainwindow.cpp" line="1524"/>
         <source>Disk is not large enough for the specified image.</source>
         <translation>Disk is niet groot genoeg voor dit image bestand.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1535"/>
+        <location filename="../mainwindow.cpp" line="1538"/>
         <source>Reading...</source>
         <translation>Lezen...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1559"/>
+        <location filename="../mainwindow.cpp" line="1562"/>
         <source>Reading: %1 MB/s</source>
         <translation>Lezen: %1 MB/s</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1654"/>
+        <location filename="../mainwindow.cpp" line="1657"/>
         <source>Read Canceled.</source>
         <translation>Lezen is afgebroken.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1664"/>
+        <location filename="../mainwindow.cpp" line="1667"/>
         <source>File Info</source>
         <translation>Bestandsinformatie</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1664"/>
+        <location filename="../mainwindow.cpp" line="1667"/>
         <source>Please specify a file to save data to.</source>
         <translation>Specificeer alstublieft een bestand om de data te bewaren.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1701"/>
+        <location filename="../mainwindow.cpp" line="1704"/>
         <source>Verify Error</source>
         <translation>Fout in Controle</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1822"/>
+        <location filename="../mainwindow.cpp" line="1825"/>
         <source>Size Mismatch!</source>
         <translation>Grootte komt niet overeen!</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1842"/>
+        <location filename="../mainwindow.cpp" line="1845"/>
         <source>Verifying...</source>
         <translation>Verifiëren...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1928"/>
-        <location filename="../mainwindow.cpp" line="1959"/>
-        <location filename="../mainwindow.cpp" line="1981"/>
-        <location filename="../mainwindow.cpp" line="2082"/>
-        <location filename="../mainwindow.cpp" line="2097"/>
+        <location filename="../mainwindow.cpp" line="1931"/>
+        <location filename="../mainwindow.cpp" line="1962"/>
+        <location filename="../mainwindow.cpp" line="1984"/>
+        <location filename="../mainwindow.cpp" line="2085"/>
+        <location filename="../mainwindow.cpp" line="2100"/>
         <source>Verify Failure</source>
         <translation>Controle mislukt</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1948"/>
+        <location filename="../mainwindow.cpp" line="1951"/>
         <source>Failed to commit partition table before verification.</source>
         <translation>Kan de partitietabel niet wegschrijven vóór de verificatie.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2083"/>
+        <location filename="../mainwindow.cpp" line="2086"/>
         <source>The image verified correctly, but writing the partition table at the end failed. The card is not bootable — please write the image again.</source>
         <translation>De image is correct geverifieerd, maar het wegschrijven van de partitietabel aan het einde is mislukt. De kaart is niet opstartbaar — schrijf de image opnieuw.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2157"/>
+        <location filename="../mainwindow.cpp" line="2160"/>
         <source>Write &amp;amp; Verify Successful.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Write:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verify:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Total:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;Card can be safely removed.&lt;/i&gt;</source>
         <translation>Schrijven &amp;amp; Verifiëren gelukt.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Schrijven:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verifiëren:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Totaal:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;Kaart kan veilig worden verwijderd.&lt;/i&gt;</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2246"/>
+        <location filename="../mainwindow.cpp" line="2223"/>
+        <source>Confirm Format</source>
+        <translation>Formatteren bevestigen</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2224"/>
+        <source>Everything on %1 will be erased and replaced with a single %2 partition.
+
+All data on the device will be lost. Continue?</source>
+        <translation>Alles op %1 wordt gewist en vervangen door één %2-partitie.
+
+Alle gegevens op het apparaat gaan verloren. Doorgaan?</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2238"/>
+        <source>Formatting...</source>
+        <translation>Bezig met formatteren...</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2254"/>
+        <source>Format Successful.&lt;br&gt;&lt;br&gt;The device is now a single %1 partition.</source>
+        <translation>Formatteren geslaagd.&lt;br&gt;&lt;br&gt;Het apparaat bestaat nu uit één %1-partitie.</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2257"/>
+        <source>Format Error</source>
+        <translation>Formatteerfout</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2302"/>
         <source>A new version is available: &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;Current version: %2&lt;br&gt;&lt;br&gt;No installer asset is attached to this release. Open the release page on GitHub?</source>
         <translation>Een nieuwe versie is beschikbaar: &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;Huidige versie: %2&lt;br&gt;&lt;br&gt;Er is geen installer bij deze release. Release-pagina op GitHub openen?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2251"/>
-        <location filename="../mainwindow.cpp" line="2264"/>
+        <location filename="../mainwindow.cpp" line="2307"/>
+        <location filename="../mainwindow.cpp" line="2320"/>
         <source>Update available</source>
         <translation>Update beschikbaar</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2260"/>
+        <location filename="../mainwindow.cpp" line="2316"/>
         <source>A new version is available: &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;Current version: %2&lt;br&gt;&lt;br&gt;Download and install now?</source>
         <translation>Een nieuwe versie is beschikbaar: &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;Huidige versie: %2&lt;br&gt;&lt;br&gt;Nu downloaden en installeren?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2274"/>
+        <location filename="../mainwindow.cpp" line="2330"/>
         <source>You are running the latest version (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;View all releases on GitHub&lt;/a&gt;</source>
         <translation>U gebruikt de nieuwste versie (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;Bekijk alle releases op GitHub&lt;/a&gt;</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2279"/>
+        <location filename="../mainwindow.cpp" line="2335"/>
         <source>Up to date</source>
         <translation>Bijgewerkt</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2287"/>
+        <location filename="../mainwindow.cpp" line="2343"/>
         <source>Update check failed</source>
         <translation>Controle op updates mislukt</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2288"/>
+        <location filename="../mainwindow.cpp" line="2344"/>
         <source>Could not check for updates:
 %1</source>
         <translation>Kon niet controleren op updates:
 %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2299"/>
-        <location filename="../mainwindow.cpp" line="2345"/>
+        <location filename="../mainwindow.cpp" line="2355"/>
+        <location filename="../mainwindow.cpp" line="2401"/>
         <source>Download failed</source>
         <translation>Download mislukt</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2300"/>
+        <location filename="../mainwindow.cpp" line="2356"/>
         <source>Could not write to %1</source>
         <translation>Kon niet schrijven naar %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2306"/>
+        <location filename="../mainwindow.cpp" line="2362"/>
         <source>Downloading installer...</source>
         <translation>Installer downloaden…</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2346"/>
+        <location filename="../mainwindow.cpp" line="2402"/>
         <source>Could not download the installer.</source>
         <translation>Kon installer niet downloaden.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2356"/>
+        <location filename="../mainwindow.cpp" line="2412"/>
         <source>Update failed</source>
         <translation>Update mislukt</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2357"/>
+        <location filename="../mainwindow.cpp" line="2413"/>
         <source>Could not launch the installer.</source>
         <translation>Kon installer niet starten.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1993"/>
+        <location filename="../mainwindow.cpp" line="1996"/>
         <source>Verifying: %1 MB/s</source>
         <translation>Verifiëren: %1 MB/s</translation>
     </message>
@@ -612,92 +643,142 @@ Zorg ervoor dat geen andere applicatie de kaart gebruikt (Verkenner, antivirussc
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../disk.cpp" line="69"/>
-        <location filename="../disk.cpp" line="880"/>
+        <location filename="../disk.cpp" line="72"/>
+        <location filename="../disk.cpp" line="883"/>
         <source>File Error</source>
         <translation>Bestandsfout</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="69"/>
+        <location filename="../disk.cpp" line="72"/>
         <source>An error occurred when attempting to get a handle on the file.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het opvragen van de handle van het bestand.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="86"/>
-        <location filename="../disk.cpp" line="855"/>
+        <location filename="../disk.cpp" line="89"/>
+        <location filename="../disk.cpp" line="858"/>
         <source>Device Error</source>
         <translation>Apparaat fout</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="87"/>
+        <location filename="../disk.cpp" line="90"/>
         <source>An error occurred when attempting to get a handle on the device.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het opvragen van de handle van het apparaat.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="703"/>
-        <location filename="../disk.cpp" line="741"/>
+        <location filename="../disk.cpp" line="706"/>
+        <location filename="../disk.cpp" line="744"/>
         <source>Read Error</source>
         <translation>Leesfout</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="704"/>
-        <location filename="../disk.cpp" line="767"/>
+        <location filename="../disk.cpp" line="707"/>
+        <location filename="../disk.cpp" line="770"/>
         <source>Seek failed at offset %1.
 Error %2: %3</source>
         <translation>Zoeken mislukt op offset %1.
 Fout %2: %3</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="742"/>
+        <location filename="../disk.cpp" line="745"/>
         <source>An error occurred when attempting to read data from handle.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het lezen van data van de handle.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="766"/>
-        <location filename="../disk.cpp" line="816"/>
+        <location filename="../disk.cpp" line="769"/>
+        <location filename="../disk.cpp" line="819"/>
         <source>Write Error</source>
         <translation>Schrijffout</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="817"/>
+        <location filename="../disk.cpp" line="820"/>
         <source>An error occurred when attempting to write data to handle.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het schrijven van data naar de handle.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="856"/>
+        <location filename="../disk.cpp" line="859"/>
         <source>An error occurred when attempting to get the device&apos;s geometry.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het opvragen van de geometrie van het apparaat.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="881"/>
+        <location filename="../disk.cpp" line="884"/>
         <source>An error occurred while getting the file size.
 Error %1: %2</source>
         <translation>Een fout is opgetreden bij het opvragen van de bestandsgrootte.
 Error %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="904"/>
+        <location filename="../disk.cpp" line="907"/>
         <source>Free Space Error</source>
         <translation>Beschikbare ruimte fout</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="905"/>
+        <location filename="../disk.cpp" line="908"/>
         <source>Failed to get the free space on drive %1.
 Error %2: %3
 Checking of free space will be skipped.</source>
         <translation>Fout bij het opvragen van de vrije ruimte op de drive %1.
 Fout %2: %3
 Controle van vrije ruimte zal worden overgeslagen.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1054"/>
+        <source>The device disappeared while preparing it. Re-insert the card and try again.</source>
+        <translation>Het apparaat is tijdens de voorbereiding verdwenen. Plaats de kaart opnieuw en probeer het nogmaals.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1056"/>
+        <source>Could not open the device (error %1).</source>
+        <translation>Kan het apparaat niet openen (fout %1).</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1108"/>
+        <source>The device is too small to format.</source>
+        <translation>Het apparaat is te klein om te formatteren.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1142"/>
+        <source>Could not write the partition table (error %1).</source>
+        <translation>Kan de partitietabel niet wegschrijven (fout %1).</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1342"/>
+        <source>The partition was created, but Windows did not surface a volume for it. Re-insert the card and try again.</source>
+        <translation>De partitie is aangemaakt, maar Windows heeft er geen volume voor beschikbaar gesteld. Plaats de kaart opnieuw en probeer het nogmaals.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1350"/>
+        <source>The partition was created, but no drive letter was free to mount it for formatting.</source>
+        <translation>De partitie is aangemaakt, maar er was geen stationsletter vrij om deze te koppelen voor het formatteren.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1363"/>
+        <source>Could not load fmifs.dll, which performs the format.</source>
+        <translation>Kan fmifs.dll, die het formatteren uitvoert, niet laden.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1373"/>
+        <source>fmifs.dll does not expose FormatEx on this system.</source>
+        <translation>fmifs.dll biedt FormatEx niet aan op dit systeem.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1419"/>
+        <source>Formatting the device as %1 failed.</source>
+        <translation>Het formatteren van het apparaat als %1 is mislukt.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1420"/>
+        <source>Formatting the device as %1 failed: %2.</source>
+        <translation>Het formatteren van het apparaat als %1 is mislukt: %2.</translation>
     </message>
     <message>
         <location filename="../gzimagereader.cpp" line="60"/>

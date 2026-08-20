@@ -90,7 +90,7 @@
     </message>
     <message>
         <location filename="../mainwindow.ui" line="345"/>
-        <location filename="../mainwindow.cpp" line="2306"/>
+        <location filename="../mainwindow.cpp" line="2362"/>
         <source>Cancel</source>
         <translation>취소</translation>
     </message>
@@ -122,7 +122,7 @@
     <message>
         <location filename="../mainwindow.ui" line="390"/>
         <source>Compare &apos;Image File&apos; against &apos;Device&apos; without writing</source>
-        <translation>기록하지 않고 '이미지 파일'과 '장치'를 비교합니다</translation>
+        <translation>기록하지 않고 &apos;이미지 파일&apos;과 &apos;장치&apos;를 비교합니다</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="393"/>
@@ -137,7 +137,7 @@
     <message>
         <location filename="../mainwindow.ui" line="409"/>
         <source>Erase &apos;Device&apos; and format it as one partition (FAT32, or exFAT above 32 GB)</source>
-        <translation>'장치'를 지우고 하나의 파티션으로 포맷합니다 (32GB 초과 시 exFAT)</translation>
+        <translation>&apos;장치&apos;를 지우고 하나의 파티션으로 포맷합니다 (32GB 초과 시 exFAT)</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="412"/>
@@ -163,70 +163,70 @@
         <translation>종료</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="570"/>
-        <location filename="../mainwindow.cpp" line="580"/>
-        <location filename="../mainwindow.cpp" line="590"/>
+        <location filename="../mainwindow.cpp" line="573"/>
+        <location filename="../mainwindow.cpp" line="583"/>
+        <location filename="../mainwindow.cpp" line="593"/>
         <source>Exit?</source>
         <translation>종료할까요?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="570"/>
+        <location filename="../mainwindow.cpp" line="573"/>
         <source>Exiting now will result in a corrupt image file.
 Are you sure you want to exit?</source>
         <translation>지금 종료하면 이미지 파일이 깨질 수 있습니다.
 종료할까요?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="580"/>
+        <location filename="../mainwindow.cpp" line="583"/>
         <source>Exiting now will result in a corrupt disk.
 Are you sure you want to exit?</source>
         <translation>지금 종료하면 디스크가 깨질 수 있습니다.
 종료할까요?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="616"/>
+        <location filename="../mainwindow.cpp" line="619"/>
         <source>Select a disk image</source>
         <translation>디스크 이미지 선택</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="673"/>
+        <location filename="../mainwindow.cpp" line="676"/>
         <source>Generating...</source>
         <translation>생성 중 ...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="715"/>
-        <location filename="../mainwindow.cpp" line="724"/>
+        <location filename="../mainwindow.cpp" line="718"/>
+        <location filename="../mainwindow.cpp" line="727"/>
         <source>Cancel?</source>
         <translation>취소할까요?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="715"/>
+        <location filename="../mainwindow.cpp" line="718"/>
         <source>Canceling now will result in a corrupt destination.
 Are you sure you want to cancel?</source>
         <translation>지금 취소하면 대상이 깨질 수 있습니다.
 취소할까요?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="754"/>
-        <location filename="../mainwindow.cpp" line="1344"/>
-        <location filename="../mainwindow.cpp" line="1521"/>
+        <location filename="../mainwindow.cpp" line="757"/>
+        <location filename="../mainwindow.cpp" line="1347"/>
+        <location filename="../mainwindow.cpp" line="1524"/>
         <source>Write Error</source>
         <translation>쓰기 오류</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="755"/>
-        <location filename="../mainwindow.cpp" line="1345"/>
-        <location filename="../mainwindow.cpp" line="1702"/>
+        <location filename="../mainwindow.cpp" line="758"/>
+        <location filename="../mainwindow.cpp" line="1348"/>
+        <location filename="../mainwindow.cpp" line="1705"/>
         <source>Image file cannot be located on the target device.</source>
         <translation>이미지 파일을 대상 기기에 위치시킬 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="767"/>
+        <location filename="../mainwindow.cpp" line="770"/>
         <source>Confirm overwrite</source>
         <translation>중복쓰기 확인</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="767"/>
+        <location filename="../mainwindow.cpp" line="770"/>
         <source>Writing to a physical device can corrupt the device.
 (Target Device: %1 &quot;%2&quot;)
 Are you sure you want to continue?</source>
@@ -235,12 +235,12 @@ Are you sure you want to continue?</source>
 계속 할까요?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1658"/>
+        <location filename="../mainwindow.cpp" line="1661"/>
         <source>Read Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
         <translation>읽기 성공.&lt;br&gt;&lt;br&gt;&lt;b&gt;경과:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2180"/>
+        <location filename="../mainwindow.cpp" line="2183"/>
         <source>Verify Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1</source>
         <translation>확인 성공.&lt;br&gt;&lt;br&gt;&lt;b&gt;경과:&lt;/b&gt; %1</translation>
     </message>
@@ -260,38 +260,38 @@ Are you sure you want to continue?</source>
         <translation>압축 이미지 (*.gz *.xz *.zst)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="590"/>
+        <location filename="../mainwindow.cpp" line="593"/>
         <source>Exiting now will cancel verifying image.
 Are you sure you want to exit?</source>
         <translation>지금 종료하는 것은 이미지 검증이 취소될 수 있습니다.
 종료할까요?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="724"/>
+        <location filename="../mainwindow.cpp" line="727"/>
         <source>Cancel Verify.
 Are you sure you want to cancel?</source>
         <translation>검증 취소.
 취소할까요?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="940"/>
+        <location filename="../mainwindow.cpp" line="943"/>
         <source>Not enough available space!</source>
         <translation>공간이 충분하지 않습니다!</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="684"/>
-        <location filename="../mainwindow.cpp" line="892"/>
-        <location filename="../mainwindow.cpp" line="1220"/>
-        <location filename="../mainwindow.cpp" line="1268"/>
-        <location filename="../mainwindow.cpp" line="1273"/>
-        <location filename="../mainwindow.cpp" line="1278"/>
-        <location filename="../mainwindow.cpp" line="1305"/>
-        <location filename="../mainwindow.cpp" line="1782"/>
-        <location filename="../mainwindow.cpp" line="2061"/>
-        <location filename="../mainwindow.cpp" line="2131"/>
-        <location filename="../mainwindow.cpp" line="2136"/>
-        <location filename="../mainwindow.cpp" line="2141"/>
-        <location filename="../mainwindow.cpp" line="2187"/>
+        <location filename="../mainwindow.cpp" line="687"/>
+        <location filename="../mainwindow.cpp" line="895"/>
+        <location filename="../mainwindow.cpp" line="1223"/>
+        <location filename="../mainwindow.cpp" line="1271"/>
+        <location filename="../mainwindow.cpp" line="1276"/>
+        <location filename="../mainwindow.cpp" line="1281"/>
+        <location filename="../mainwindow.cpp" line="1308"/>
+        <location filename="../mainwindow.cpp" line="1785"/>
+        <location filename="../mainwindow.cpp" line="2064"/>
+        <location filename="../mainwindow.cpp" line="2134"/>
+        <location filename="../mainwindow.cpp" line="2139"/>
+        <location filename="../mainwindow.cpp" line="2144"/>
+        <location filename="../mainwindow.cpp" line="2190"/>
         <source>File Error</source>
         <translation>파일 오류</translation>
     </message>
@@ -315,33 +315,33 @@ Are you sure you want to cancel?</source>
 %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="684"/>
+        <location filename="../mainwindow.cpp" line="687"/>
         <source>Unable to open file for hashing.</source>
         <translation>해시 계산을 위해 파일을 열 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="784"/>
+        <location filename="../mainwindow.cpp" line="787"/>
         <source>Preparing disk...</source>
         <translation>디스크 준비 중…</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="820"/>
+        <location filename="../mainwindow.cpp" line="823"/>
         <source>Settling disk (this can take 10-20 seconds)...</source>
         <translation>디스크 안정화 중 (10–20초 정도 걸릴 수 있음)…</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="824"/>
+        <location filename="../mainwindow.cpp" line="827"/>
         <source>Opening disk...</source>
         <translation>디스크 여는 중…</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="842"/>
-        <location filename="../mainwindow.cpp" line="847"/>
+        <location filename="../mainwindow.cpp" line="845"/>
+        <location filename="../mainwindow.cpp" line="850"/>
         <source>Device Error</source>
         <translation>기기 오류</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="843"/>
+        <location filename="../mainwindow.cpp" line="846"/>
         <source>The target device is no longer available.
 
 The card may have been removed, or it is still starting up. Re-insert it, wait a moment for it to appear, and try again.</source>
@@ -350,7 +350,7 @@ The card may have been removed, or it is still starting up. Re-insert it, wait a
 카드가 제거되었거나 아직 시작하는 중일 수 있습니다. 다시 삽입하고 나타날 때까지 잠시 기다린 후 다시 시도하십시오.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="848"/>
+        <location filename="../mainwindow.cpp" line="851"/>
         <source>Could not open the target device for writing.
 
 Make sure no other application is using the card (File Explorer, antivirus scan, backup software) and try again.</source>
@@ -359,255 +359,286 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
 다른 응용 프로그램이 카드를 사용 중이 아닌지 확인하고 (파일 탐색기, 안티바이러스 검사, 백업 소프트웨어) 다시 시도하세요.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="893"/>
-        <location filename="../mainwindow.cpp" line="1783"/>
+        <location filename="../mainwindow.cpp" line="896"/>
+        <location filename="../mainwindow.cpp" line="1786"/>
         <source>The selected image file is empty.</source>
         <translation>선택한 이미지 파일이 비어 있습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="964"/>
+        <location filename="../mainwindow.cpp" line="967"/>
         <source>Writing...</source>
         <translation>쓰는 중...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1078"/>
+        <location filename="../mainwindow.cpp" line="1081"/>
         <source>Failed to allocate buffer for delayed first chunk.</source>
         <translation>지연된 첫 번째 블록용 버퍼를 할당하지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1096"/>
+        <location filename="../mainwindow.cpp" line="1099"/>
         <source>Writing: %1 MB/s</source>
         <translation>쓰는 중: %1 MB/s</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1198"/>
+        <location filename="../mainwindow.cpp" line="1201"/>
         <source>Failed to commit partition table at end of write.</source>
         <translation>쓰기 종료 시 파티션 테이블을 커밋하지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1268"/>
-        <location filename="../mainwindow.cpp" line="2131"/>
+        <location filename="../mainwindow.cpp" line="1271"/>
+        <location filename="../mainwindow.cpp" line="2134"/>
         <source>The selected file does not exist.</source>
         <translation>선택된 파일이 존재하지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1273"/>
-        <location filename="../mainwindow.cpp" line="2136"/>
+        <location filename="../mainwindow.cpp" line="1276"/>
+        <location filename="../mainwindow.cpp" line="2139"/>
         <source>You do not have permision to read the selected file.</source>
         <translation>선택된 파일을 읽기위한 권한이 없습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1278"/>
-        <location filename="../mainwindow.cpp" line="2141"/>
+        <location filename="../mainwindow.cpp" line="1281"/>
+        <location filename="../mainwindow.cpp" line="2144"/>
         <source>The specified file contains no data.</source>
         <translation>지정된 파일은 자료가 없습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1282"/>
-        <location filename="../mainwindow.cpp" line="1652"/>
-        <location filename="../mainwindow.cpp" line="2145"/>
+        <location filename="../mainwindow.cpp" line="1285"/>
+        <location filename="../mainwindow.cpp" line="1655"/>
+        <location filename="../mainwindow.cpp" line="2148"/>
+        <location filename="../mainwindow.cpp" line="2250"/>
         <source>Done.</source>
         <translation>완료.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1297"/>
-        <location filename="../mainwindow.cpp" line="1654"/>
+        <location filename="../mainwindow.cpp" line="1300"/>
         <location filename="../mainwindow.cpp" line="1657"/>
-        <location filename="../mainwindow.cpp" line="2182"/>
+        <location filename="../mainwindow.cpp" line="1660"/>
+        <location filename="../mainwindow.cpp" line="2185"/>
+        <location filename="../mainwindow.cpp" line="2253"/>
         <source>Complete</source>
         <translation>완료</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1298"/>
+        <location filename="../mainwindow.cpp" line="1301"/>
         <source>Write Successful.&lt;br&gt;&lt;br&gt;&lt;b&gt;Elapsed:&lt;/b&gt; %1&lt;br&gt;&lt;br&gt;&lt;i&gt;Card can be safely removed.&lt;/i&gt;</source>
         <translation>쓰기 완료.&lt;br&gt;&lt;br&gt;&lt;b&gt;경과 시간:&lt;/b&gt; %1&lt;br&gt;&lt;br&gt;&lt;i&gt;카드를 안전하게 제거할 수 있습니다.&lt;/i&gt;</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1305"/>
-        <location filename="../mainwindow.cpp" line="2187"/>
+        <location filename="../mainwindow.cpp" line="1308"/>
+        <location filename="../mainwindow.cpp" line="2190"/>
         <source>Please specify an image file to use.</source>
         <translation>사용하기 위한 이미지 파일을 지정해주세요.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1352"/>
+        <location filename="../mainwindow.cpp" line="1355"/>
         <source>Confirm Overwrite</source>
         <translation>중복 쓰기 확인</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1352"/>
+        <location filename="../mainwindow.cpp" line="1355"/>
         <source>Are you sure you want to overwrite the specified file?</source>
         <translation>지정된 파일을 중복쓰기를 하시겠습니까?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1440"/>
+        <location filename="../mainwindow.cpp" line="1443"/>
         <source>GPT header is invalid or unreadable. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>GPT 헤더가 잘못되었거나 읽을 수 없습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1442"/>
+        <location filename="../mainwindow.cpp" line="1445"/>
         <source>No valid MBR or GPT on this device. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>이 장치에 유효한 MBR 또는 GPT가 없습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1452"/>
+        <location filename="../mainwindow.cpp" line="1455"/>
         <source>Could not read GPT partition entries. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>GPT 파티션 항목을 읽을 수 없습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1490"/>
+        <location filename="../mainwindow.cpp" line="1493"/>
         <source>GPT has no allocated partitions. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>GPT에 할당된 파티션이 없습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1494"/>
+        <location filename="../mainwindow.cpp" line="1497"/>
         <source>GPT partition entries invalid or corrupt. &apos;Read Only Allocated Partitions&apos; falls back to a full disk read.</source>
         <translation>GPT 파티션 항목이 잘못되었거나 손상되었습니다. &apos;Read Only Allocated Partitions&apos;는 전체 디스크 읽기로 대체됩니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1502"/>
+        <location filename="../mainwindow.cpp" line="1505"/>
         <source>Allocated-only fallback</source>
         <translation>할당 영역만 대체 처리</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1521"/>
+        <location filename="../mainwindow.cpp" line="1524"/>
         <source>Disk is not large enough for the specified image.</source>
         <translation>디스크가 지정된 이미지 보다 크지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1535"/>
+        <location filename="../mainwindow.cpp" line="1538"/>
         <source>Reading...</source>
         <translation>읽는 중...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1559"/>
+        <location filename="../mainwindow.cpp" line="1562"/>
         <source>Reading: %1 MB/s</source>
         <translation>읽는 중: %1 MB/s</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1654"/>
+        <location filename="../mainwindow.cpp" line="1657"/>
         <source>Read Canceled.</source>
         <translation>읽기 취소됨.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1664"/>
+        <location filename="../mainwindow.cpp" line="1667"/>
         <source>File Info</source>
         <translation>파일 정보</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1664"/>
+        <location filename="../mainwindow.cpp" line="1667"/>
         <source>Please specify a file to save data to.</source>
         <translation>자료를 저장하기 위한 파일을 지정하세요.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1701"/>
+        <location filename="../mainwindow.cpp" line="1704"/>
         <source>Verify Error</source>
         <translation>검증 오류</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1822"/>
+        <location filename="../mainwindow.cpp" line="1825"/>
         <source>Size Mismatch!</source>
         <translation>크기가 다름!</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1842"/>
+        <location filename="../mainwindow.cpp" line="1845"/>
         <source>Verifying...</source>
         <translation>확인 중...</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1928"/>
-        <location filename="../mainwindow.cpp" line="1959"/>
-        <location filename="../mainwindow.cpp" line="1981"/>
-        <location filename="../mainwindow.cpp" line="2082"/>
-        <location filename="../mainwindow.cpp" line="2097"/>
+        <location filename="../mainwindow.cpp" line="1931"/>
+        <location filename="../mainwindow.cpp" line="1962"/>
+        <location filename="../mainwindow.cpp" line="1984"/>
+        <location filename="../mainwindow.cpp" line="2085"/>
+        <location filename="../mainwindow.cpp" line="2100"/>
         <source>Verify Failure</source>
         <translation>검증 실패</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1948"/>
+        <location filename="../mainwindow.cpp" line="1951"/>
         <source>Failed to commit partition table before verification.</source>
         <translation>확인 전에 파티션 테이블을 기록하지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2083"/>
+        <location filename="../mainwindow.cpp" line="2086"/>
         <source>The image verified correctly, but writing the partition table at the end failed. The card is not bootable — please write the image again.</source>
         <translation>이미지는 정상적으로 확인되었지만 마지막에 파티션 테이블을 기록하지 못했습니다. 이 카드는 부팅할 수 없습니다 — 이미지를 다시 기록하십시오.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2157"/>
+        <location filename="../mainwindow.cpp" line="2160"/>
         <source>Write &amp;amp; Verify Successful.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Write:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Verify:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;Total:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;Card can be safely removed.&lt;/i&gt;</source>
         <translation>쓰기 및 확인 완료.&lt;br&gt;&lt;br&gt;&lt;center&gt;&lt;table cellspacing=&quot;0&quot; cellpadding=&quot;6&quot;&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;쓰기:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;확인:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td&gt;%2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;&lt;b&gt;전체:&lt;/b&gt;&amp;nbsp;&amp;nbsp;&lt;/td&gt;&lt;td bgcolor=&quot;%ZEBRA%&quot;&gt;%3&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/center&gt;&lt;br&gt;&lt;i&gt;카드를 안전하게 제거할 수 있습니다.&lt;/i&gt;</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2246"/>
+        <location filename="../mainwindow.cpp" line="2223"/>
+        <source>Confirm Format</source>
+        <translation>포맷 확인</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2224"/>
+        <source>Everything on %1 will be erased and replaced with a single %2 partition.
+
+All data on the device will be lost. Continue?</source>
+        <translation>%1의 모든 내용이 지워지고 단일 %2 파티션으로 대체됩니다.
+
+장치의 모든 데이터가 손실됩니다. 계속하시겠습니까?</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2238"/>
+        <source>Formatting...</source>
+        <translation>포맷하는 중...</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2254"/>
+        <source>Format Successful.&lt;br&gt;&lt;br&gt;The device is now a single %1 partition.</source>
+        <translation>포맷 성공.&lt;br&gt;&lt;br&gt;장치가 이제 단일 %1 파티션입니다.</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2257"/>
+        <source>Format Error</source>
+        <translation>포맷 오류</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="2302"/>
         <source>A new version is available: &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;Current version: %2&lt;br&gt;&lt;br&gt;No installer asset is attached to this release. Open the release page on GitHub?</source>
         <translation>새 버전이 있습니다: &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;현재 버전: %2&lt;br&gt;&lt;br&gt;이 릴리스에는 설치 파일이 첨부되지 않았습니다. GitHub의 릴리스 페이지를 여시겠습니까?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2251"/>
-        <location filename="../mainwindow.cpp" line="2264"/>
+        <location filename="../mainwindow.cpp" line="2307"/>
+        <location filename="../mainwindow.cpp" line="2320"/>
         <source>Update available</source>
         <translation>업데이트 있음</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2260"/>
+        <location filename="../mainwindow.cpp" line="2316"/>
         <source>A new version is available: &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;Current version: %2&lt;br&gt;&lt;br&gt;Download and install now?</source>
         <translation>새 버전이 있습니다: &lt;b&gt;%1&lt;/b&gt;&lt;br&gt;현재 버전: %2&lt;br&gt;&lt;br&gt;지금 다운로드해서 설치하시겠습니까?</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2274"/>
+        <location filename="../mainwindow.cpp" line="2330"/>
         <source>You are running the latest version (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;View all releases on GitHub&lt;/a&gt;</source>
         <translation>최신 버전을 사용 중입니다 (&lt;b&gt;%1&lt;/b&gt;).&lt;br&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/zvldz/Win32DiskImager/releases&quot;&gt;GitHub의 모든 릴리스 보기&lt;/a&gt;</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2279"/>
+        <location filename="../mainwindow.cpp" line="2335"/>
         <source>Up to date</source>
         <translation>최신 버전</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2287"/>
+        <location filename="../mainwindow.cpp" line="2343"/>
         <source>Update check failed</source>
         <translation>업데이트 확인 실패</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2288"/>
+        <location filename="../mainwindow.cpp" line="2344"/>
         <source>Could not check for updates:
 %1</source>
         <translation>업데이트를 확인할 수 없습니다:
 %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2299"/>
-        <location filename="../mainwindow.cpp" line="2345"/>
+        <location filename="../mainwindow.cpp" line="2355"/>
+        <location filename="../mainwindow.cpp" line="2401"/>
         <source>Download failed</source>
         <translation>다운로드 실패</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2300"/>
+        <location filename="../mainwindow.cpp" line="2356"/>
         <source>Could not write to %1</source>
         <translation>%1에 쓸 수 없습니다</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2306"/>
+        <location filename="../mainwindow.cpp" line="2362"/>
         <source>Downloading installer...</source>
         <translation>설치 파일 다운로드 중…</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2346"/>
+        <location filename="../mainwindow.cpp" line="2402"/>
         <source>Could not download the installer.</source>
         <translation>설치 파일을 다운로드할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2356"/>
+        <location filename="../mainwindow.cpp" line="2412"/>
         <source>Update failed</source>
         <translation>업데이트 실패</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="2357"/>
+        <location filename="../mainwindow.cpp" line="2413"/>
         <source>Could not launch the installer.</source>
         <translation>설치 파일을 실행할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1993"/>
+        <location filename="../mainwindow.cpp" line="1996"/>
         <source>Verifying: %1 MB/s</source>
         <translation>확인 중: %1 MB/s</translation>
     </message>
@@ -615,92 +646,142 @@ Make sure no other application is using the card (File Explorer, antivirus scan,
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../disk.cpp" line="69"/>
-        <location filename="../disk.cpp" line="880"/>
+        <location filename="../disk.cpp" line="72"/>
+        <location filename="../disk.cpp" line="883"/>
         <source>File Error</source>
         <translation>파일 오</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="69"/>
+        <location filename="../disk.cpp" line="72"/>
         <source>An error occurred when attempting to get a handle on the file.
 Error %1: %2</source>
         <translation>파일의 핸들을 얻기 시도할 때 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="86"/>
-        <location filename="../disk.cpp" line="855"/>
+        <location filename="../disk.cpp" line="89"/>
+        <location filename="../disk.cpp" line="858"/>
         <source>Device Error</source>
         <translation>기기 오류</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="87"/>
+        <location filename="../disk.cpp" line="90"/>
         <source>An error occurred when attempting to get a handle on the device.
 Error %1: %2</source>
         <translation>기기의 핸들을 얻기 시도할 때 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="703"/>
-        <location filename="../disk.cpp" line="741"/>
+        <location filename="../disk.cpp" line="706"/>
+        <location filename="../disk.cpp" line="744"/>
         <source>Read Error</source>
         <translation>읽기 오류</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="704"/>
-        <location filename="../disk.cpp" line="767"/>
+        <location filename="../disk.cpp" line="707"/>
+        <location filename="../disk.cpp" line="770"/>
         <source>Seek failed at offset %1.
 Error %2: %3</source>
         <translation>오프셋 %1에서 탐색 실패.
 오류 %2: %3</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="742"/>
+        <location filename="../disk.cpp" line="745"/>
         <source>An error occurred when attempting to read data from handle.
 Error %1: %2</source>
         <translation>핸들로부터 자료를 읽으려고 시도할 때 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="766"/>
-        <location filename="../disk.cpp" line="816"/>
+        <location filename="../disk.cpp" line="769"/>
+        <location filename="../disk.cpp" line="819"/>
         <source>Write Error</source>
         <translation>쓰기 오류</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="817"/>
+        <location filename="../disk.cpp" line="820"/>
         <source>An error occurred when attempting to write data to handle.
 Error %1: %2</source>
         <translation>핸들로 자료를 쓰려고 할 때 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="856"/>
+        <location filename="../disk.cpp" line="859"/>
         <source>An error occurred when attempting to get the device&apos;s geometry.
 Error %1: %2</source>
         <translation>기기의 지오메트리를 얻으려고 할 때 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="881"/>
+        <location filename="../disk.cpp" line="884"/>
         <source>An error occurred while getting the file size.
 Error %1: %2</source>
         <translation>파일크기를 얻는 동안 오류가 발생.
 오류 %1: %2</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="904"/>
+        <location filename="../disk.cpp" line="907"/>
         <source>Free Space Error</source>
         <translation>저장공간 오류</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="905"/>
+        <location filename="../disk.cpp" line="908"/>
         <source>Failed to get the free space on drive %1.
 Error %2: %3
 Checking of free space will be skipped.</source>
         <translation>%1 기기의 저장공간을 얻는데 실패.
 오류 %2: %3
 저장공간 크기 체크를 하지 않습니다.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1054"/>
+        <source>The device disappeared while preparing it. Re-insert the card and try again.</source>
+        <translation>준비하는 동안 장치가 사라졌습니다. 카드를 다시 삽입하고 다시 시도하십시오.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1056"/>
+        <source>Could not open the device (error %1).</source>
+        <translation>장치를 열 수 없습니다 (오류 %1).</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1108"/>
+        <source>The device is too small to format.</source>
+        <translation>장치가 너무 작아 포맷할 수 없습니다.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1142"/>
+        <source>Could not write the partition table (error %1).</source>
+        <translation>파티션 테이블을 기록할 수 없습니다 (오류 %1).</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1342"/>
+        <source>The partition was created, but Windows did not surface a volume for it. Re-insert the card and try again.</source>
+        <translation>파티션이 생성되었지만 Windows가 해당 볼륨을 표시하지 않았습니다. 카드를 다시 삽입하고 다시 시도하십시오.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1350"/>
+        <source>The partition was created, but no drive letter was free to mount it for formatting.</source>
+        <translation>파티션이 생성되었지만 포맷을 위해 마운트할 빈 드라이브 문자가 없습니다.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1363"/>
+        <source>Could not load fmifs.dll, which performs the format.</source>
+        <translation>포맷을 수행하는 fmifs.dll을 불러올 수 없습니다.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1373"/>
+        <source>fmifs.dll does not expose FormatEx on this system.</source>
+        <translation>이 시스템의 fmifs.dll에는 FormatEx가 없습니다.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1419"/>
+        <source>Formatting the device as %1 failed.</source>
+        <translation>장치를 %1(으)로 포맷하지 못했습니다.</translation>
+    </message>
+    <message>
+        <location filename="../disk.cpp" line="1420"/>
+        <source>Formatting the device as %1 failed: %2.</source>
+        <translation>장치를 %1(으)로 포맷하지 못했습니다: %2.</translation>
     </message>
     <message>
         <location filename="../gzimagereader.cpp" line="60"/>
