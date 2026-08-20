@@ -11,6 +11,9 @@ Open work items. Completed tasks are removed once shipped — see CHANGELOG.md f
   - If upstream Pi Imager ships a fix for #1489, port the idea and see if it lets us simplify.
   The pre-squash branch (`2.3.2-pre-squash-backup`) preserves the per-fix commit chain if anyone wants to audit which defence caught which failure mode.
 
+- **Find out what SD Card Formatter actually does.** It formats a card cleanly in about a second, including its "full format" mode, where our path takes 10-15 seconds whenever anything goes sideways — and it clearly does not follow the rufus / RPi Imager / Etcher recipe that ours is modelled on. The tool is closed-source, so the way to learn this is to run it under Process Monitor or API Monitor and record the real call sequence: whether it touches `IOCTL_DISK_SET_DRIVE_LAYOUT_EX` at all, whether it goes through `FormatEx` in fmifs.dll or `IVdsService`, how it handles a card that has no drive letter, and what it does *instead* of dismount-and-settle.
+  Worth doing because the findings may not stop at Format: our whole pre-write preparation is inherited from RPi Imager, whose own maintainers have the unresolved #1489 for the same root cause. If SD Card Formatter gets exclusive access without the dance we perform, Write could get faster too.
+
 ## Features
 
 - **Reformat device** — not implemented. Brings an SD card back to a clean FAT32 layout after it's been written with a Linux / Pi image. Low priority: SDA Card Formatter and the Windows Disk Management snap-in already cover this.
