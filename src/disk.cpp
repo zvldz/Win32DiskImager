@@ -1235,8 +1235,8 @@ QString findVolumeOnDisk(DWORD diskNumber, quint64 expectedOffset,
 bool dismountForFormat(const QString &mountPoint)
 {
     QString dev = mountPoint;
-    while (dev.endsWith(QLatin1Char('\'))) dev.chop(1);
-    const QString path = QStringLiteral("\\.\%1").arg(dev);
+    while (dev.endsWith(QLatin1Char('\\'))) dev.chop(1);
+    const QString path = QStringLiteral("\\\\.\\%1").arg(dev);
 
     HANDLE h = CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()),
                            GENERIC_READ | GENERIC_WRITE,
