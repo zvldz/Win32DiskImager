@@ -16,4 +16,4 @@ Open work items. Completed tasks are removed once shipped — see CHANGELOG.md f
 
 ## Features
 
-- **Reformat device** — not implemented. Brings an SD card back to a clean FAT32 layout after it's been written with a Linux / Pi image. Low priority: SDA Card Formatter and the Windows Disk Management snap-in already cover this.
+- **Format device — done in 2.4.2, one gap left.** The button lays down a single MBR partition spanning the card and formats it (FAT32 up to 32 GB, exFAT above). Verified on 8 GB and 15 GB cards; **the exFAT branch has never actually run** — no card larger than 32 GB has been through it. Also untested straight after writing a Linux image, where the card carries GPT and several partitions.
