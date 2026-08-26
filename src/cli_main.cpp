@@ -2125,7 +2125,6 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
     });
 
     uint64_t processed = 0;       // bytes committed to device
-    uint64_t compLast  = 0;
     std::cout << "Writing:" << std::endl;
     ProgressPrinter progress(imageBytes > 0 ? imageBytes : src->compressedSize());
 
@@ -2200,7 +2199,6 @@ int cmdWrite(const std::string &imagePath, const std::string &device,
                 progress.setTotal(estTotal);
             }
             progress.update(processed);
-            compLast = cp;
         }
     }
     queue.requestAbort();
@@ -2646,7 +2644,6 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
 
     std::vector<char> diskBuf(chunk, 0);
     uint64_t processed = 0;
-    uint64_t compLast  = 0;
     int rc = 0;
     std::cout << "Verifying:" << std::endl;
     ProgressPrinter progress(imageBytes > 0 ? imageBytes : src->compressedSize());
@@ -2777,7 +2774,6 @@ int cmdVerify(const std::string &imagePath, const std::string &device,
                 progress.setTotal(estTotal);
             }
             progress.update(processed);
-            compLast = cp;
         }
     }
     queue.requestAbort();
