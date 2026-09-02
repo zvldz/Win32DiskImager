@@ -3369,9 +3369,20 @@ int main(int argc, char *argv[])
     }
 
     if (!isRunningAsAdmin()) {
-        std::cerr << "Administrator privileges are required for read/write/verify on physical disks." << std::endl;
+        std::cerr << "Administrator privileges are required for read/write/verify/format on physical disks." << std::endl;
         std::cerr << "Please run this command from an elevated terminal." << std::endl;
         return 1;
+    }
+
+    // format takes a device and nothing else — checking for --image here
+    // would reject it.
+    if (opt.command == "format") {
+        if (opt.device.empty()) {
+            std::cerr << "This command requires --device." << std::endl;
+            printUsage();
+            return 1;
+        }
+        return cmdFormat(opt.device, opt.label, opt.assumeYes);
     }
 
     if (opt.device.empty() || opt.image.empty()) {
@@ -3402,9 +3413,6 @@ int main(int argc, char *argv[])
     if (opt.command == "read") {
         const uint64_t bytes = opt.bytesSet ? opt.bytes : 0;
         return cmdRead(opt.image, opt.device, bytes, opt.allocatedOnly);
-    }
-    if (opt.command == "format") {
-        return cmdFormat(opt.device, opt.label, opt.assumeYes);
     }
     if (opt.command == "verify") {
         return cmdVerify(opt.image, opt.device);
