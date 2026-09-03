@@ -558,7 +558,7 @@ Toutes les données du périphérique seront perdues. Continuer ?</translation>
     <message>
         <location filename="../mainwindow.cpp" line="2254"/>
         <source>Format Successful.&lt;br&gt;&lt;br&gt;The device is now a single %1 partition.</source>
-        <translation>Formatage réussi.&lt;br&gt;&lt;br&gt;Le périphérique ne contient plus qu'une seule partition %1.</translation>
+        <translation>Formatage réussi.&lt;br&gt;&lt;br&gt;Le périphérique ne contient plus qu&apos;une seule partition %1.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="2257"/>
@@ -738,7 +738,7 @@ La vérification de l&apos;espace libre ne sera pas effectuée.</translation>
     <message>
         <location filename="../disk.cpp" line="1056"/>
         <source>Could not open the device (error %1).</source>
-        <translation>Impossible d'ouvrir le périphérique (erreur %1).</translation>
+        <translation>Impossible d&apos;ouvrir le périphérique (erreur %1).</translation>
     </message>
     <message>
         <location filename="../disk.cpp" line="1108"/>
@@ -748,17 +748,17 @@ La vérification de l&apos;espace libre ne sera pas effectuée.</translation>
     <message>
         <location filename="../disk.cpp" line="1142"/>
         <source>Could not write the partition table (error %1).</source>
-        <translation>Impossible d'écrire la table de partition (erreur %1).</translation>
+        <translation>Impossible d&apos;écrire la table de partition (erreur %1).</translation>
     </message>
     <message>
         <location filename="../disk.cpp" line="1342"/>
         <source>The partition was created, but Windows did not surface a volume for it. Re-insert the card and try again.</source>
-        <translation>La partition a été créée, mais Windows n'a pas exposé de volume correspondant. Réinsérez la carte et réessayez.</translation>
+        <translation>La partition a été créée, mais Windows n&apos;a pas exposé de volume correspondant. Réinsérez la carte et réessayez.</translation>
     </message>
     <message>
         <location filename="../disk.cpp" line="1350"/>
         <source>The partition was created, but no drive letter was free to mount it for formatting.</source>
-        <translation>La partition a été créée, mais aucune lettre de lecteur n'était libre pour la monter et la formater.</translation>
+        <translation>La partition a été créée, mais aucune lettre de lecteur n&apos;était libre pour la monter et la formater.</translation>
     </message>
     <message>
         <location filename="../disk.cpp" line="1363"/>
@@ -768,15 +768,15 @@ La vérification de l&apos;espace libre ne sera pas effectuée.</translation>
     <message>
         <location filename="../disk.cpp" line="1373"/>
         <source>fmifs.dll does not expose FormatEx on this system.</source>
-        <translation>fmifs.dll n'expose pas FormatEx sur ce système.</translation>
+        <translation>fmifs.dll n&apos;expose pas FormatEx sur ce système.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1419"/>
+        <location filename="../disk.cpp" line="1429"/>
         <source>Formatting the device as %1 failed.</source>
         <translation>Le formatage du périphérique en %1 a échoué.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1420"/>
+        <location filename="../disk.cpp" line="1430"/>
         <source>Formatting the device as %1 failed: %2.</source>
         <translation>Le formatage du périphérique en %1 a échoué : %2.</translation>
     </message>

@@ -550,7 +550,7 @@ La scheda potrebbe essere stata rimossa oppure è ancora in fase di avvio. Reins
         <source>Everything on %1 will be erased and replaced with a single %2 partition.
 
 All data on the device will be lost. Continue?</source>
-        <translation>Tutto il contenuto di %1 verrà cancellato e sostituito da un'unica partizione %2.
+        <translation>Tutto il contenuto di %1 verrà cancellato e sostituito da un&apos;unica partizione %2.
 
 Tutti i dati sul dispositivo andranno persi. Continuare?</translation>
     </message>
@@ -562,7 +562,7 @@ Tutti i dati sul dispositivo andranno persi. Continuare?</translation>
     <message>
         <location filename="../mainwindow.cpp" line="2254"/>
         <source>Format Successful.&lt;br&gt;&lt;br&gt;The device is now a single %1 partition.</source>
-        <translation>Formattazione riuscita.&lt;br&gt;&lt;br&gt;Il dispositivo è ora un'unica partizione %1.</translation>
+        <translation>Formattazione riuscita.&lt;br&gt;&lt;br&gt;Il dispositivo è ora un&apos;unica partizione %1.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="2257"/>
@@ -726,7 +726,7 @@ Errore %1: %2</translation>
     <message>
         <location filename="../disk.cpp" line="1350"/>
         <source>The partition was created, but no drive letter was free to mount it for formatting.</source>
-        <translation>La partizione è stata creata, ma non c'era alcuna lettera di unità libera per montarla e formattarla.</translation>
+        <translation>La partizione è stata creata, ma non c&apos;era alcuna lettera di unità libera per montarla e formattarla.</translation>
     </message>
     <message>
         <location filename="../disk.cpp" line="1363"/>
@@ -739,12 +739,12 @@ Errore %1: %2</translation>
         <translation>fmifs.dll non espone FormatEx su questo sistema.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1419"/>
+        <location filename="../disk.cpp" line="1429"/>
         <source>Formatting the device as %1 failed.</source>
         <translation>Formattazione del dispositivo come %1 non riuscita.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1420"/>
+        <location filename="../disk.cpp" line="1430"/>
         <source>Formatting the device as %1 failed: %2.</source>
         <translation>Formattazione del dispositivo come %1 non riuscita: %2.</translation>
     </message>

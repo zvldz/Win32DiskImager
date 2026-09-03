@@ -774,12 +774,12 @@ Checking of free space will be skipped.</source>
         <translation>此系統上的 fmifs.dll 未提供 FormatEx。</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1419"/>
+        <location filename="../disk.cpp" line="1429"/>
         <source>Formatting the device as %1 failed.</source>
         <translation>將裝置格式化為 %1 失敗。</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1420"/>
+        <location filename="../disk.cpp" line="1430"/>
         <source>Formatting the device as %1 failed: %2.</source>
         <translation>將裝置格式化為 %1 失敗：%2。</translation>
     </message>

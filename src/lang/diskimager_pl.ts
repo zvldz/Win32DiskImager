@@ -773,12 +773,12 @@ Sprawdzanie wolnej pamięci zostanie pominięte.</translation>
         <translation>Plik fmifs.dll w tym systemie nie udostępnia funkcji FormatEx.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1419"/>
+        <location filename="../disk.cpp" line="1429"/>
         <source>Formatting the device as %1 failed.</source>
         <translation>Formatowanie urządzenia jako %1 nie powiodło się.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1420"/>
+        <location filename="../disk.cpp" line="1430"/>
         <source>Formatting the device as %1 failed: %2.</source>
         <translation>Formatowanie urządzenia jako %1 nie powiodło się: %2.</translation>
     </message>

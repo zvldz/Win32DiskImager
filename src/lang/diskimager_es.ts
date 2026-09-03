@@ -774,12 +774,12 @@ La comprobación del espacio libre será omitida.</translation>
         <translation>fmifs.dll no expone FormatEx en este sistema.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1419"/>
+        <location filename="../disk.cpp" line="1429"/>
         <source>Formatting the device as %1 failed.</source>
         <translation>Falló el formateo del dispositivo como %1.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1420"/>
+        <location filename="../disk.cpp" line="1430"/>
         <source>Formatting the device as %1 failed: %2.</source>
         <translation>Falló el formateo del dispositivo como %1: %2.</translation>
     </message>

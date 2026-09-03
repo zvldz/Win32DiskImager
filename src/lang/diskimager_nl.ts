@@ -771,12 +771,12 @@ Controle van vrije ruimte zal worden overgeslagen.</translation>
         <translation>fmifs.dll biedt FormatEx niet aan op dit systeem.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1419"/>
+        <location filename="../disk.cpp" line="1429"/>
         <source>Formatting the device as %1 failed.</source>
         <translation>Het formatteren van het apparaat als %1 is mislukt.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1420"/>
+        <location filename="../disk.cpp" line="1430"/>
         <source>Formatting the device as %1 failed: %2.</source>
         <translation>Het formatteren van het apparaat als %1 is mislukt: %2.</translation>
     </message>

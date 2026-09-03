@@ -774,12 +774,12 @@ Checking of free space will be skipped.</source>
         <translation>இந்த அமைப்பில் fmifs.dll FormatEx ஐ வழங்கவில்லை.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1419"/>
+        <location filename="../disk.cpp" line="1429"/>
         <source>Formatting the device as %1 failed.</source>
         <translation>சாதனத்தை %1 ஆக வடிவூட்டுவது தோல்வியடைந்தது.</translation>
     </message>
     <message>
-        <location filename="../disk.cpp" line="1420"/>
+        <location filename="../disk.cpp" line="1430"/>
         <source>Formatting the device as %1 failed: %2.</source>
         <translation>சாதனத்தை %1 ஆக வடிவூட்டுவது தோல்வியடைந்தது: %2.</translation>
     </message>
