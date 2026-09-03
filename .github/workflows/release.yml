@@ -18,6 +18,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # Full history: the release notes step needs the tag list to work
+          # out which release came before this one.
+          fetch-depth: 0
 
       # Static Qt 6 pulls in many third-party libs at link time (image codecs,
       # SSL, fonts, text layout, compression). MSYS2's qt6-static does not
@@ -223,6 +227,13 @@ jobs:
           if [ ! -s release-notes.md ]; then
             echo "CHANGELOG.md has no '### Version ${VER}' section" >&2
             exit 1
+          fi
+          # Keep the compare link GitHub used to add on its own.
+          PREV=$(git tag --list 'v*' --sort=-v:refname | grep -A1 -x "${GITHUB_REF_NAME}" | tail -1)
+          if [ -n "${PREV}" ] && [ "${PREV}" != "${GITHUB_REF_NAME}" ]; then
+            printf '
+**Full Changelog**: https://github.com/%s/compare/%s...%s
+'               "${GITHUB_REPOSITORY}" "${PREV}" "${GITHUB_REF_NAME}" >> release-notes.md
           fi
           echo "--- release notes ---"
           cat release-notes.md
