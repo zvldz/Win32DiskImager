@@ -1395,13 +1395,18 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
     formatEx(rootBuf.data(), 11 /* FmMediaRemovable */, fsBuf.data(),
              labelBuf.data(), TRUE /* quick */, 0, formatExCallback);
 
-    // One retry when the volume was busy: something grabbed it between our
-    // dismount and FormatEx opening it, which happens on cards Windows was
-    // already using. A second dismount usually settles it.
-    if (g_formatFinished && !g_formatSucceeded
-        && g_formatReason == QStringLiteral("cannot lock the volume")) {
-        diagLog("format: volume was busy, dismounting again and retrying once");
-        Sleep(700);
+    // Windows re-mounts the volume the instant we release our lock, so
+    // FormatEx can find it busy even though the dismount just above
+    // succeeded — the window is milliseconds wide. Retry the whole
+    // dismount-and-format a few times; the mount usually loses the race
+    // eventually. Note the check does NOT require g_formatFinished:
+    // FormatEx skips the FINISHED packet entirely when it gives up on the
+    // lock, which is why the first version of this retry never ran.
+    for (int attempt = 1; attempt < 4 && !g_formatSucceeded; ++attempt) {
+        diagLog(QString("format: volume busy (%1), dismounting and retrying (attempt %2)")
+                    .arg(g_formatReason.isEmpty() ? "no reason given" : g_formatReason)
+                    .arg(attempt));
+        Sleep(400 * attempt);
         dismountForFormat(mount);
         g_formatFinished = false;
         g_formatSucceeded = false;
