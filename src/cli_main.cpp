@@ -3217,19 +3217,19 @@ int cmdFormat(const std::string &device, const std::string &label, bool assumeYe
     g_formatReason.clear();
     formatEx(&root[0], FmMediaRemovable, &fsBuf[0], &labelBuf[0], TRUE, 0, formatExCallback);
 
-    // Windows re-mounts the volume the instant our lock is released, so
-    // FormatEx can still find it busy right after a successful dismount.
-    // Retry the whole dismount-and-format a few times. The check must not
-    // require g_formatFinished: FormatEx omits the FINISHED packet when it
-    // gives up on the lock.
+    // Windows re-mounts the volume as soon as our lock drops, and holds it
+    // itself while settling the new partition — hence "cannot lock the
+    // volume" straight after a dismount that succeeded. Waiting clears it;
+    // a second dismount only restarts the mount cycle. Runs that paused
+    // for the typed confirmation always succeeded, --yes runs did not.
     for (int attempt = 1; attempt < 4 && !g_formatSucceeded; ++attempt) {
         std::ostringstream os;
         os << "format: volume busy ("
            << (g_formatReason.empty() ? "no reason given" : g_formatReason)
-           << "), dismounting and retrying (attempt " << attempt << ")";
+           << "), waiting " << (1000 * attempt) << " ms and retrying (attempt "
+           << attempt << ")";
         diagLog(os.str());
-        Sleep(400 * attempt);
-        dismountForFormat(mount);
+        Sleep(1000 * attempt);
         g_formatFinished = g_formatSucceeded = false;
         g_formatReason.clear();
         formatEx(&root[0], FmMediaRemovable, &fsBuf[0], &labelBuf[0], TRUE, 0, formatExCallback);

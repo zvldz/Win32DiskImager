@@ -1395,19 +1395,24 @@ bool formatTargetDisk(const TargetDisk &td, const QString &label, QString *errOu
     formatEx(rootBuf.data(), 11 /* FmMediaRemovable */, fsBuf.data(),
              labelBuf.data(), TRUE /* quick */, 0, formatExCallback);
 
-    // Windows re-mounts the volume the instant we release our lock, so
-    // FormatEx can find it busy even though the dismount just above
-    // succeeded — the window is milliseconds wide. Retry the whole
-    // dismount-and-format a few times; the mount usually loses the race
-    // eventually. Note the check does NOT require g_formatFinished:
-    // FormatEx skips the FINISHED packet entirely when it gives up on the
-    // lock, which is why the first version of this retry never ran.
+    // Windows re-mounts the volume the instant our lock drops, and while it
+    // is still settling the new partition it holds the volume itself, so
+    // FormatEx reports "cannot lock the volume" right after a dismount that
+    // reported success.
+    //
+    // What clears this is waiting, not trying harder: a second dismount
+    // only restarts the mount cycle. Observed plainly from the CLI — runs
+    // that paused for a typed confirmation always succeeded, runs with
+    // --yes that went straight through always failed.
+    //
+    // The check must not require g_formatFinished: FormatEx omits the
+    // FINISHED packet entirely when it gives up on the lock.
     for (int attempt = 1; attempt < 4 && !g_formatSucceeded; ++attempt) {
-        diagLog(QString("format: volume busy (%1), dismounting and retrying (attempt %2)")
+        diagLog(QString("format: volume busy (%1), waiting %2 ms and retrying (attempt %3)")
                     .arg(g_formatReason.isEmpty() ? "no reason given" : g_formatReason)
+                    .arg(1000 * attempt)
                     .arg(attempt));
-        Sleep(400 * attempt);
-        dismountForFormat(mount);
+        Sleep(1000 * attempt);
         g_formatFinished = false;
         g_formatSucceeded = false;
         g_formatReason.clear();
