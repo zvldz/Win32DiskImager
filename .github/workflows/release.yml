@@ -17,7 +17,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Static Qt 6 pulls in many third-party libs at link time (image codecs,
       # SSL, fonts, text layout, compression). MSYS2's qt6-static does not
@@ -180,21 +180,21 @@ jobs:
       # downloads. GitHub still zip-wraps each one on download, but each wrapper
       # contains exactly one file (installer / gui zip / cli zip).
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Win32DiskImager-setup-${{ steps.version.outputs.version }}
           path: artifacts/Win32DiskImager-setup-${{ steps.version.outputs.version }}.exe
           if-no-files-found: error
 
       - name: Upload GUI portable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Win32DiskImager-${{ steps.version.outputs.version }}
           path: artifacts/Win32DiskImager-${{ steps.version.outputs.version }}.zip
           if-no-files-found: error
 
       - name: Upload CLI portable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Win32DiskImager-cli-${{ steps.version.outputs.version }}
           path: artifacts/Win32DiskImager-cli-${{ steps.version.outputs.version }}.zip
@@ -202,7 +202,7 @@ jobs:
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: artifacts/*
           draft: false
